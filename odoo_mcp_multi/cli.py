@@ -22,7 +22,12 @@ from odoo_mcp_multi.config import (
     remove_profile,
     set_default_profile,
 )
-from odoo_mcp_multi.utils import OdooClient, OdooAuthenticationError, OdooConnectionError
+from odoo_mcp_multi.utils import (
+    OdooAuthenticationError,
+    OdooConnectionError,
+    create_client,
+    get_server_version,
+)
 
 
 @click.group()
@@ -61,7 +66,7 @@ def cmd_add_profile(
     if test_connection:
         click.echo(f"Testing connection to {url}...")
         try:
-            client = OdooClient(url=url, database=database, user=user, password=password, timeout=30)
+            client = create_client(url=url, database=database, user=user, password=password, timeout=30)
             uid = client.authenticate()
             click.secho(f"✓ Connection successful! Authenticated as UID {uid}", fg="green")
         except OdooConnectionError as e:
@@ -187,7 +192,7 @@ def cmd_edit_profile(
     if test_connection:
         click.echo(f"Testing connection to {new_url}...")
         try:
-            client = OdooClient(url=new_url, database=new_database, user=new_user, password=new_password, timeout=30)
+            client = create_client(url=new_url, database=new_database, user=new_user, password=new_password, timeout=30)
             uid = client.authenticate()
             click.secho(f"✓ Connection successful! Authenticated as UID {uid}", fg="green")
         except OdooConnectionError as e:
@@ -227,21 +232,22 @@ def cmd_test(profile: str) -> None:
     click.echo(f"Testing connection to {odoo_profile.url}...")
 
     try:
-        client = OdooClient(
+        client = create_client(
             url=odoo_profile.url,
             database=odoo_profile.database,
             user=odoo_profile.user,
             password=odoo_profile.password,
+            protocol=odoo_profile.protocol,
             timeout=30,
         )
         uid = client.authenticate()
         click.secho(f"✓ Connection successful! Authenticated as UID {uid}", fg="green")
 
         # Try to get version info
-        import xmlrpc.client
-        common = xmlrpc.client.ServerProxy(f"{client.url}/xmlrpc/2/common", allow_none=True)
-        version = common.version()
-        click.echo(f"  Server version: {version.get('server_version', 'unknown')}")
+        version = get_server_version(odoo_profile.url)
+        if version:
+            click.echo(f"  Server version: {version.get('server_version', 'unknown')}")
+            click.echo(f"  Protocol: {odoo_profile.protocol}")
 
     except OdooConnectionError as e:
         click.secho(f"✗ Connection failed: {e}", fg="red")

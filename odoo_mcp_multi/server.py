@@ -10,17 +10,19 @@ Exposes MCP tools for interacting with Odoo instances:
 from __future__ import annotations
 
 import json
-import os
 from typing import Optional
 
 from mcp.server.fastmcp import FastMCP
 
-from odoo_mcp_multi.config import OdooProfile, get_profile
+from odoo_mcp_multi.config import OdooProfile
 from odoo_mcp_multi.utils import (
+    BaseOdooClient,
     OdooAuthenticationError,
-    OdooClient,
     OdooConnectionError,
     OdooExecutionError,
+    create_client,
+    get_server_version,
+    normalize_url,
     parse_domain,
     parse_fields,
     parse_ids,
@@ -31,27 +33,20 @@ from odoo_mcp_multi.utils import (
 _current_profile: Optional[OdooProfile] = None
 
 # Create the MCP server
-mcp = FastMCP(
-    "odoo-mcp",
-    description="MCP server for interacting with Odoo ERP instances via XML-RPC",
-)
+mcp = FastMCP("odoo-mcp")
 
 
 def set_profile(profile: OdooProfile) -> None:
-    """Set the current active profile for the MCP server.
-
-    Args:
-        profile: OdooProfile to use for connections
-    """
+    """Set the current active profile for the MCP server."""
     global _current_profile
     _current_profile = profile
 
 
-def get_client() -> OdooClient:
-    """Get an OdooClient instance using the current profile.
+def get_client() -> BaseOdooClient:
+    """Get an Odoo client instance using the current profile.
 
     Returns:
-        Configured OdooClient
+        Configured Odoo client (JSON-RPC, JSON2, or XML-RPC based on version)
 
     Raises:
         ValueError: If no profile is configured
@@ -59,11 +54,12 @@ def get_client() -> OdooClient:
     if _current_profile is None:
         raise ValueError("No Odoo profile configured. Run 'odoo-mcp run --profile <name>' first.")
 
-    return OdooClient(
+    return create_client(
         url=_current_profile.url,
         database=_current_profile.database,
         user=_current_profile.user,
         password=_current_profile.password,
+        protocol=_current_profile.protocol,
     )
 
 
@@ -236,13 +232,14 @@ def get_version() -> str:
     Returns:
         JSON with server version details
     """
+    if _current_profile is None:
+        return format_error(ValueError("No Odoo profile configured."))
+
     try:
-        client = get_client()
-        # Use common endpoint to get version without full auth
-        import xmlrpc.client
-        common = xmlrpc.client.ServerProxy(f"{client.url}/xmlrpc/2/common", allow_none=True)
-        version = common.version()
-        return format_result(version)
+        version = get_server_version(normalize_url(_current_profile.url))
+        if version:
+            return format_result(version)
+        return format_error(ValueError("Could not retrieve version information"))
     except Exception as e:
         return format_error(e)
 

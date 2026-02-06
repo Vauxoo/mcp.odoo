@@ -22,6 +22,7 @@ class OdooProfile(BaseModel):
     database: str = Field(..., description="Database name")
     user: str = Field(..., description="Username for authentication")
     password: SecretStr = Field(..., description="Password (stored securely)")
+    protocol: str = Field(default="auto", description="RPC protocol: auto, jsonrpcs, json2s, xmlrpcs")
 
     def to_dict(self) -> dict:
         """Convert profile to dictionary for JSON serialization."""
@@ -31,6 +32,7 @@ class OdooProfile(BaseModel):
             "database": self.database,
             "user": self.user,
             "password": self.password.get_secret_value(),
+            "protocol": self.protocol,
         }
 
     @classmethod
@@ -42,6 +44,7 @@ class OdooProfile(BaseModel):
             database=data["database"],
             user=data["user"],
             password=SecretStr(data["password"]),
+            protocol=data.get("protocol", "auto"),
         )
 
 
@@ -194,6 +197,7 @@ def list_profiles() -> list[dict]:
             "url": profile.url,
             "database": profile.database,
             "user": profile.user,
+            "protocol": profile.protocol,
             "is_default": name == config.default_profile,
         })
 
