@@ -1,11 +1,12 @@
 # odoo-mcp-multi
 
-MCP Server para conectar Claude/Cursor a múltiples instancias de Odoo via XML-RPC.
+MCP Server para conectar clientes MCP (Antigravity, Claude Desktop, Cursor, VS Code) a múltiples instancias de Odoo.
 
 ## Características
 
 - **Gestión multi-perfil**: Almacena credenciales de múltiples entornos (prod, staging, dev)
 - **Almacenamiento seguro**: Credenciales en `~/.config/odoo-mcp/` con permisos 600
+- **Multi-protocolo**: JSON-RPC (8.0+), JSON2 (19.0+), XML-RPC (legacy) con detección automática
 - **7 herramientas MCP**: `search_read`, `write`, `create`, `execute_kw`, `list_models`, `list_fields`, `get_version`
 - **CLI completo**: Gestión de perfiles y servidor MCP
 
@@ -194,13 +195,14 @@ odoo-mcp test [-p PERFIL]
 odoo-mcp test -p prod
 # ✓ Connection successful! Authenticated as UID 2
 #   Server version: 16.0
+#   Protocol: auto
 ```
 
 ---
 
 ### `odoo-mcp run`
 
-Inicia el servidor MCP para Claude/Cursor.
+Inicia el servidor MCP.
 
 ```bash
 odoo-mcp run [-p PERFIL]
@@ -224,6 +226,79 @@ odoo-mcp run -p prod
 
 ## Configuración de Clientes MCP
 
+### Configuración Multi-Perfil
+
+Hay dos enfoques para trabajar con múltiples instancias Odoo:
+
+#### Opción 1: Múltiples servidores MCP (recomendado para uso frecuente)
+
+Declara un servidor MCP por cada perfil. El cliente verá cada instancia como un servidor separado:
+
+```json
+{
+  "mcpServers": {
+    "odoo-vauxoo": {
+      "command": "odoo-mcp",
+      "args": ["run", "-p", "vauxoo"]
+    },
+    "odoo-ingelub": {
+      "command": "odoo-mcp",
+      "args": ["run", "-p", "ingelub"]
+    },
+    "odoo-staging": {
+      "command": "odoo-mcp",
+      "args": ["run", "-p", "staging"]
+    }
+  }
+}
+```
+
+Luego puedes decirle al AI: *"En odoo-vauxoo, busca los proyectos de IA"*.
+
+#### Opción 2: Servidor único con perfil default
+
+Si usualmente trabajas con una sola instancia:
+
+```json
+{
+  "mcpServers": {
+    "odoo": {
+      "command": "odoo-mcp",
+      "args": ["run"]
+    }
+  }
+}
+```
+
+Sin `-p`, usa el perfil marcado como default. Cambia el default con:
+
+```bash
+odoo-mcp set-default vauxoo
+```
+
+---
+
+### Antigravity
+
+Edita `~/.gemini/antigravity/mcp_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "odoo-vauxoo": {
+      "command": "odoo-mcp",
+      "args": ["run", "-p", "vauxoo"]
+    },
+    "odoo-ingelub": {
+      "command": "odoo-mcp",
+      "args": ["run", "-p", "ingelub"]
+    }
+  }
+}
+```
+
+> **Nota**: Reinicia Antigravity después de modificar la configuración.
+
 ### Claude Desktop
 
 Edita `~/Library/Application Support/Claude/claude_desktop_config.json`:
@@ -242,6 +317,21 @@ Edita `~/Library/Application Support/Claude/claude_desktop_config.json`:
 ### Cursor
 
 Edita `.cursor/mcp.json` en tu proyecto o globalmente:
+
+```json
+{
+  "mcpServers": {
+    "odoo": {
+      "command": "odoo-mcp",
+      "args": ["run", "-p", "prod"]
+    }
+  }
+}
+```
+
+### VS Code (con extensión MCP)
+
+Edita `.vscode/mcp.json` o la configuración global:
 
 ```json
 {
