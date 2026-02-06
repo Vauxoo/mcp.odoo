@@ -1,0 +1,49 @@
+stages:
+  - lint
+  - test
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+
+cache:
+  paths:
+    - .cache/pip/
+
+.python-template:
+  image: python:3.12-slim
+  before_script:
+    - pip install --upgrade pip
+    - pip install -e ".[dev]"
+
+lint:
+  extends: .python-template
+  stage: lint
+  script:
+    - ruff check odoo_mcp_multi/
+    - ruff format --check odoo_mcp_multi/
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+test:import:
+  extends: .python-template
+  stage: test
+  script:
+    - python -c "from odoo_mcp_multi.cli import main; print('CLI imports OK')"
+    - python -c "from odoo_mcp_multi.server import mcp; print('Server imports OK')"
+    - python -c "from odoo_mcp_multi.config import load_profiles; print('Config imports OK')"
+    - python -c "from odoo_mcp_multi.utils import OdooClient; print('Utils imports OK')"
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+test:cli:
+  extends: .python-template
+  stage: test
+  script:
+    - odoo-mcp --version
+    - odoo-mcp --help
+    - odoo-mcp list-profiles
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
