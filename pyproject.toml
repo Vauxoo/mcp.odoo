@@ -80,6 +80,11 @@ filename = "odoo_mcp_multi/__init__.py"
 search = "__version__ = \"{current_version}\""
 replace = "__version__ = \"{new_version}\""
 
+[[tool.bumpversion.files]]
+filename = "tests/test_basic.py"
+search = "assert __version__ == \"{current_version}\""
+replace = "assert __version__ == \"{new_version}\""
+
 [tool.pytest.ini_options]
 minversion = "7.0"
 addopts = "-ra -q --cov=odoo_mcp_multi --cov-report=term-missing --cov-report=xml"
