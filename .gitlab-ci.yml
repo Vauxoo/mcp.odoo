@@ -1,6 +1,7 @@
 stages:
   - lint
   - test
+  - deploy
 
 variables:
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
@@ -25,25 +26,28 @@ lint:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
-test:import:
+test:
   extends: .python-template
   stage: test
   script:
-    - python -c "from odoo_mcp_multi.cli import main; print('CLI imports OK')"
-    - python -c "from odoo_mcp_multi.server import mcp; print('Server imports OK')"
-    - python -c "from odoo_mcp_multi.config import load_profiles; print('Config imports OK')"
-    - python -c "from odoo_mcp_multi.utils import OdooClient; print('Utils imports OK')"
+    - pytest --cov=odoo_mcp_multi --cov-report=term --cov-report=xml
+  artifacts:
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+  coverage: '/(?i)total.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
 
-test:cli:
+pages:
   extends: .python-template
-  stage: test
+  stage: deploy
   script:
-    - odoo-mcp --version
-    - odoo-mcp --help
-    - odoo-mcp list-profiles
+    - mkdocs build -d public --strict
+  artifacts:
+    paths:
+      - public
   rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
