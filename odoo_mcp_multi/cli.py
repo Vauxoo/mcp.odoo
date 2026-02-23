@@ -263,32 +263,35 @@ def cmd_test(profile: str) -> None:
 
 
 @main.command("run")
-@click.option("--profile", "-p", default=None, help="Profile name to use (default: default profile)")
+@click.option("--profile", "-p", default=None, help="Fallback profile name to use (default: default profile)")
 def cmd_run(profile: str) -> None:
     """Start the MCP server.
 
-    Connects to the specified Odoo profile and starts the MCP server
-    using stdio transport for communication with Claude/Cursor.
+    Starts the MCP server using stdio transport for communication with Claude/Cursor.
+    If a profile is provided (or a default exists), it will be used as the fallback
+    when tool calls don't specify a target profile.
     """
     from odoo_mcp_multi.server import run_server, set_profile
 
+    # Attempt to load the profile (this will return None if no profile exists or name is wrong)
     odoo_profile = get_profile(profile)
 
-    if odoo_profile is None:
-        if profile:
-            click.secho(f"✗ Profile '{profile}' not found.", fg="red", err=True)
-        else:
-            click.secho("✗ No default profile configured. Use 'odoo-mcp add-profile' first.", fg="red", err=True)
+    if profile and odoo_profile is None:
+        # The user explicitly asked for a profile that doesn't exist
+        click.secho(f"✗ Profile '{profile}' not found.", fg="red", err=True)
         sys.exit(1)
 
-    # Set the profile for the server
-    set_profile(odoo_profile)
-
-    # Log to stderr (stdout is for MCP protocol)
-    click.echo(f"Starting MCP server with profile '{odoo_profile.name}'...", err=True)
-    click.echo(f"  URL: {odoo_profile.url}", err=True)
-    click.echo(f"  Database: {odoo_profile.database}", err=True)
-    click.echo(f"  User: {odoo_profile.user}", err=True)
+    if odoo_profile:
+        # Set the fallback profile for the server
+        set_profile(odoo_profile)
+        click.echo(f"Starting MCP server with fallback profile '{odoo_profile.name}'...", err=True)
+        click.echo(f"  URL: {odoo_profile.url}", err=True)
+        click.echo(f"  Database: {odoo_profile.database}", err=True)
+        click.echo(f"  User: {odoo_profile.user}", err=True)
+    else:
+        # No explicit or default profile, start anyway for dynamic resolution
+        click.echo("Starting MCP server without a fallback profile.", err=True)
+        click.echo("Tools MUST specify a 'profile' argument to execute actions.", err=True)
 
     # Run the server
     run_server()

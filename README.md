@@ -228,36 +228,11 @@ odoo-mcp run -p prod
 
 ### Multi-Profile Configuration
 
-There are two approaches to working with multiple Odoo instances:
+The MCP server handles multi-instance connections **dynamically**. You only need to declare a single server in your AI editor. When the AI uses a tool, it can pass a `profile` argument to target a specific instance.
 
-#### Option 1: Multiple MCP servers (recommended for frequent use)
+#### Recommended Setup
 
-Declare an MCP server for each profile. The client will treat each instance as a separate server:
-
-```json
-{
-  "mcpServers": {
-    "odoo-prod": {
-      "command": "odoo-mcp",
-      "args": ["run", "-p", "prod"]
-    },
-    "odoo-staging": {
-      "command": "odoo-mcp",
-      "args": ["run", "-p", "staging"]
-    },
-    "odoo-dev": {
-      "command": "odoo-mcp",
-      "args": ["run", "-p", "dev"]
-    }
-  }
-}
-```
-
-Then you can tell the AI: *"In odoo-prod, look for the AI projects"*.
-
-#### Option 2: Single server with default profile
-
-If you usually work with a single instance:
+Declare a single server without forcing a profile parameter on startup:
 
 ```json
 {
@@ -270,10 +245,24 @@ If you usually work with a single instance:
 }
 ```
 
-Without `-p`, it uses the profile marked as default. Change the default with:
+Then you can tell the AI: *"In the 'prod' profile, look for the CRM leads"*.
+The AI will use the `list_available_profiles` tool to see your configured profiles and pass `"profile": "prod"` automatically.
 
-```bash
-odoo-mcp set-default prod
+If the AI doesn't pass a profile, the server will fallback to the profile marked as default in your local configuration.
+
+#### Forced Default Setup
+
+If you want the fallback profile to be completely explicit regardless of local `odoo-mcp set-default`, use the `-p` argument:
+
+```json
+{
+  "mcpServers": {
+    "odoo": {
+      "command": "odoo-mcp",
+      "args": ["run", "-p", "prod"]
+    }
+  }
+}
 ```
 
 ---
@@ -285,13 +274,9 @@ Edit `~/.gemini/antigravity/mcp_config.json`:
 ```json
 {
   "mcpServers": {
-    "odoo-prod": {
+    "odoo": {
       "command": "odoo-mcp",
-      "args": ["run", "-p", "prod"]
-    },
-    "odoo-staging": {
-      "command": "odoo-mcp",
-      "args": ["run", "-p", "staging"]
+      "args": ["run"]
     }
   }
 }
@@ -308,7 +293,7 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
   "mcpServers": {
     "odoo": {
       "command": "odoo-mcp",
-      "args": ["run", "-p", "prod"]
+      "args": ["run"]
     }
   }
 }
@@ -323,7 +308,7 @@ Edit `.cursor/mcp.json` in your project or globally:
   "mcpServers": {
     "odoo": {
       "command": "odoo-mcp",
-      "args": ["run", "-p", "prod"]
+      "args": ["run"]
     }
   }
 }
@@ -338,7 +323,7 @@ Edit `.vscode/mcp.json` or the global configuration:
   "mcpServers": {
     "odoo": {
       "command": "odoo-mcp",
-      "args": ["run", "-p", "prod"]
+      "args": ["run"]
     }
   }
 }
@@ -348,7 +333,15 @@ Edit `.vscode/mcp.json` or the global configuration:
 
 ## Available MCP Tools
 
-Once the server is running, these tools are available for Claude/Cursor:
+Once the server is running, these tools are available for Claude/Cursor. **All tools accept an optional `profile` parameter** to target a specific Odoo instance dynamically.
+
+### `list_available_profiles`
+
+Lists all locally configured Odoo profiles. The AI can use this to discover available environments before making requests.
+
+*No parameters.*
+
+---
 
 ### `search_read`
 
@@ -362,6 +355,7 @@ Searches and reads records from a model.
 | `limit` | int | Maximum records (default: 100) |
 | `offset` | int | Records to skip (default: 0) |
 | `order` | string | Sorting (e.g., `name asc, id desc`) |
+| `profile` | string | *(Optional)* Target Odoo profile name |
 
 ---
 
@@ -374,6 +368,7 @@ Updates existing records.
 | `model` | string | Model name |
 | `ids` | string | IDs as JSON or comma-separated (e.g., `[1,2,3]` or `1,2,3`) |
 | `values` | string | Values as JSON (e.g., `{"name": "New Name"}`) |
+| `profile` | string | *(Optional)* Target Odoo profile name |
 
 ---
 
@@ -385,6 +380,7 @@ Creates a new record.
 |-----------|------|-------------|
 | `model` | string | Model name |
 | `values` | string | Values as JSON (e.g., `{"name": "Alice", "email": "alice@example.com"}`) |
+| `profile` | string | *(Optional)* Target Odoo profile name |
 
 ---
 
@@ -398,6 +394,7 @@ Executes any method of an Odoo model.
 | `method` | string | Method name (e.g., `action_confirm`, `send`) |
 | `args` | string | Positional arguments as JSON (e.g., `[[42]]`) |
 | `kwargs` | string | Keyword arguments as JSON (e.g., `{"force_send": true}`) |
+| `profile` | string | *(Optional)* Target Odoo profile name |
 
 ---
 
@@ -408,6 +405,7 @@ Lists the models available in the instance.
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `search` | string | Optional filter by model name |
+| `profile` | string | *(Optional)* Target Odoo profile name |
 
 ---
 
@@ -418,6 +416,7 @@ Lists the fields of a model.
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `model` | string | Model name |
+| `profile` | string | *(Optional)* Target Odoo profile name |
 
 ---
 
@@ -425,7 +424,9 @@ Lists the fields of a model.
 
 Gets version information from the Odoo server.
 
-*No parameters.*
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `profile` | string | *(Optional)* Target Odoo profile name |
 
 ---
 
