@@ -89,7 +89,7 @@ def cmd_add_profile(
     click.secho(f"✓ Profile '{name}' saved successfully!", fg="green")
 
     if set_default:
-        click.echo(f"  Set as default profile.")
+        click.echo("  Set as default profile.")
 
 
 @main.command("list-profiles")
@@ -104,6 +104,7 @@ def cmd_list_profiles(as_json: bool) -> None:
 
     if as_json:
         import json
+
         click.echo(json.dumps(profiles, indent=2))
         return
 
@@ -151,7 +152,9 @@ def cmd_set_default(name: str) -> None:
 @click.option("--url", default=None, help="New Odoo URL")
 @click.option("--database", default=None, help="New database name")
 @click.option("--user", default=None, help="New username")
-@click.option("--password", is_flag=False, flag_value="__PROMPT__", default=None, help="New password (prompts if flag used)")
+@click.option(
+    "--password", is_flag=False, flag_value="__PROMPT__", default=None, help="New password (prompts if flag used)"
+)
 @click.option("--test", "test_connection", is_flag=True, default=False, help="Test connection after editing")
 def cmd_edit_profile(
     name: str,
@@ -192,7 +195,9 @@ def cmd_edit_profile(
     if test_connection:
         click.echo(f"Testing connection to {new_url}...")
         try:
-            client = create_client(url=new_url, database=new_database, user=new_user, password=new_password, timeout=30)
+            client = create_client(
+                url=new_url, database=new_database, user=new_user, password=new_password, timeout=30
+            )
             uid = client.authenticate()
             click.secho(f"✓ Connection successful! Authenticated as UID {uid}", fg="green")
         except OdooConnectionError as e:
@@ -265,7 +270,7 @@ def cmd_run(profile: str) -> None:
     Connects to the specified Odoo profile and starts the MCP server
     using stdio transport for communication with Claude/Cursor.
     """
-    from odoo_mcp_multi.server import set_profile, run_server
+    from odoo_mcp_multi.server import run_server, set_profile
 
     odoo_profile = get_profile(profile)
 

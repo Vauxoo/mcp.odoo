@@ -1,76 +1,76 @@
 # odoo-mcp-multi
 
-MCP Server para conectar clientes MCP (Antigravity, Claude Desktop, Cursor, VS Code) a múltiples instancias de Odoo.
+MCP Server for connecting MCP clients (Antigravity, Claude Desktop, Cursor, VS Code) to multiple Odoo instances.
 
-## Características
+## Features
 
-- **Gestión multi-perfil**: Almacena credenciales de múltiples entornos (prod, staging, dev)
-- **Almacenamiento seguro**: Credenciales en `~/.config/odoo-mcp/` con permisos 600
-- **Multi-protocolo**: JSON-RPC (8.0+), JSON2 (19.0+), XML-RPC (legacy) con detección automática
-- **7 herramientas MCP**: `search_read`, `write`, `create`, `execute_kw`, `list_models`, `list_fields`, `get_version`
-- **CLI completo**: Gestión de perfiles y servidor MCP
+- **Multi-profile management**: Store credentials for multiple environments (prod, staging, dev)
+- **Secure storage**: Credentials stored in `~/.config/odoo-mcp/` with 600 permissions
+- **Multi-protocol**: JSON-RPC (8.0+), JSON2 (19.0+), XML-RPC (legacy) with automatic detection
+- **7 MCP tools**: `search_read`, `write`, `create`, `execute_kw`, `list_models`, `list_fields`, `get_version`
+- **Full CLI**: Profile and MCP server management
 
-## Instalación
+## Installation
 
 ```bash
-# Usando pip
+# Using pip
 pip install .
 
-# Usando uv
+# Using uv
 uv pip install .
 
-# Modo desarrollo
+# Development mode
 pip install -e .
 ```
 
-Después de instalar, el comando `odoo-mcp` estará disponible en tu PATH.
+After installation, the `odoo-mcp` command will be available in your PATH.
 
 ---
 
-## Inicio Rápido
+## Quick Start
 
 ```bash
-# 1. Agregar un perfil
+# 1. Add a profile
 odoo-mcp add-profile
 
-# 2. Verificar conexión
+# 2. Verify connection
 odoo-mcp test -p prod
 
-# 3. Iniciar servidor MCP
+# 3. Start MCP server
 odoo-mcp run -p prod
 ```
 
 ---
 
-## Comandos CLI
+## CLI Commands
 
 ### `odoo-mcp add-profile`
 
-Wizard interactivo para agregar credenciales de una instancia Odoo.
+Interactive wizard to add an Odoo instance's credentials.
 
 ```bash
 odoo-mcp add-profile
 ```
 
-**Opciones:**
-| Opción | Descripción |
+**Options:**
+| Option | Description |
 |--------|-------------|
-| `--name TEXT` | Identificador del perfil (ej: `prod`, `staging`) |
-| `--url TEXT` | URL de la instancia (ej: `https://odoo.example.com`) |
-| `--database TEXT` | Nombre de la base de datos |
-| `--user TEXT` | Usuario de Odoo |
-| `--password TEXT` | Contraseña (se oculta al escribir) |
-| `--default` | Establecer como perfil por defecto |
-| `--test / --no-test` | Probar conexión antes de guardar (default: `--test`) |
+| `--name TEXT` | Profile identifier (e.g., `prod`, `staging`) |
+| `--url TEXT` | Instance URL (e.g., `https://odoo.example.com`) |
+| `--database TEXT` | Database name |
+| `--user TEXT` | Odoo user |
+| `--password TEXT` | Password (hidden on typing) |
+| `--default` | Set as default profile |
+| `--test / --no-test` | Test connection before saving (default: `--test`) |
 
-**Ejemplo no interactivo:**
+**Non-interactive example:**
 ```bash
 odoo-mcp add-profile \
   --name prod \
-  --url https://erp.miempresa.com \
-  --database produccion \
+  --url https://erp.mycompany.com \
+  --database production \
   --user admin \
-  --password secreto \
+  --password secret \
   --default
 ```
 
@@ -78,28 +78,28 @@ odoo-mcp add-profile \
 
 ### `odoo-mcp list-profiles`
 
-Muestra todos los perfiles configurados.
+Displays all configured profiles.
 
 ```bash
 odoo-mcp list-profiles
 ```
 
-**Opciones:**
-| Opción | Descripción |
+**Options:**
+| Option | Description |
 |--------|-------------|
-| `--json` | Salida en formato JSON |
+| `--json` | JSON output format |
 
-**Ejemplo de salida:**
-```
+**Sample output:**
+```text
 Configured Profiles:
 ------------------------------------------------------------
   prod (default)
-    URL:      https://erp.miempresa.com
-    Database: produccion
+    URL:      https://erp.mycompany.com
+    Database: production
     User:     admin
 
   staging
-    URL:      https://staging.miempresa.com
+    URL:      https://staging.mycompany.com
     Database: staging_db
     User:     admin
 ```
@@ -108,54 +108,54 @@ Configured Profiles:
 
 ### `odoo-mcp edit-profile`
 
-Modifica un perfil existente. Solo los campos especificados serán actualizados.
+Modifies an existing profile. Only the specified fields will be updated.
 
 ```bash
-odoo-mcp edit-profile NOMBRE [OPCIONES]
+odoo-mcp edit-profile NAME [OPTIONS]
 ```
 
-**Argumentos:**
-| Argumento | Descripción |
+**Arguments:**
+| Argument | Description |
 |-----------|-------------|
-| `NAME` | Nombre del perfil a editar (requerido) |
+| `NAME` | Name of the profile to edit (required) |
 
-**Opciones:**
-| Opción | Descripción |
+**Options:**
+| Option | Description |
 |--------|-------------|
-| `--url TEXT` | Nueva URL |
-| `--database TEXT` | Nuevo nombre de base de datos |
-| `--user TEXT` | Nuevo usuario |
-| `--password` | Solicita nueva contraseña interactivamente |
-| `--test` | Probar conexión después de editar |
+| `--url TEXT` | New URL |
+| `--database TEXT` | New database name |
+| `--user TEXT` | New username |
+| `--password` | Interactively prompt for new password |
+| `--test` | Test connection after editing |
 
-**Ejemplos:**
+**Examples:**
 ```bash
-# Cambiar solo la URL
-odoo-mcp edit-profile prod --url https://nueva-url.com
+# Change only the URL
+odoo-mcp edit-profile prod --url https://new-url.com
 
-# Cambiar usuario y contraseña
-odoo-mcp edit-profile staging --user nuevo_admin --password
+# Change username and password
+odoo-mcp edit-profile staging --user new_admin --password
 
-# Cambiar base de datos con prueba de conexión
-odoo-mcp edit-profile dev --database nueva_db --test
+# Change database and test connection
+odoo-mcp edit-profile dev --database new_db --test
 ```
 
 ---
 
 ### `odoo-mcp remove-profile`
 
-Elimina un perfil por nombre.
+Removes a profile by name.
 
 ```bash
-odoo-mcp remove-profile NOMBRE
+odoo-mcp remove-profile NAME
 ```
 
-**Opciones:**
-| Opción | Descripción |
+**Options:**
+| Option | Description |
 |--------|-------------|
-| `-f, --force` | Omitir confirmación |
+| `-f, --force` | Skip confirmation |
 
-**Ejemplo:**
+**Example:**
 ```bash
 odoo-mcp remove-profile staging -f
 ```
@@ -164,13 +164,13 @@ odoo-mcp remove-profile staging -f
 
 ### `odoo-mcp set-default`
 
-Establece el perfil por defecto.
+Sets the default profile.
 
 ```bash
-odoo-mcp set-default NOMBRE
+odoo-mcp set-default NAME
 ```
 
-**Ejemplo:**
+**Example:**
 ```bash
 odoo-mcp set-default prod
 ```
@@ -179,18 +179,18 @@ odoo-mcp set-default prod
 
 ### `odoo-mcp test`
 
-Prueba la conexión a una instancia Odoo.
+Tests the connection to an Odoo instance.
 
 ```bash
-odoo-mcp test [-p PERFIL]
+odoo-mcp test [-p PROFILE]
 ```
 
-**Opciones:**
-| Opción | Descripción |
+**Options:**
+| Option | Description |
 |--------|-------------|
-| `-p, --profile TEXT` | Perfil a usar (default: perfil por defecto) |
+| `-p, --profile TEXT` | Profile to use (default: default profile) |
 
-**Ejemplo:**
+**Example:**
 ```bash
 odoo-mcp test -p prod
 # ✓ Connection successful! Authenticated as UID 2
@@ -202,62 +202,62 @@ odoo-mcp test -p prod
 
 ### `odoo-mcp run`
 
-Inicia el servidor MCP.
+Starts the MCP server.
 
 ```bash
-odoo-mcp run [-p PERFIL]
+odoo-mcp run [-p PROFILE]
 ```
 
-**Opciones:**
-| Opción | Descripción |
+**Options:**
+| Option | Description |
 |--------|-------------|
-| `-p, --profile TEXT` | Perfil a usar (default: perfil por defecto) |
+| `-p, --profile TEXT` | Profile to use (default: default profile) |
 
-**Ejemplo:**
+**Example:**
 ```bash
 odoo-mcp run -p prod
 # Starting MCP server with profile 'prod'...
-#   URL: https://erp.miempresa.com
-#   Database: produccion
+#   URL: https://erp.mycompany.com
+#   Database: production
 #   User: admin
 ```
 
 ---
 
-## Configuración de Clientes MCP
+## MCP Clients Configuration
 
-### Configuración Multi-Perfil
+### Multi-Profile Configuration
 
-Hay dos enfoques para trabajar con múltiples instancias Odoo:
+There are two approaches to working with multiple Odoo instances:
 
-#### Opción 1: Múltiples servidores MCP (recomendado para uso frecuente)
+#### Option 1: Multiple MCP servers (recommended for frequent use)
 
-Declara un servidor MCP por cada perfil. El cliente verá cada instancia como un servidor separado:
+Declare an MCP server for each profile. The client will treat each instance as a separate server:
 
 ```json
 {
   "mcpServers": {
-    "odoo-vauxoo": {
+    "odoo-prod": {
       "command": "odoo-mcp",
-      "args": ["run", "-p", "vauxoo"]
-    },
-    "odoo-ingelub": {
-      "command": "odoo-mcp",
-      "args": ["run", "-p", "ingelub"]
+      "args": ["run", "-p", "prod"]
     },
     "odoo-staging": {
       "command": "odoo-mcp",
       "args": ["run", "-p", "staging"]
+    },
+    "odoo-dev": {
+      "command": "odoo-mcp",
+      "args": ["run", "-p", "dev"]
     }
   }
 }
 ```
 
-Luego puedes decirle al AI: *"En odoo-vauxoo, busca los proyectos de IA"*.
+Then you can tell the AI: *"In odoo-prod, look for the AI projects"*.
 
-#### Opción 2: Servidor único con perfil default
+#### Option 2: Single server with default profile
 
-Si usualmente trabajas con una sola instancia:
+If you usually work with a single instance:
 
 ```json
 {
@@ -270,38 +270,38 @@ Si usualmente trabajas con una sola instancia:
 }
 ```
 
-Sin `-p`, usa el perfil marcado como default. Cambia el default con:
+Without `-p`, it uses the profile marked as default. Change the default with:
 
 ```bash
-odoo-mcp set-default vauxoo
+odoo-mcp set-default prod
 ```
 
 ---
 
 ### Antigravity
 
-Edita `~/.gemini/antigravity/mcp_config.json`:
+Edit `~/.gemini/antigravity/mcp_config.json`:
 
 ```json
 {
   "mcpServers": {
-    "odoo-vauxoo": {
+    "odoo-prod": {
       "command": "odoo-mcp",
-      "args": ["run", "-p", "vauxoo"]
+      "args": ["run", "-p", "prod"]
     },
-    "odoo-ingelub": {
+    "odoo-staging": {
       "command": "odoo-mcp",
-      "args": ["run", "-p", "ingelub"]
+      "args": ["run", "-p", "staging"]
     }
   }
 }
 ```
 
-> **Nota**: Reinicia Antigravity después de modificar la configuración.
+> **Note**: Restart Antigravity after modifying the configuration.
 
 ### Claude Desktop
 
-Edita `~/Library/Application Support/Claude/claude_desktop_config.json`:
+Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 ```json
 {
@@ -316,7 +316,7 @@ Edita `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 ### Cursor
 
-Edita `.cursor/mcp.json` en tu proyecto o globalmente:
+Edit `.cursor/mcp.json` in your project or globally:
 
 ```json
 {
@@ -329,9 +329,9 @@ Edita `.cursor/mcp.json` en tu proyecto o globalmente:
 }
 ```
 
-### VS Code (con extensión MCP)
+### VS Code (with MCP extension)
 
-Edita `.vscode/mcp.json` o la configuración global:
+Edit `.vscode/mcp.json` or the global configuration:
 
 ```json
 {
@@ -346,110 +346,110 @@ Edita `.vscode/mcp.json` o la configuración global:
 
 ---
 
-## Herramientas MCP Disponibles
+## Available MCP Tools
 
-Una vez el servidor está corriendo, estas herramientas están disponibles para Claude/Cursor:
+Once the server is running, these tools are available for Claude/Cursor:
 
 ### `search_read`
 
-Busca y lee registros de un modelo.
+Searches and reads records from a model.
 
-| Parámetro | Tipo | Descripción |
+| Parameter | Type | Description |
 |-----------|------|-------------|
-| `model` | string | Nombre del modelo (ej: `res.partner`) |
-| `domain` | string | Dominio de búsqueda (ej: `[('name', 'ilike', 'John')]`) |
-| `fields` | string | Campos separados por coma (ej: `name,email,phone`) |
-| `limit` | int | Máximo de registros (default: 100) |
-| `offset` | int | Registros a saltar (default: 0) |
-| `order` | string | Ordenamiento (ej: `name asc, id desc`) |
+| `model` | string | Model name (e.g., `res.partner`) |
+| `domain` | string | Search domain (e.g., `[('name', 'ilike', 'John')]`) |
+| `fields` | string | Comma-separated fields (e.g., `name,email,phone`) |
+| `limit` | int | Maximum records (default: 100) |
+| `offset` | int | Records to skip (default: 0) |
+| `order` | string | Sorting (e.g., `name asc, id desc`) |
 
 ---
 
 ### `write`
 
-Actualiza registros existentes.
+Updates existing records.
 
-| Parámetro | Tipo | Descripción |
+| Parameter | Type | Description |
 |-----------|------|-------------|
-| `model` | string | Nombre del modelo |
-| `ids` | string | IDs como JSON o separados por coma (ej: `[1,2,3]` o `1,2,3`) |
-| `values` | string | Valores como JSON (ej: `{"name": "Nuevo Nombre"}`) |
+| `model` | string | Model name |
+| `ids` | string | IDs as JSON or comma-separated (e.g., `[1,2,3]` or `1,2,3`) |
+| `values` | string | Values as JSON (e.g., `{"name": "New Name"}`) |
 
 ---
 
 ### `create`
 
-Crea un nuevo registro.
+Creates a new record.
 
-| Parámetro | Tipo | Descripción |
+| Parameter | Type | Description |
 |-----------|------|-------------|
-| `model` | string | Nombre del modelo |
-| `values` | string | Valores como JSON (ej: `{"name": "Alice", "email": "alice@example.com"}`) |
+| `model` | string | Model name |
+| `values` | string | Values as JSON (e.g., `{"name": "Alice", "email": "alice@example.com"}`) |
 
 ---
 
 ### `execute_kw`
 
-Ejecuta cualquier método de un modelo Odoo.
+Executes any method of an Odoo model.
 
-| Parámetro | Tipo | Descripción |
+| Parameter | Type | Description |
 |-----------|------|-------------|
-| `model` | string | Nombre del modelo |
-| `method` | string | Nombre del método (ej: `action_confirm`, `send`) |
-| `args` | string | Argumentos posicionales como JSON (ej: `[[42]]`) |
-| `kwargs` | string | Argumentos keyword como JSON (ej: `{"force_send": true}`) |
+| `model` | string | Model name |
+| `method` | string | Method name (e.g., `action_confirm`, `send`) |
+| `args` | string | Positional arguments as JSON (e.g., `[[42]]`) |
+| `kwargs` | string | Keyword arguments as JSON (e.g., `{"force_send": true}`) |
 
 ---
 
 ### `list_models`
 
-Lista los modelos disponibles en la instancia.
+Lists the models available in the instance.
 
-| Parámetro | Tipo | Descripción |
+| Parameter | Type | Description |
 |-----------|------|-------------|
-| `search` | string | Filtro opcional por nombre del modelo |
+| `search` | string | Optional filter by model name |
 
 ---
 
 ### `list_fields`
 
-Lista los campos de un modelo.
+Lists the fields of a model.
 
-| Parámetro | Tipo | Descripción |
+| Parameter | Type | Description |
 |-----------|------|-------------|
-| `model` | string | Nombre del modelo |
+| `model` | string | Model name |
 
 ---
 
 ### `get_version`
 
-Obtiene información de versión del servidor Odoo.
+Gets version information from the Odoo server.
 
-*Sin parámetros.*
+*No parameters.*
 
 ---
 
-## Ejemplos de Uso en Claude
+## Usage Examples in Claude
 
-> "Lista todos los contactos que contengan 'Juan' en el nombre"
+> "List all contacts containing 'John' in their name"
 
 ```python
-search_read(model="res.partner", domain="[('name', 'ilike', 'Juan')]", fields="name,email,phone")
+search_read(model="res.partner", domain="[('name', 'ilike', 'John')]", fields="name,email,phone")
 ```
 
-> "Crea un nuevo contacto llamado Alice con email alice@example.com"
+> "Create a new contact named Alice with email alice@example.com"
 
 ```python
 create(model="res.partner", values='{"name": "Alice", "email": "alice@example.com"}')
 ```
 
-> "Confirma el pedido de venta con ID 42"
+> "Confirm the sales order with ID 42"
 
 ```python
 execute_kw(model="sale.order", method="action_confirm", args="[[42]]")
 ```
 
-> "¿Qué campos tiene el modelo de facturas?"
+> "What fields does the invoice model have?"
 
 ```python
 list_fields(model="account.move")
@@ -457,29 +457,29 @@ list_fields(model="account.move")
 
 ---
 
-## Seguridad
+## Security
 
-- Las credenciales se almacenan en `~/.config/odoo-mcp/profiles.json`
-- Los permisos del archivo se configuran como `600` (solo lectura/escritura del propietario)
-- Las contraseñas se manejan con `SecretStr` para evitar logging accidental
+- Credentials are stored in `~/.config/odoo-mcp/profiles.json`
+- File permissions are set to `600` (owner read/write only)
+- Passwords are handled with `SecretStr` to prevent accidental logging
 
 ---
 
-## Desarrollo
+## Development
 
 ```bash
-# Instalar con dependencias de desarrollo
+# Install with development dependencies
 pip install -e ".[dev]"
 
-# Ejecutar linting
+# Run linting
 ruff check odoo_mcp_multi/
 
-# Formatear código
+# Format code
 ruff format odoo_mcp_multi/
 ```
 
 ---
 
-## Licencia
+## License
 
 MIT

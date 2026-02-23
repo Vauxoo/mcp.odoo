@@ -1,8 +1,8 @@
 site_name: Odoo MCP Multi
 site_description: MCP Server for connecting Claude/Cursor to multiple Odoo instances
-site_author: Vauxoo
+site_author: "nhomar [Vauxoo]"
 site_url: https://vauxoo.github.io/odoo-mcp-multi/
-repo_url: https://github.com/vauxoo/odoo-mcp-multi
+repo_url: https://git.vauxoo.com/nhomar/mcp.odoo
 
 theme:
   name: material

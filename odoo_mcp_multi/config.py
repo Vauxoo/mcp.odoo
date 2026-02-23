@@ -64,7 +64,9 @@ class ProfileConfig(BaseModel):
     @classmethod
     def from_dict(cls, data: dict) -> ProfileConfig:
         """Create config from dictionary."""
-        profiles = {name: OdooProfile.from_dict(profile_data) for name, profile_data in data.get("profiles", {}).items()}
+        profiles = {
+            name: OdooProfile.from_dict(profile_data) for name, profile_data in data.get("profiles", {}).items()
+        }
         return cls(profiles=profiles, default_profile=data.get("default_profile"))
 
 
@@ -192,14 +194,16 @@ def list_profiles() -> list[dict]:
     result = []
 
     for name, profile in config.profiles.items():
-        result.append({
-            "name": name,
-            "url": profile.url,
-            "database": profile.database,
-            "user": profile.user,
-            "protocol": profile.protocol,
-            "is_default": name == config.default_profile,
-        })
+        result.append(
+            {
+                "name": name,
+                "url": profile.url,
+                "database": profile.database,
+                "user": profile.user,
+                "protocol": profile.protocol,
+                "is_default": name == config.default_profile,
+            }
+        )
 
     return result
 

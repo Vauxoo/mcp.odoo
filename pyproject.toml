@@ -10,7 +10,7 @@ readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
 authors = [
-    { name = "Vauxoo", email = "info@vauxoo.com" }
+    { name = "nhomar [Vauxoo]", email = "info@vauxoo.com" }
 ]
 keywords = ["mcp", "odoo", "erp", "xmlrpc", "claude", "cursor"]
 classifiers = [
@@ -46,8 +46,8 @@ dev = [
 odoo-mcp = "odoo_mcp_multi.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/vauxoo/odoo-mcp-multi"
-Repository = "https://github.com/vauxoo/odoo-mcp-multi"
+Homepage = "https://git.vauxoo.com/nhomar/mcp.odoo"
+Repository = "https://git.vauxoo.com/nhomar/mcp.odoo"
 
 [tool.hatch.build.targets.wheel]
 packages = ["odoo_mcp_multi"]

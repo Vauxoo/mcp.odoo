@@ -284,7 +284,9 @@ class JsonRpcClient(BaseOdooClient):
             raise OdooAuthenticationError(str(e)) from e
 
         if not uid:
-            raise OdooAuthenticationError(f"Authentication failed for user '{self.user}' on database '{self.database}'")
+            raise OdooAuthenticationError(
+                f"Authentication failed for user '{self.user}' on database '{self.database}'"
+            )
 
         self._uid = uid
         return uid
@@ -353,7 +355,9 @@ class XmlRpcClient(BaseOdooClient):
             raise OdooConnectionError(f"Connection error: {e}") from e
 
         if not uid:
-            raise OdooAuthenticationError(f"Authentication failed for user '{self.user}' on database '{self.database}'")
+            raise OdooAuthenticationError(
+                f"Authentication failed for user '{self.user}' on database '{self.database}'"
+            )
 
         self._uid = uid
         return uid
@@ -504,6 +508,7 @@ def parse_domain(domain_str: str) -> list:
 
     try:
         import ast
+
         return ast.literal_eval(domain_str)
     except (ValueError, SyntaxError) as e:
         raise ValueError(f"Invalid domain format: {domain_str}") from e
@@ -542,6 +547,7 @@ def parse_json_arg(arg_str: str, default: Any = None) -> Any:
     except json.JSONDecodeError:
         try:
             import ast
+
             return ast.literal_eval(arg_str)
         except (ValueError, SyntaxError):
             return default

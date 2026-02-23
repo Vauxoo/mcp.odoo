@@ -12,4 +12,4 @@ Welcome to the documentation for **Odoo MCP Multi**, an MCP (Model Context Proto
 
 ## Getting Started
 
-Check out the [README on GitHub](https://github.com/vauxoo/odoo-mcp-multi) for quick setup instructions and how to integrate with your preferred AI editor.
+Check out the [README on Git](https://git.vauxoo.com/nhomar/mcp.odoo) for quick setup instructions and how to integrate with your preferred AI editor.
