@@ -384,6 +384,32 @@ Creates a new record.
 
 ---
 
+### `export_records`
+
+Exports records from a model using native `export_data`. Returns a clean array of dictionaries, ideal for bulk operations.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `model` | string | Model name |
+| `domain` | string | Search domain (e.g., `[('name', 'ilike', 'John')]`) |
+| `fields` | string | Comma-separated fields. Use `id` for External ID, and `rel/id` for relations (e.g., `id,name,country_id/id`) |
+| `profile` | string | *(Optional)* Target Odoo profile name |
+
+---
+
+### `import_records`
+
+Imports and updates records via native `load`. If the `id` field contains an External ID, the record is updated. Returns detailed line-by-line messages on format errors.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `model` | string | Model name |
+| `fields` | string | Comma-separated field names matching the keys (e.g., `id,name`) |
+| `rows` | string | JSON array of dictionaries containing the data. |
+| `profile` | string | *(Optional)* Target Odoo profile name |
+
+---
+
 ### `execute_kw`
 
 Executes any method of an Odoo model.

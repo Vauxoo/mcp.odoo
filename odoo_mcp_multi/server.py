@@ -235,6 +235,122 @@ def create(model: str, values: str, profile: Optional[str] = None) -> str:
 
 
 @mcp.tool()
+def export_records(
+    model: str,
+    domain: str = "[]",
+    fields: str = "id,name",
+    profile: Optional[str] = None,
+) -> str:
+    """Export records from an Odoo model using native export_data.
+
+    This returns data as a JSON array of dictionaries mapping field names to values,
+    which is much easier to read and modify than standard search_read.
+    Crucially, if you request the 'id' field, Odoo will return the External ID (XML ID)
+    which is highly recommended for stable imports.
+    For relational fields, use Odoo's export syntax (e.g., 'country_id/id' to get the
+    external ID of the country, or 'category_id/id' for a list of external IDs).
+
+    Args:
+        model: Model name (e.g., 'res.partner')
+        domain: Search domain as string (e.g., "[('name', 'ilike', 'John')]")
+        fields: Comma-separated field names (e.g., "id,name,country_id/id")
+        profile: Optional name of the Odoo profile to connect to.
+
+    Returns:
+        JSON array of exported records as dictionaries.
+    """
+    try:
+        client = get_client(profile)
+        parsed_domain = parse_domain(domain)
+        parsed_fields = parse_fields(fields) if fields else ["id"]
+
+        search_result = client.execute_kw(model, "search", [parsed_domain])
+        if not search_result:
+            return format_result([])
+
+        export_result = client.execute_kw(model, "export_data", [search_result, parsed_fields])
+
+        # Odoo returns: {'datas': [['ext_id_1', 'Name 1'], ['ext_id_2', 'Name 2']]}
+        if not export_result or "datas" not in export_result:
+            return format_result([])
+
+        datas = export_result["datas"]
+
+        # Convert array of arrays to array of dicts
+        formatted_result = []
+        for row in datas:
+            formatted_row = {}
+            for i, field_name in enumerate(parsed_fields):
+                formatted_row[field_name] = row[i] if i < len(row) else None
+            formatted_result.append(formatted_row)
+
+        return format_result(formatted_result)
+    except (OdooConnectionError, OdooAuthenticationError, OdooExecutionError) as e:
+        return format_error(e)
+    except Exception as e:
+        return format_error(e)
+
+
+@mcp.tool()
+def import_records(
+    model: str,
+    fields: str,
+    rows: str,
+    profile: Optional[str] = None,
+) -> str:
+    """Import records into an Odoo model using native load.
+
+    Uses Odoo's bulk import mechanism (`load`).
+    Pass the JSON string array of dictionaries (matching the output format of `export_records`).
+    If the 'id' field is present and contains an External ID, Odoo will automatically
+    UPDATE existing records. Otherwise, it will CREATE new ones.
+    Relational fields should be mapped appropriately (e.g. 'country_id/id' mapped to 'base.us').
+
+    Args:
+        model: Model name (e.g., 'res.partner')
+        fields: Comma-separated field names matching the dictionaries (e.g., "id,name,country_id/id")
+        rows: JSON array of dictionaries with the data to import.
+        profile: Optional name of the Odoo profile to connect to.
+
+    Returns:
+        JSON with success status, created/updated IDs, and any detailed parsed error messages.
+    """
+    try:
+        client = get_client(profile)
+        parsed_fields = parse_fields(fields)
+        parsed_rows_raw = parse_json_arg(rows, [])
+
+        if not parsed_fields:
+            return format_error(ValueError("No fields provided for import."))
+        if not parsed_rows_raw:
+            return format_error(ValueError("No rows provided for import."))
+
+        # Convert array of dicts back to array of arrays
+        formatted_rows = []
+        for row in parsed_rows_raw:
+            if isinstance(row, dict):
+                # Odoo expects False instead of None for empty/null values in load()
+                formatted_row = [row.get(f, False) if row.get(f) is not None else False for f in parsed_fields]
+                formatted_rows.append(formatted_row)
+            elif isinstance(row, list):
+                # If they already passed array of arrays
+                mapped_row = [val if val is not None else False for val in row]
+                formatted_rows.append(mapped_row)
+            else:
+                return format_error(ValueError("Rows must be a JSON array of dictionaries or arrays."))
+
+        load_result = client.execute_kw(model, "load", [parsed_fields, formatted_rows])
+
+        # load_result typically looks like: {'ids': [1,2], 'messages': []}
+        # or {'ids': False, 'messages': [{'message': 'error', 'field': 'name', 'record': 0}]}
+        return format_result(load_result)
+    except (OdooConnectionError, OdooAuthenticationError, OdooExecutionError) as e:
+        return format_error(e)
+    except Exception as e:
+        return format_error(e)
+
+
+@mcp.tool()
 def execute_kw(
     model: str,
     method: str,
