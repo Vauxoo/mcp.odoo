@@ -10,7 +10,7 @@ readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
 authors = [
-    { name = "nhomar [Vauxoo]", email = "info@vauxoo.com" }
+    { name = "Nhomar Hernandez", email = "info@vauxoo.com" }
 ]
 keywords = ["mcp", "odoo", "erp", "xmlrpc", "claude", "cursor"]
 classifiers = [
