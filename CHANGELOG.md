@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.4] - 2026-02-23
+
+### Changed
+- Converted the `publish:pypi` GitLab CI job to a manual trigger (`when: manual`) to prevent automatic deployment to PyPI when a tag is pushed.
+
+### Added
+- Added usage examples for `export_records` and `import_records` to the `README.md` documentation.
+
 ## [0.2.3] - 2026-02-23
 
 ### Fixed

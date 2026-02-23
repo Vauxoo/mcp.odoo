@@ -482,6 +482,18 @@ execute_kw(model="sale.order", method="action_confirm", args="[[42]]")
 list_fields(model="account.move")
 ```
 
+> "Export the name and external ID of all active partners"
+
+```python
+export_records(model="res.partner", domain="[('active', '=', True)]", fields="id,name")
+```
+
+> "Update the phone number of the partner with external ID 'base.res_partner_1' and create a new partner"
+
+```python
+import_records(model="res.partner", fields="id,name,phone", rows='[{"id": "base.res_partner_1", "name": "Existing Partner", "phone": "12345"}, {"name": "New Partner", "phone": "67890"}]')
+```
+
 ---
 
 ## Security
