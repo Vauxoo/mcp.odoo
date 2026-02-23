@@ -1,7 +1,10 @@
-import pytest
-import httpx
-from odoo_mcp_multi.utils import JsonRpcClient, OdooConnectionError
 import json
+
+import httpx
+import pytest
+
+from odoo_mcp_multi.utils import JsonRpcClient, OdooConnectionError
+
 
 class MockResponse:
     def __init__(self, status_code, content):
@@ -10,6 +13,7 @@ class MockResponse:
 
     def json(self):
         return json.loads(self.content)
+
 
 def test_json_decode_error(monkeypatch):
     client = JsonRpcClient("https://odoo.example.com", "test_db", "admin", "password")

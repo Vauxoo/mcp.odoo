@@ -262,7 +262,9 @@ class JsonRpcClient(BaseOdooClient):
             try:
                 result = response.json()
             except json.JSONDecodeError as e:
-                raise OdooConnectionError(f"Invalid JSON response from server (HTTP {response.status_code}): {e}") from e
+                raise OdooConnectionError(
+                    f"Invalid JSON response from server (HTTP {response.status_code}): {e}"
+                ) from e
 
             if "error" in result:
                 error = result["error"]
