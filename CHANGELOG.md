@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.5] - 2026-02-23
+
+### Changed
+- Refactored `README.md` to be "SKILL friendly"—condensing excessively verbose CLI options and tool schemas into streamlined, high-density documentation tailored for AI agents.
+- Updated `.gitlab-ci.yml` to implement "Option 1" for the Tag Pipeline: 
+  - Attached the `pages` job to the tag-triggered pipeline for a complete view of the deployment sequence (`lint` -> `test` -> `pages` -> `publish:pypi`).
+  - Reverted `publish:pypi` back to automated execution by removing `when: manual`.
+
 ## [0.2.4] - 2026-02-23
 
 ### Changed
