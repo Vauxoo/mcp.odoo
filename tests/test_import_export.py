@@ -75,9 +75,7 @@ def test_import_records_error(mock_get_client):
     }
 
     rows_json = json.dumps([{"id": "part_1", "name": "Test", "country_id/id": "test_id"}])
-    result = op_import_records(
-        model="res.partner", fields="id,name,country_id/id", rows=rows_json, profile="test"
-    )
+    result = op_import_records(model="res.partner", fields="id,name,country_id/id", rows=rows_json, profile="test")
 
     assert result["ids"] is False
     assert len(result["messages"]) == 1

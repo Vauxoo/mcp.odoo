@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-03-15
+
+### Added
+- **Full CLI parity with MCP tools**: All 9 Odoo data operations are now available as CLI commands (`search-read`, `write`, `create`, `export-records`, `import-records`, `execute-kw`, `get-version`, `list-models`, `list-fields`).
+- New shared `operations.py` module extracting business logic from `server.py` — both MCP and CLI call the same functions (DRY architecture).
+- 54 new tests: `test_operations.py` (19 unit tests), `test_cli_commands.py` (14 CLI integration tests), `test_pre_parsed_args.py` (additional coverage). Total: **60 tests**.
+
+### Changed
+- Refactored `server.py` to thin MCP wrapper delegating to `operations.py`.
+- Expanded `README.md` with full CLI data operations documentation.
+
 ## [0.2.8] - 2026-02-23
 
 ### Fixed

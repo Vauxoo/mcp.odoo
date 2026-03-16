@@ -35,15 +35,26 @@ def test_cli_search_read(mock_op):
 def test_cli_search_read_with_options(mock_op):
     mock_op.return_value = []
 
-    result = runner.invoke(main, [
-        "search-read", "--model", "res.partner",
-        "--domain", "[('active','=',True)]",
-        "--fields", "name",
-        "--limit", "10",
-        "--offset", "5",
-        "--order", "name asc",
-        "--profile", "prod",
-    ])
+    result = runner.invoke(
+        main,
+        [
+            "search-read",
+            "--model",
+            "res.partner",
+            "--domain",
+            "[('active','=',True)]",
+            "--fields",
+            "name",
+            "--limit",
+            "10",
+            "--offset",
+            "5",
+            "--order",
+            "name asc",
+            "--profile",
+            "prod",
+        ],
+    )
 
     assert result.exit_code == 0
     mock_op.assert_called_once_with("res.partner", "[('active','=',True)]", "name", 10, 5, "name asc", "prod")
@@ -65,9 +76,7 @@ def test_cli_search_read_error(mock_op):
 def test_cli_write(mock_op):
     mock_op.return_value = {"success": True, "updated_ids": [1]}
 
-    result = runner.invoke(main, [
-        "write", "--model", "res.partner", "--ids", "1", "--values", '{"name": "Updated"}'
-    ])
+    result = runner.invoke(main, ["write", "--model", "res.partner", "--ids", "1", "--values", '{"name": "Updated"}'])
 
     assert result.exit_code == 0
     output = json.loads(result.output)
@@ -83,9 +92,7 @@ def test_cli_write(mock_op):
 def test_cli_create(mock_op):
     mock_op.return_value = {"success": True, "id": 42}
 
-    result = runner.invoke(main, [
-        "create", "--model", "res.partner", "--values", '{"name": "New"}'
-    ])
+    result = runner.invoke(main, ["create", "--model", "res.partner", "--values", '{"name": "New"}'])
 
     assert result.exit_code == 0
     output = json.loads(result.output)
@@ -101,9 +108,7 @@ def test_cli_create(mock_op):
 def test_cli_export_records(mock_op):
     mock_op.return_value = [{"id": "ext_1", "name": "A"}]
 
-    result = runner.invoke(main, [
-        "export-records", "--model", "res.partner", "--fields", "id,name"
-    ])
+    result = runner.invoke(main, ["export-records", "--model", "res.partner", "--fields", "id,name"])
 
     assert result.exit_code == 0
     output = json.loads(result.output)
@@ -120,9 +125,7 @@ def test_cli_import_records(mock_op):
     mock_op.return_value = {"ids": [1], "messages": []}
 
     rows = json.dumps([{"id": "ext_1", "name": "Test"}])
-    result = runner.invoke(main, [
-        "import-records", "--model", "res.partner", "--fields", "id,name", "--rows", rows
-    ])
+    result = runner.invoke(main, ["import-records", "--model", "res.partner", "--fields", "id,name", "--rows", rows])
 
     assert result.exit_code == 0
     output = json.loads(result.output)
@@ -138,9 +141,9 @@ def test_cli_import_records(mock_op):
 def test_cli_execute_kw(mock_op):
     mock_op.return_value = {"success": True, "result": True}
 
-    result = runner.invoke(main, [
-        "execute-kw", "--model", "sale.order", "--method", "action_confirm", "--args", "[[42]]"
-    ])
+    result = runner.invoke(
+        main, ["execute-kw", "--model", "sale.order", "--method", "action_confirm", "--args", "[[42]]"]
+    )
 
     assert result.exit_code == 0
     output = json.loads(result.output)
@@ -212,8 +215,17 @@ def test_cli_help():
     result = runner.invoke(main, ["--help"])
     assert result.exit_code == 0
     # All new commands should be listed
-    for cmd in ["search-read", "write", "create", "export-records", "import-records",
-                 "execute-kw", "get-version", "list-models", "list-fields"]:
+    for cmd in [
+        "search-read",
+        "write",
+        "create",
+        "export-records",
+        "import-records",
+        "execute-kw",
+        "get-version",
+        "list-models",
+        "list-fields",
+    ]:
         assert cmd in result.output, f"Command '{cmd}' not found in --help output"
 
 

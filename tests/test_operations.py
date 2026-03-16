@@ -216,9 +216,7 @@ def test_op_execute_kw(mock_get_client):
     mock_get_client.return_value = mock_client
     mock_client.execute_kw.return_value = True
 
-    result = op_execute_kw(
-        model="sale.order", method="action_confirm", args="[[42]]", kwargs="{}", profile="test"
-    )
+    result = op_execute_kw(model="sale.order", method="action_confirm", args="[[42]]", kwargs="{}", profile="test")
 
     assert result["success"] is True
     assert result["result"] is True

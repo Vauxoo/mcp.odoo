@@ -8,7 +8,8 @@ MCP Server for connecting MCP clients (Antigravity, Claude Desktop, Cursor, VS C
 - **Secure by default**: Credentials safely stored in `~/.config/odoo-mcp/` (`600` permissions).
 - **Multi-protocol Support**: JSON-RPC (8.0+), JSON2 (19.0+), XML-RPC (legacy) natively auto-detected.
 - **10 Native MCP tools**: `search_read`, `write`, `create`, `export_records`, `import_records`, `execute_kw`, `list_models`, `list_fields`, `list_available_profiles`, `get_version`.
-- **Integrated CLI**: Powerful command-line tool for profile and server management.
+- **Full CLI parity**: Every MCP tool is also available as a CLI command — same logic, no duplication (DRY).
+- **Integrated CLI**: Profile management, connection testing, and all Odoo data operations from your terminal.
 
 ## 🚀 Installation & Quick Start
 
@@ -25,14 +26,31 @@ odoo-mcp run
 
 ## 💻 CLI Operations
 
-You can manage all configuration directly from your terminal. Use `odoo-mcp [COMMAND] --help` for specific flags.
+All operations are available directly from your terminal. Use `odoo-mcp [COMMAND] --help` for specific flags.
+
+### Profile Management
 
 - `odoo-mcp add-profile`: Interactive wizard to register a new instance.
 - `odoo-mcp list-profiles`: Displays all configured profiles.
 - `odoo-mcp edit-profile NAME`: Modify credentials, URLs, or database of an existing profile.
 - `odoo-mcp remove-profile NAME`: Deletes a profile.
+- `odoo-mcp set-default NAME`: Sets the default profile.
 - `odoo-mcp test -p NAME`: Tests live connection to confirm credentials are working.
 - `odoo-mcp run`: **Starts the MCP server process.**
+
+### Odoo Data Operations
+
+All data commands support `--profile / -p` and output JSON for composability.
+
+- `odoo-mcp search-read -m MODEL`: Search and read records (`--domain`, `--fields`, `--limit`, `--offset`, `--order`).
+- `odoo-mcp write -m MODEL -i IDS -v VALUES`: Update existing records.
+- `odoo-mcp create -m MODEL -v VALUES`: Create a new record.
+- `odoo-mcp export-records -m MODEL`: Export via native `export_data` (`--fields`, `--domain`).
+- `odoo-mcp import-records -m MODEL -f FIELDS -r ROWS`: Import via native `load`.
+- `odoo-mcp execute-kw -m MODEL --method METHOD`: Execute any model method (`--args`, `--kwargs`).
+- `odoo-mcp get-version`: Retrieve server version info.
+- `odoo-mcp list-models`: List available models (`--search` to filter).
+- `odoo-mcp list-fields -m MODEL`: List all fields of a model.
 
 ## ⚙️ MCP Client Configuration
 
