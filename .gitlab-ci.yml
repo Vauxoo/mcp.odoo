@@ -67,8 +67,8 @@ auto-release:
     - pip install -e ".[dev]"
   script:
     - |
-      echo "==> Reading commits since last tag..."
-      git fetch --tags
+      echo "==> Syncing tags with remote (pruning stale local tags)..."
+      git fetch --tags --prune --prune-tags
       LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
       if [ -n "$LAST_TAG" ]; then
         COMMITS=$(git log ${LAST_TAG}..HEAD --pretty=format:"%s" 2>/dev/null)
