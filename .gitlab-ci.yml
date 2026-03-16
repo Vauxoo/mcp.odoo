@@ -61,6 +61,10 @@ test:
 auto-release:
   extends: .python-template
   stage: release
+  before_script:
+    - apt-get update && apt-get install -y --no-install-recommends git
+    - pip install --upgrade pip
+    - pip install -e ".[dev]"
   script:
     - |
       echo "==> Reading commits since last tag..."
