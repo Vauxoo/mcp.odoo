@@ -68,6 +68,7 @@ auto-release:
   script:
     - |
       echo "==> Reading commits since last tag..."
+      git fetch --tags
       LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
       if [ -n "$LAST_TAG" ]; then
         COMMITS=$(git log ${LAST_TAG}..HEAD --pretty=format:"%s" 2>/dev/null)
@@ -78,6 +79,13 @@ auto-release:
 
       if echo "$COMMITS" | grep -qi "\[skip release\]"; then
         echo "==> [skip release] found. Skipping."
+        exit 0
+      fi
+
+      # Skip if this is a version bump commit (already released)
+      HEAD_MSG=$(git log -1 --pretty=format:"%s")
+      if echo "$HEAD_MSG" | grep -q "^Bump version:"; then
+        echo "==> HEAD is already a version bump commit. Skipping."
         exit 0
       fi
 
