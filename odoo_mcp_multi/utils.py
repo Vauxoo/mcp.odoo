@@ -501,8 +501,15 @@ def create_client(
 OdooClient = create_client
 
 
-def parse_domain(domain_str: str) -> list:
-    """Parse a domain string into a Python list."""
+def parse_domain(domain_str: str | list) -> list:
+    """Parse a domain string into a Python list.
+
+    Accepts both a JSON string and an already-parsed list (some MCP clients
+    deserialize JSON arguments before delivering them to the tool handler).
+    """
+    if isinstance(domain_str, list):
+        return domain_str
+
     if not domain_str or domain_str.strip() in ("", "[]"):
         return []
 
@@ -526,8 +533,16 @@ def parse_fields(fields_str: str) -> list[str]:
     return [f.strip() for f in fields_str.split(",") if f.strip()]
 
 
-def parse_ids(ids_str: str) -> list[int]:
-    """Parse an IDs string into a list of integers."""
+def parse_ids(ids_str: str | list) -> list[int]:
+    """Parse an IDs string into a list of integers.
+
+    Accepts both a JSON string and an already-parsed list.
+    """
+    if isinstance(ids_str, list):
+        return [int(i) for i in ids_str]
+    if isinstance(ids_str, int):
+        return [ids_str]
+
     if not ids_str or ids_str.strip() == "":
         return []
 
@@ -542,17 +557,26 @@ def parse_ids(ids_str: str) -> list[int]:
     return [int(i.strip()) for i in ids_str.split(",") if i.strip()]
 
 
-def parse_json_arg(arg_str: str, default: Any = None) -> Any:
-    """Parse a JSON argument string."""
-    if not arg_str or arg_str.strip() in ("", "{}", "[]"):
+def parse_json_arg(arg: str | dict | list, default: Any = None) -> Any:
+    """Parse a JSON argument string, or return it directly if already parsed.
+
+    Some MCP clients (e.g. Claude Code) deserialize JSON arguments into native
+    Python objects before delivering them to the tool handler, even when the
+    parameter schema declares ``type: "string"``.  This function transparently
+    handles both cases so that tools work regardless of client behaviour.
+    """
+    if isinstance(arg, (dict, list, int, float, bool)):
+        return arg
+
+    if not arg or arg.strip() in ("", "{}", "[]"):
         return default
 
     try:
-        return json.loads(arg_str)
+        return json.loads(arg)
     except json.JSONDecodeError:
         try:
             import ast
 
-            return ast.literal_eval(arg_str)
+            return ast.literal_eval(arg)
         except (ValueError, SyntaxError):
             return default

@@ -8,7 +8,7 @@ the shared business logic in operations.py.
 from __future__ import annotations
 
 import json
-from typing import Optional
+from typing import Optional, Union
 
 from mcp.server.fastmcp import FastMCP
 
@@ -86,7 +86,7 @@ def list_available_profiles() -> str:
 @mcp.tool()
 def search_read(
     model: str,
-    domain: str = "[]",
+    domain: Union[str, list] = "[]",
     fields: str = "",
     limit: int = 100,
     offset: int = 0,
@@ -97,7 +97,7 @@ def search_read(
 
     Args:
         model: Model name (e.g., 'res.partner', 'sale.order')
-        domain: Search domain as string (e.g., "[('name', 'ilike', 'John')]")
+        domain: Search domain as string (e.g., "[('name', 'ilike', 'John')]") or list
         fields: Comma-separated field names (e.g., "name,email,phone")
         limit: Maximum number of records to return (default: 100)
         offset: Number of records to skip (default: 0)
@@ -115,7 +115,12 @@ def search_read(
 
 
 @mcp.tool()
-def write(model: str, ids: str, values: str, profile: Optional[str] = None) -> str:
+def write(
+    model: str,
+    ids: Union[str, list] = "[]",
+    values: Union[str, dict] = "{}",
+    profile: Optional[str] = None,
+) -> str:
     """Update existing records in Odoo.
 
     Args:
@@ -135,7 +140,11 @@ def write(model: str, ids: str, values: str, profile: Optional[str] = None) -> s
 
 
 @mcp.tool()
-def create(model: str, values: str, profile: Optional[str] = None) -> str:
+def create(
+    model: str,
+    values: Union[str, dict] = "{}",
+    profile: Optional[str] = None,
+) -> str:
     """Create a new record in Odoo.
 
     Args:
@@ -191,7 +200,7 @@ def export_records(
 def import_records(
     model: str,
     fields: str,
-    rows: str,
+    rows: Union[str, list] = "[]",
     profile: Optional[str] = None,
 ) -> str:
     """Import records into an Odoo model using native load.
@@ -224,8 +233,8 @@ def import_records(
 def execute_kw(
     model: str,
     method: str,
-    args: str = "[]",
-    kwargs: str = "{}",
+    args: Union[str, list] = "[]",
+    kwargs: Union[str, dict] = "{}",
     profile: Optional[str] = None,
 ) -> str:
     """Execute any method on an Odoo model.
