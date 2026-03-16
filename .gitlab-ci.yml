@@ -1,6 +1,7 @@
 stages:
   - lint
   - test
+  - release
   - deploy
 
 variables:
@@ -42,6 +43,67 @@ test:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     - if: $CI_COMMIT_TAG
+
+# ---------------------------------------------------------------------------
+# Auto-release: runs on main after lint+test pass.
+#
+# Bump level logic (commit-format agnostic):
+#   - Default: patch (0.3.0 → 0.3.1)
+#   - [minor] in any commit message → minor (0.3.0 → 0.4.0)
+#   - [major] in any commit message → major (0.4.0 → 1.0.0)
+#   - [skip release] in any commit message → no release
+#
+# Pushes a version commit + tag, which triggers the publish:* jobs.
+#
+# Requires CI/CD variable: RELEASE_TOKEN (project access token with
+# write_repository scope). Set in Settings → CI/CD → Variables.
+# ---------------------------------------------------------------------------
+auto-release:
+  extends: .python-template
+  stage: release
+  script:
+    - |
+      echo "==> Reading commits since last tag..."
+      LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+      if [ -n "$LAST_TAG" ]; then
+        COMMITS=$(git log ${LAST_TAG}..HEAD --pretty=format:"%s" 2>/dev/null)
+      else
+        COMMITS=$(git log --pretty=format:"%s" -20)
+      fi
+      echo "$COMMITS"
+
+      if echo "$COMMITS" | grep -qi "\[skip release\]"; then
+        echo "==> [skip release] found. Skipping."
+        exit 0
+      fi
+
+      BUMP_LEVEL="patch"
+      if echo "$COMMITS" | grep -qi "\[major\]"; then
+        BUMP_LEVEL="major"
+      elif echo "$COMMITS" | grep -qi "\[minor\]"; then
+        BUMP_LEVEL="minor"
+      fi
+      echo "==> Bump level: $BUMP_LEVEL"
+
+      echo "==> Configuring git for push..."
+      git config user.name "CI Release Bot"
+      git config user.email "ci@vauxoo.com"
+      git remote set-url origin "https://release-bot:${RELEASE_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
+
+      echo "==> Bumping version ($BUMP_LEVEL)..."
+      bump-my-version bump $BUMP_LEVEL
+
+      echo "==> Pushing version commit and tag..."
+      git push origin HEAD:$CI_DEFAULT_BRANCH --tags
+
+      NEW_TAG=$(git describe --tags --exact-match HEAD)
+      echo "==> Released: $NEW_TAG"
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_COMMIT_TAG == null
+      when: on_success
+  needs:
+    - lint
+    - test
 
 pages:
   extends: .python-template
