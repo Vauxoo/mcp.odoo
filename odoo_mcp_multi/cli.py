@@ -1,14 +1,13 @@
 """Click CLI for odoo-mcp-multi.
 
-Provides commands for managing Odoo profiles and running the MCP server:
-- add-profile: Interactive wizard to add credentials
-- list-profiles: Show configured profiles
-- remove-profile: Delete a profile
-- run: Start the MCP server
+Provides commands for managing Odoo profiles and running the MCP server,
+plus all Odoo data operations (search, write, create, etc.) mirroring
+the MCP tool interface. Both interfaces share logic via operations.py.
 """
 
 from __future__ import annotations
 
+import json
 import sys
 
 import click
@@ -22,12 +21,35 @@ from odoo_mcp_multi.config import (
     remove_profile,
     set_default_profile,
 )
+from odoo_mcp_multi.operations import (
+    op_create,
+    op_execute_kw,
+    op_export_records,
+    op_get_version,
+    op_import_records,
+    op_list_fields,
+    op_list_models,
+    op_search_read,
+    op_write,
+)
 from odoo_mcp_multi.utils import (
     OdooAuthenticationError,
     OdooConnectionError,
+    OdooExecutionError,
     create_client,
     get_server_version,
 )
+
+
+def _output(data, as_json: bool = True) -> None:
+    """Output data as formatted JSON to stdout."""
+    click.echo(json.dumps(data, indent=2, default=str, ensure_ascii=False))
+
+
+def _handle_error(e: Exception) -> None:
+    """Print error and exit with code 1."""
+    click.secho(f"✗ Error: {e}", fg="red", err=True)
+    sys.exit(1)
 
 
 @click.group()
@@ -37,8 +59,16 @@ def main() -> None:
 
     Use 'odoo-mcp add-profile' to configure an Odoo instance,
     then 'odoo-mcp run' to start the MCP server.
+
+    All Odoo data commands (search-read, write, create, etc.) are also
+    available directly from the CLI.
     """
     pass
+
+
+# ---------------------------------------------------------------------------
+# Profile management commands
+# ---------------------------------------------------------------------------
 
 
 @main.command("add-profile")
@@ -103,9 +133,7 @@ def cmd_list_profiles(as_json: bool) -> None:
         return
 
     if as_json:
-        import json
-
-        click.echo(json.dumps(profiles, indent=2))
+        _output(profiles)
         return
 
     click.echo("\nConfigured Profiles:")
@@ -295,6 +323,133 @@ def cmd_run(profile: str) -> None:
 
     # Run the server
     run_server()
+
+
+# ---------------------------------------------------------------------------
+# Odoo data operation commands (mirroring MCP tools)
+# ---------------------------------------------------------------------------
+
+
+@main.command("search-read")
+@click.option("--model", "-m", required=True, help="Model name (e.g., 'res.partner')")
+@click.option("--domain", "-d", default="[]", help="Search domain as string (e.g., \"[('name','ilike','John')]\")")
+@click.option("--fields", "-f", default="", help="Comma-separated field names (e.g., 'name,email,phone')")
+@click.option("--limit", "-l", default=100, type=int, help="Maximum number of records (default: 100)")
+@click.option("--offset", default=0, type=int, help="Number of records to skip (default: 0)")
+@click.option("--order", default="", help="Sort order (e.g., 'name asc, id desc')")
+@click.option("--profile", "-p", default=None, help="Profile name to use")
+def cmd_search_read(model, domain, fields, limit, offset, order, profile) -> None:
+    """Search and read records from an Odoo model."""
+    try:
+        result = op_search_read(model, domain, fields, limit, offset, order, profile)
+        _output(result)
+    except (OdooConnectionError, OdooAuthenticationError, OdooExecutionError, ValueError) as e:
+        _handle_error(e)
+
+
+@main.command("write")
+@click.option("--model", "-m", required=True, help="Model name (e.g., 'res.partner')")
+@click.option("--ids", "-i", required=True, help="Record IDs as JSON array or comma-separated (e.g., '1,2,3')")
+@click.option("--values", "-v", required=True, help="Field values as JSON object")
+@click.option("--profile", "-p", default=None, help="Profile name to use")
+def cmd_write(model, ids, values, profile) -> None:
+    """Update existing records in Odoo."""
+    try:
+        result = op_write(model, ids, values, profile)
+        _output(result)
+    except (OdooConnectionError, OdooAuthenticationError, OdooExecutionError, ValueError) as e:
+        _handle_error(e)
+
+
+@main.command("create")
+@click.option("--model", "-m", required=True, help="Model name (e.g., 'res.partner')")
+@click.option("--values", "-v", required=True, help="Field values as JSON object")
+@click.option("--profile", "-p", default=None, help="Profile name to use")
+def cmd_create(model, values, profile) -> None:
+    """Create a new record in Odoo."""
+    try:
+        result = op_create(model, values, profile)
+        _output(result)
+    except (OdooConnectionError, OdooAuthenticationError, OdooExecutionError, ValueError) as e:
+        _handle_error(e)
+
+
+@main.command("export-records")
+@click.option("--model", "-m", required=True, help="Model name (e.g., 'res.partner')")
+@click.option("--domain", "-d", default="[]", help="Search domain as string")
+@click.option("--fields", "-f", default="id,name", help="Comma-separated field names (e.g., 'id,name,country_id/id')")
+@click.option("--profile", "-p", default=None, help="Profile name to use")
+def cmd_export_records(model, domain, fields, profile) -> None:
+    """Export records using native export_data."""
+    try:
+        result = op_export_records(model, domain, fields, profile)
+        _output(result)
+    except (OdooConnectionError, OdooAuthenticationError, OdooExecutionError, ValueError) as e:
+        _handle_error(e)
+
+
+@main.command("import-records")
+@click.option("--model", "-m", required=True, help="Model name (e.g., 'res.partner')")
+@click.option("--fields", "-f", required=True, help="Comma-separated field names (e.g., 'id,name')")
+@click.option("--rows", "-r", required=True, help="JSON array of dictionaries with import data")
+@click.option("--profile", "-p", default=None, help="Profile name to use")
+def cmd_import_records(model, fields, rows, profile) -> None:
+    """Import records using native load."""
+    try:
+        result = op_import_records(model, fields, rows, profile)
+        _output(result)
+    except (OdooConnectionError, OdooAuthenticationError, OdooExecutionError, ValueError) as e:
+        _handle_error(e)
+
+
+@main.command("execute-kw")
+@click.option("--model", "-m", required=True, help="Model name (e.g., 'res.partner')")
+@click.option("--method", required=True, help="Method name to execute (e.g., 'action_confirm')")
+@click.option("--args", "-a", default="[]", help="Positional args as JSON array (e.g., '[[42]]')")
+@click.option("--kwargs", "-k", default="{}", help="Keyword args as JSON object")
+@click.option("--profile", "-p", default=None, help="Profile name to use")
+def cmd_execute_kw(model, method, args, kwargs, profile) -> None:
+    """Execute any method on an Odoo model."""
+    try:
+        result = op_execute_kw(model, method, args, kwargs, profile)
+        _output(result)
+    except (OdooConnectionError, OdooAuthenticationError, OdooExecutionError, ValueError) as e:
+        _handle_error(e)
+
+
+@main.command("get-version")
+@click.option("--profile", "-p", default=None, help="Profile name to use")
+def cmd_get_version(profile) -> None:
+    """Get the Odoo server version information."""
+    try:
+        result = op_get_version(profile)
+        _output(result)
+    except Exception as e:
+        _handle_error(e)
+
+
+@main.command("list-models")
+@click.option("--search", "-s", default="", help="Search term to filter model names")
+@click.option("--profile", "-p", default=None, help="Profile name to use")
+def cmd_list_models(search, profile) -> None:
+    """List available models in the Odoo instance."""
+    try:
+        result = op_list_models(search, profile)
+        _output(result)
+    except (OdooConnectionError, OdooAuthenticationError, OdooExecutionError) as e:
+        _handle_error(e)
+
+
+@main.command("list-fields")
+@click.option("--model", "-m", required=True, help="Model name (e.g., 'res.partner')")
+@click.option("--profile", "-p", default=None, help="Profile name to use")
+def cmd_list_fields(model, profile) -> None:
+    """List all fields of an Odoo model."""
+    try:
+        result = op_list_fields(model, profile)
+        _output(result)
+    except (OdooConnectionError, OdooAuthenticationError, OdooExecutionError) as e:
+        _handle_error(e)
 
 
 if __name__ == "__main__":
