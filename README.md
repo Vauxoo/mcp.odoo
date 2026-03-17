@@ -15,7 +15,7 @@ MCP Server for connecting MCP clients (Antigravity, Claude Desktop, Cursor, VS C
 
 ```bash
 # Install package
-pip install .
+pip install odoo-mcp-multi
 
 # 1. Add your Odoo instance credentials
 odoo-mcp add-profile
@@ -23,6 +23,28 @@ odoo-mcp add-profile
 # 2. Start MCP server (Optional: lock to a specific profile with -p)
 odoo-mcp run
 ```
+
+## 📋 1-Minute Setup (Copy-Paste Prompt)
+
+Paste this into your AI client (Antigravity, Claude, Cursor) to get started instantly:
+
+> **Install & configure the Odoo MCP server.** Run these steps:
+>
+> 1. Install: `pip install odoo-mcp-multi`
+> 2. Add a profile: `odoo-mcp add-profile` (enter your Odoo URL, database, user, and API key)
+> 3. Test connection: `odoo-mcp test`
+> 4. Add this to your MCP client config (`~/.gemini/antigravity/mcp_config.json` for Antigravity, `~/Library/Application Support/Claude/claude_desktop_config.json` for Claude Desktop, `.cursor/mcp.json` for Cursor):
+>    ```json
+>    {
+>      "mcpServers": {
+>        "odoo": {
+>          "command": "odoo-mcp",
+>          "args": ["run"]
+>        }
+>      }
+>    }
+>    ```
+> 5. Restart your AI client. You now have access to 10 Odoo tools: `search_read`, `write`, `create`, `export_records`, `import_records`, `execute_kw`, `list_models`, `list_fields`, `list_available_profiles`, `get_version`.
 
 ## 💻 CLI Operations
 

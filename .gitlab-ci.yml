@@ -82,13 +82,6 @@ auto-release:
         exit 0
       fi
 
-      # Skip if this is a version bump commit (already released)
-      HEAD_MSG=$(git log -1 --pretty=format:"%s")
-      if echo "$HEAD_MSG" | grep -q "^Bump version:"; then
-        echo "==> HEAD is already a version bump commit. Skipping."
-        exit 0
-      fi
-
       BUMP_LEVEL="patch"
       if echo "$COMMITS" | grep -qi "\[major\]"; then
         BUMP_LEVEL="major"
