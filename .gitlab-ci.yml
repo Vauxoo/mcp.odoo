@@ -46,6 +46,7 @@ test:
 
 # ---------------------------------------------------------------------------
 # Auto-release: runs on main after lint+test pass.
+# The bumpversion commit_message includes [skip ci] to break the loop.
 #
 # Bump level logic (commit-format agnostic):
 #   - Default: patch (0.3.0 → 0.3.1)
