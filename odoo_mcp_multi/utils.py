@@ -262,8 +262,34 @@ class JsonRpcClient(BaseOdooClient):
             try:
                 result = response.json()
             except json.JSONDecodeError as e:
+                # Sniff the body to detect common non-JSON responses
+                body_preview = response.text[:500].strip()
+                hint = ""
+
+                # Odoo SaaS rate-limit: returns "200 OK" HTML page
+                if "<h1>200 OK</h1>" in body_preview or "Service ready" in body_preview:
+                    hint = (
+                        " — This looks like an Odoo SaaS rate-limit response. "
+                        "The server returned an HTML page instead of JSON. "
+                        "Wait 30-60 seconds and retry, or restart the MCP server."
+                    )
+                # Cloudflare challenge page
+                elif "cloudflare" in body_preview.lower() or "cf-" in response.headers.get("server", "").lower():
+                    hint = (
+                        " — This looks like a Cloudflare challenge/block. "
+                        "The server may be rate-limiting requests. "
+                        "Wait 60 seconds and retry."
+                    )
+                # Generic HTML (probably a proxy or load balancer error page)
+                elif body_preview.startswith(("<!DOCTYPE", "<html", "<HTML")):
+                    hint = (
+                        " — The server returned an HTML page instead of JSON. "
+                        "This may indicate a temporary rate-limit, proxy error, "
+                        "or the endpoint is unreachable. Wait and retry."
+                    )
+
                 raise OdooConnectionError(
-                    f"Invalid JSON response from server (HTTP {response.status_code}): {e}"
+                    f"Invalid JSON response from server (HTTP {response.status_code}): {e}{hint}"
                 ) from e
 
             if "error" in result:
