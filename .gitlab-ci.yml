@@ -83,22 +83,35 @@ auto-release:
       echo "==> Syncing tags with remote (pruning stale local tags)..."
       git fetch --tags --prune --prune-tags
       LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-      if [ -n "$LAST_TAG" ]; then
-        COMMITS=$(git log ${LAST_TAG}..HEAD --pretty=format:"%s" 2>/dev/null)
-      else
-        COMMITS=$(git log --pretty=format:"%s" -20)
-      fi
-      echo "$COMMITS"
 
-      if echo "$COMMITS" | grep -qi "\[skip release\]"; then
-        echo "==> [skip release] found. Skipping."
+      # PUSH_COMMITS: only the commits that arrived in this push.
+      # Used for [skip release] guard — so a historical commit with
+      # [skip release] never permanently blocks future releases.
+      if [ -n "$CI_COMMIT_BEFORE_SHA" ] && [ "$CI_COMMIT_BEFORE_SHA" != "0000000000000000000000000000000000000000" ]; then
+        PUSH_COMMITS=$(git log ${CI_COMMIT_BEFORE_SHA}..HEAD --pretty=format:"%s" 2>/dev/null)
+      else
+        PUSH_COMMITS=$(git log --pretty=format:"%s" -5)
+      fi
+
+      # RANGE_COMMITS: all commits since last tag — used for bump level detection.
+      if [ -n "$LAST_TAG" ]; then
+        RANGE_COMMITS=$(git log ${LAST_TAG}..HEAD --pretty=format:"%s" 2>/dev/null)
+      else
+        RANGE_COMMITS=$(git log --pretty=format:"%s" -20)
+      fi
+
+      echo "==> Push commits:"
+      echo "$PUSH_COMMITS"
+
+      if echo "$PUSH_COMMITS" | grep -qi "\[skip release\]"; then
+        echo "==> [skip release] found in push. Skipping."
         exit 0
       fi
 
       BUMP_LEVEL="patch"
-      if echo "$COMMITS" | grep -qi "\[major\]"; then
+      if echo "$RANGE_COMMITS" | grep -qi "\[major\]"; then
         BUMP_LEVEL="major"
-      elif echo "$COMMITS" | grep -qi "\[minor\]"; then
+      elif echo "$RANGE_COMMITS" | grep -qi "\[minor\]"; then
         BUMP_LEVEL="minor"
       fi
       echo "==> Bump level: $BUMP_LEVEL"
