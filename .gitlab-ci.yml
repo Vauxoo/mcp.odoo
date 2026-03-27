@@ -84,6 +84,14 @@ auto-release:
       git fetch --tags --prune --prune-tags
       LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
 
+      # Guard: if HEAD is already tagged, this pipeline is for a commit
+      # that was already released (e.g. two pipelines ran for the same SHA).
+      # Exit cleanly to avoid 'tag already exists' error 128.
+      if git describe --tags --exact-match HEAD 2>/dev/null; then
+        echo "==> HEAD is already tagged ($(git describe --tags --exact-match HEAD)). Nothing to release."
+        exit 0
+      fi
+
       # PUSH_COMMITS: only the commits that arrived in this push.
       # Used for [skip release] guard — so a historical commit with
       # [skip release] never permanently blocks future releases.
