@@ -30,7 +30,7 @@ def test_export_records(mock_get_client):
 
     # Verify client calls
     assert mock_client.execute_kw.call_count == 2
-    mock_client.execute_kw.assert_any_call("res.partner", "search", [[]])
+    mock_client.execute_kw.assert_any_call("res.partner", "search", [[]], {"limit": 500})
     mock_client.execute_kw.assert_any_call("res.partner", "export_data", [[42, 43], ["id", "name"]])
 
     # Verify output structure is array of dicts

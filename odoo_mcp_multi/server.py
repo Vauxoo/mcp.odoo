@@ -162,6 +162,7 @@ def export_records(
     model: str,
     domain: str = "[]",
     fields: str = "id,name",
+    limit: int = 500,
     profile: Optional[str] = None,
 ) -> str:
     """Export records from an Odoo model using native export_data.
@@ -177,13 +178,14 @@ def export_records(
         model: Model name (e.g., 'res.partner')
         domain: Search domain as string (e.g., "[('name', 'ilike', 'John')]")
         fields: Comma-separated field names (e.g., "id,name,country_id/id")
+        limit: Maximum number of records to export (default: 500)
         profile: Optional name of the Odoo profile to connect to.
 
     Returns:
         JSON array of exported records as dictionaries.
     """
     try:
-        result = op_export_records(model, domain, fields, profile)
+        result = op_export_records(model, domain, fields, limit, profile)
         return format_result(result)
     except Exception as e:
         return format_error(e)

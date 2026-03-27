@@ -218,6 +218,7 @@ def op_export_records(
     model: str,
     domain: str = "[]",
     fields: str = "id,name",
+    limit: int = 500,
     profile: Optional[str] = None,
 ) -> list[dict]:
     """Export records from an Odoo model using native export_data.
@@ -226,6 +227,7 @@ def op_export_records(
         model: Model name
         domain: Search domain as string
         fields: Comma-separated field names
+        limit: Maximum number of records to export (default: 500)
         profile: Profile name to use
 
     Returns:
@@ -235,7 +237,7 @@ def op_export_records(
     parsed_domain = parse_domain(domain)
     parsed_fields = parse_fields(fields) if fields else ["id"]
 
-    search_result = client.execute_kw(model, "search", [parsed_domain])
+    search_result = client.execute_kw(model, "search", [parsed_domain], {"limit": limit})
     if not search_result:
         return []
 
