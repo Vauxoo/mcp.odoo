@@ -12,7 +12,7 @@ Connects any MCP client (Antigravity, Claude Desktop, Cursor, VS Code) to
 (JSON-RPC 8.0+, JSON2 19.0+, XML-RPC legacy), secure credential storage
 (Unix 600 permissions), 60+ tests, and full CLI parity for every MCP tool.
 
-## 🌟 Features
+## Features
 
 - **Multi-profile management**: Store credentials for multiple environments (`prod`, `staging`, `dev`).
 - **Secure by default**: Credentials safely stored in `~/.config/odoo-mcp/` (`600` permissions).
@@ -21,35 +21,38 @@ Connects any MCP client (Antigravity, Claude Desktop, Cursor, VS Code) to
 - **Full CLI parity**: Every MCP tool is also available as a CLI command — same logic, no duplication (DRY).
 - **Integrated CLI**: Profile management, connection testing, and all Odoo data operations from your terminal.
 
-## 📋 1-Minute Setup (Copy-Paste Prompt)
+## 1-Minute Setup (Copy-Paste Prompt)
 
-Paste this into your AI client (Antigravity, Claude, Cursor) to get started instantly:
+Paste the block below into your AI client (Antigravity, Claude, Cursor) to get started instantly.
+The block renders as plain text — copy it as-is:
 
-> **Install & configure the Odoo MCP server.** Run these steps:
->
-> 1. Install (recommended — isolated, no venv needed):
->    - macOS: `brew install pipx && pipx install odoo-mcp-multi`
->    - Linux: `pip install pipx && pipx install odoo-mcp-multi`
->    - Windows: `winget install Python.Python.3.12` → new terminal → `pip install pipx && pipx ensurepath` → new terminal → `pipx install odoo-mcp-multi`
->    - Developer alternative: `pip install odoo-mcp-multi`
-> 2. Add a profile: `odoo-mcp add-profile` (enter your Odoo URL, database, user, and API key)
-> 3. Test connection: `odoo-mcp test`
-> 4. Add this block to your AI client's MCP config file (locate the right path for your tool and OS in the [⚙️ MCP Client Configuration](#️-mcp-client-configuration) section below):
->
->    ```json
->    {
->      "mcpServers": {
->        "odoo": {
->          "command": "odoo-mcp",
->          "args": ["run"]
->        }
->      }
->    }
->    ```
->
-> 5. Restart your AI client. You now have access to 10 Odoo tools: `search_read`, `write`, `create`, `export_records`, `import_records`, `execute_kw`, `list_models`, `list_fields`, `list_available_profiles`, `get_version`.
+```text
+Install & configure the Odoo MCP server. Run these steps:
 
-## 🚀 Installation & Quick Start
+1. Install (recommended — isolated, no venv needed):
+   - macOS: brew install pipx && pipx install odoo-mcp-multi
+   - Linux: pip install pipx && pipx install odoo-mcp-multi
+   - Windows: winget install Python.Python.3.12 -> new terminal ->
+     pip install pipx && pipx ensurepath -> new terminal ->
+     pipx install odoo-mcp-multi
+   - Developer alternative: pip install odoo-mcp-multi
+2. Add a profile: odoo-mcp add-profile (enter your Odoo URL, database, user, and API key)
+3. Test connection: odoo-mcp test
+4. Add this block to your AI client MCP config file:
+   {
+     "mcpServers": {
+       "odoo": {
+         "command": "odoo-mcp",
+         "args": ["run"]
+       }
+     }
+   }
+5. Restart your AI client. You now have access to 10 Odoo tools:
+   search_read, write, create, export_records, import_records,
+   execute_kw, list_models, list_fields, list_available_profiles, get_version.
+```
+
+## Installation & Quick Start
 
 `pipx` is the recommended installer for all platforms — it automatically creates
 an isolated virtual environment per tool and exposes `odoo-mcp` globally,
@@ -114,7 +117,7 @@ odoo-mcp add-profile
 odoo-mcp run
 ```
 
-### 🗑️ Uninstall
+### Uninstall
 
 All platforms (pipx recommended install):
 
@@ -133,7 +136,7 @@ If you used `pip install` directly instead:
 pip uninstall odoo-mcp-multi
 ```
 
-## 💻 CLI Operations
+## CLI Operations
 
 All operations are available directly from your terminal. Use `odoo-mcp [COMMAND] --help` for specific flags.
 
@@ -161,7 +164,7 @@ All data commands support `--profile / -p` and output JSON for composability.
 - `odoo-mcp list-models`: List available models (`--search` to filter).
 - `odoo-mcp list-fields -m MODEL`: List all fields of a model.
 
-## ⚙️ MCP Client Configuration
+## MCP Client Configuration
 
 The server gracefully handles multiple Odoo instances simultaneously. You only need to declare one server definition in your AI client. You can optionally force a single fallback using `["run", "-p", "prod"]`.
 
@@ -189,7 +192,7 @@ Add the block above to your client's MCP config file. Paths vary by tool and OS:
 
 > **Note:** For Cursor and VS Code the config file is **workspace-scoped** — place it at the root of your project. For a user-level (global) config, check your client's own documentation.
 
-## 🛠 Available MCP Tools
+## Available MCP Tools
 
 *All tools accept an optional `profile` string parameter to dynamically select the target Odoo environment.*
 
@@ -203,7 +206,7 @@ Add the block above to your client's MCP config file. Paths vary by tool and OS:
 - `list_models` / `list_fields`: Discovers the system's schema architecture.
 - `get_version`: Retrieves server version mapping.
 
-## 💡 Usage Examples in Claude
+## Usage Examples in Claude
 
 > "List all contacts containing 'John' in their name"
 
@@ -241,7 +244,7 @@ export_records(model="res.partner", domain="[('active', '=', True)]", fields="id
 import_records(model="res.partner", fields="id,name,phone", rows='[{"id": "base.res_partner_1", "name": "Existing Partner", "phone": "12345"}, {"name": "New Partner", "phone": "67890"}]')
 ```
 
-## 🛡 Security & Development
+## Security & Development
 
 - Credentials securely written to `~/.config/odoo-mcp/profiles.json` without raw logging.
 - Development mode requires `pip install -e ".[dev]"`. Code standard is heavily enforced by `ruff`.
