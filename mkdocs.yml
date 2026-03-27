@@ -27,6 +27,7 @@ theme:
     - navigation.expand
     - search.suggest
     - search.highlight
+    - content.code.copy
 
 markdown_extensions:
   - admonition
@@ -38,6 +39,11 @@ markdown_extensions:
   - pymdownx.snippets
   - pymdownx.tasklist:
       custom_checkbox: true
+  - pymdownx.tabbed:
+      alternate_style: true
 
 nav:
   - Home: index.md
+  - MCP Tools: mcp-tools.md
+  - CLI Reference: cli.md
+  - Contributing: contributing.md
