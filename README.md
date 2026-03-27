@@ -1,6 +1,16 @@
 # odoo-mcp-multi
 
-MCP Server for connecting MCP clients (Antigravity, Claude Desktop, Cursor, VS Code) to multiple Odoo instances.
+[![PyPI version](https://img.shields.io/pypi/v/odoo-mcp-multi.svg)](https://pypi.org/project/odoo-mcp-multi/)
+[![Python](https://img.shields.io/pypi/pyversions/odoo-mcp-multi.svg)](https://pypi.org/project/odoo-mcp-multi/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![pipeline status](https://git.vauxoo.com/nhomar/mcp.odoo/badges/main/pipeline.svg)](https://git.vauxoo.com/nhomar/mcp.odoo/-/pipelines)
+[![coverage](https://git.vauxoo.com/nhomar/mcp.odoo/badges/main/coverage.svg)](https://git.vauxoo.com/nhomar/mcp.odoo/-/commits/main)
+
+The **most tested, documented, and production-ready** MCP server for Odoo.
+Connects any MCP client (Antigravity, Claude Desktop, Cursor, VS Code) to
+**multiple Odoo instances simultaneously** — automatic protocol detection
+(JSON-RPC 8.0+, JSON2 19.0+, XML-RPC legacy), secure credential storage
+(Unix 600 permissions), 60+ tests, and full CLI parity for every MCP tool.
 
 ## 🌟 Features
 
@@ -10,6 +20,34 @@ MCP Server for connecting MCP clients (Antigravity, Claude Desktop, Cursor, VS C
 - **10 Native MCP tools**: `search_read`, `write`, `create`, `export_records`, `import_records`, `execute_kw`, `list_models`, `list_fields`, `list_available_profiles`, `get_version`.
 - **Full CLI parity**: Every MCP tool is also available as a CLI command — same logic, no duplication (DRY).
 - **Integrated CLI**: Profile management, connection testing, and all Odoo data operations from your terminal.
+
+## 📋 1-Minute Setup (Copy-Paste Prompt)
+
+Paste this into your AI client (Antigravity, Claude, Cursor) to get started instantly:
+
+> **Install & configure the Odoo MCP server.** Run these steps:
+>
+> 1. Install (recommended — isolated, no venv needed):
+>    - macOS: `brew install pipx && pipx install odoo-mcp-multi`
+>    - Linux: `pip install pipx && pipx install odoo-mcp-multi`
+>    - Windows: `winget install Python.Python.3.12` → new terminal → `pip install pipx && pipx ensurepath` → new terminal → `pipx install odoo-mcp-multi`
+>    - Developer alternative: `pip install odoo-mcp-multi`
+> 2. Add a profile: `odoo-mcp add-profile` (enter your Odoo URL, database, user, and API key)
+> 3. Test connection: `odoo-mcp test`
+> 4. Add this block to your AI client's MCP config file (locate the right path for your tool and OS in the [⚙️ MCP Client Configuration](#️-mcp-client-configuration) section below):
+>
+>    ```json
+>    {
+>      "mcpServers": {
+>        "odoo": {
+>          "command": "odoo-mcp",
+>          "args": ["run"]
+>        }
+>      }
+>    }
+>    ```
+>
+> 5. Restart your AI client. You now have access to 10 Odoo tools: `search_read`, `write`, `create`, `export_records`, `import_records`, `execute_kw`, `list_models`, `list_fields`, `list_available_profiles`, `get_version`.
 
 ## 🚀 Installation & Quick Start
 
@@ -94,32 +132,6 @@ If you used `pip install` directly instead:
 ```bash
 pip uninstall odoo-mcp-multi
 ```
-
-Paste this into your AI client (Antigravity, Claude, Cursor) to get started instantly:
-
-> **Install & configure the Odoo MCP server.** Run these steps:
->
-> 1. Install (recommended — isolated, no venv needed):
->    - macOS: `brew install pipx && pipx install odoo-mcp-multi`
->    - Linux: `pip install pipx && pipx install odoo-mcp-multi`
->    - Windows: `winget install Python.Python.3.12` → new terminal → `pip install pipx && pipx ensurepath` → new terminal → `pipx install odoo-mcp-multi`
->    - Developer alternative: `pip install odoo-mcp-multi`
-> 2. Add a profile: `odoo-mcp add-profile` (enter your Odoo URL, database, user, and API key)
-> 3. Test connection: `odoo-mcp test`
-> 4. Add this block to your AI client's MCP config file (locate the right path for your tool and OS in the [⚙️ MCP Client Configuration](#️-mcp-client-configuration) section below):
->
->    ```json
->    {
->      "mcpServers": {
->        "odoo": {
->          "command": "odoo-mcp",
->          "args": ["run"]
->        }
->      }
->    }
->    ```
->
-> 5. Restart your AI client. You now have access to 10 Odoo tools: `search_read`, `write`, `create`, `export_records`, `import_records`, `execute_kw`, `list_models`, `list_fields`, `list_available_profiles`, `get_version`.
 
 ## 💻 CLI Operations
 
