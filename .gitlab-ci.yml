@@ -130,7 +130,16 @@ auto-release:
       git remote set-url origin "https://release-bot:${RELEASE_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
 
       echo "==> Bumping version ($BUMP_LEVEL)..."
-      bump-my-version bump $BUMP_LEVEL
+      # Pass the actual git tag version as --current-version so bump-my-version
+      # always computes the next version from the real released tag, not from
+      # whatever is in pyproject.toml (which can lag when commits bypass bump).
+      LAST_TAG_VERSION=$(echo "$LAST_TAG" | sed 's/^v//')
+      if [ -n "$LAST_TAG_VERSION" ]; then
+        echo "==> Using --current-version $LAST_TAG_VERSION (from git tag $LAST_TAG)"
+        bump-my-version bump $BUMP_LEVEL --current-version "$LAST_TAG_VERSION"
+      else
+        bump-my-version bump $BUMP_LEVEL
+      fi
 
       echo "==> Pushing version commit and tag..."
       git push origin HEAD:$CI_DEFAULT_BRANCH --tags
