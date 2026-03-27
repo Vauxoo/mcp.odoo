@@ -117,7 +117,12 @@ auto-release:
       NEW_TAG=$(git describe --tags --exact-match HEAD)
       echo "==> Released: $NEW_TAG"
   rules:
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_COMMIT_TAG == null
+    # Loop-prevention (layer 1): bump commits have [skip ci] so no pipeline.
+    # Loop-prevention (layer 2): this rule never runs when commit IS a bump.
+    - if: >-
+        $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+        && $CI_COMMIT_TAG == null
+        && $CI_COMMIT_MESSAGE !~ /^Bump version:/
       when: on_success
   needs:
     - lint
