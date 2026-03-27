@@ -1,7 +1,7 @@
 # Odoo MCP Multi
 
 <p align="center">
-  <img src="../docs/banner.png" alt="Odoo MCP — Talk to Odoo like Jarvis" width="100%">
+  <img src="https://git.vauxoo.com/nhomar/mcp.odoo/-/raw/main/docs/banner.png" alt="Odoo MCP — Talk to Odoo like Jarvis" width="100%">
 </p>
 
 The **most tested, documented, and production-ready** MCP server for Odoo.

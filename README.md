@@ -1,7 +1,7 @@
 # odoo-mcp-multi
 
 <p align="center">
-  <img src="docs/banner.png" alt="Odoo MCP — Talk to Odoo like Jarvis" width="100%">
+  <img src="https://git.vauxoo.com/nhomar/mcp.odoo/-/raw/main/docs/banner.png" alt="Odoo MCP — Talk to Odoo like Jarvis" width="100%">
 </p>
 
 [![PyPI version](https://img.shields.io/pypi/v/odoo-mcp-multi.svg)](https://pypi.org/project/odoo-mcp-multi/)
