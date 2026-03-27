@@ -13,25 +13,60 @@ MCP Server for connecting MCP clients (Antigravity, Claude Desktop, Cursor, VS C
 
 ## 🚀 Installation & Quick Start
 
-### ✅ Recommended: install with `pipx` (isolated, no venv management)
+`pipx` is the recommended installer for all platforms — it automatically creates
+an isolated virtual environment per tool and exposes `odoo-mcp` globally,
+with no virtualenv management required.
 
-`pipx` installs the package in an automatic isolated environment and exposes
-the `odoo-mcp` command globally — no virtualenvs, no Python version conflicts.
+### macOS
 
 ```bash
-# Step 0: install pipx (once)
-brew install pipx          # macOS
-pip install pipx           # Linux / Windows
-
-# Install odoo-mcp-multi
+brew install pipx
 pipx install odoo-mcp-multi
-
-# Add your Odoo instance credentials
 odoo-mcp add-profile
-
-# Start the MCP server
 odoo-mcp run
 ```
+
+### Linux
+
+```bash
+pip install pipx
+pipx install odoo-mcp-multi
+odoo-mcp add-profile
+odoo-mcp run
+```
+
+### Windows
+
+> **Pre-requisite:** Python must be installed before pipx.
+> The recommended method is `winget` (included in Windows 10 21H1+ and Windows 11):
+
+```powershell
+# Step 1: Install Python via winget (opens a new PowerShell after install)
+winget install Python.Python.3.12
+
+# Step 2: Open a NEW PowerShell window, then install pipx
+pip install pipx
+pipx ensurepath
+
+# Step 3: Open ANOTHER new PowerShell window (required for PATH to take effect)
+pipx install odoo-mcp-multi
+odoo-mcp add-profile
+odoo-mcp run
+```
+
+> **⚠️ Windows side corners:**
+>
+> - **Two terminal restarts required**: `winget install` and `pipx ensurepath` both modify
+>   `PATH`. Each change only takes effect in a new terminal session.
+> - **Credential file permissions**: on Linux/macOS, credentials are stored with `600`
+>   (owner-read-only) Unix permissions. On Windows, `os.chmod` is silently ignored —
+>   the file `%USERPROFILE%\.config\odoo-mcp\profiles.json` is created correctly but
+>   without restricted permissions. Ensure your user account is the only account with
+>   access to your machine.
+> - **Python from python.org**: also works, but during installation you **must** check
+>   *"Add Python to PATH"* (unchecked by default). Without it, `pip` won't be found.
+> - **Microsoft Store Python**: avoid it — it runs in an app sandbox that can cause
+>   issues with `pipx ensurepath` and file system access.
 
 ### Alternative: direct `pip install` (developer / existing venv)
 
@@ -49,7 +84,8 @@ Paste this into your AI client (Antigravity, Claude, Cursor) to get started inst
 >
 > 1. Install (recommended — isolated, no venv needed):
 >    - macOS: `brew install pipx && pipx install odoo-mcp-multi`
->    - Linux/Windows: `pip install pipx && pipx install odoo-mcp-multi`
+>    - Linux: `pip install pipx && pipx install odoo-mcp-multi`
+>    - Windows: `winget install Python.Python.3.12` → new terminal → `pip install pipx && pipx ensurepath` → new terminal → `pipx install odoo-mcp-multi`
 >    - Developer alternative: `pip install odoo-mcp-multi`
 > 2. Add a profile: `odoo-mcp add-profile` (enter your Odoo URL, database, user, and API key)
 > 3. Test connection: `odoo-mcp test`
