@@ -24,11 +24,6 @@ from odoo_mcp_multi.operations import (
     op_search_read,
     op_write,
 )
-from odoo_mcp_multi.utils import (
-    OdooAuthenticationError,
-    OdooConnectionError,
-    OdooExecutionError,
-)
 
 # Global state for the fallback profile (if not specified in tool call)
 _fallback_profile: Optional[Any] = None
@@ -110,7 +105,7 @@ def search_read(
     try:
         result = op_search_read(model, domain, fields, limit, offset, order, profile)
         return format_result(result)
-    except (OdooConnectionError, OdooAuthenticationError, OdooExecutionError, ValueError) as e:
+    except Exception as e:
         return format_error(e)
 
 
@@ -135,7 +130,7 @@ def write(
     try:
         result = op_write(model, ids, values, profile)
         return format_result(result)
-    except (OdooConnectionError, OdooAuthenticationError, OdooExecutionError, ValueError) as e:
+    except Exception as e:
         return format_error(e)
 
 
@@ -158,7 +153,7 @@ def create(
     try:
         result = op_create(model, values, profile)
         return format_result(result)
-    except (OdooConnectionError, OdooAuthenticationError, OdooExecutionError, ValueError) as e:
+    except Exception as e:
         return format_error(e)
 
 
@@ -190,8 +185,6 @@ def export_records(
     try:
         result = op_export_records(model, domain, fields, profile)
         return format_result(result)
-    except (OdooConnectionError, OdooAuthenticationError, OdooExecutionError) as e:
-        return format_error(e)
     except Exception as e:
         return format_error(e)
 
@@ -223,8 +216,6 @@ def import_records(
     try:
         result = op_import_records(model, fields, rows, profile)
         return format_result(result)
-    except (OdooConnectionError, OdooAuthenticationError, OdooExecutionError) as e:
-        return format_error(e)
     except Exception as e:
         return format_error(e)
 
@@ -260,7 +251,7 @@ def execute_kw(
     try:
         result = op_execute_kw(model, method, args, kwargs, profile)
         return format_result(result)
-    except (OdooConnectionError, OdooAuthenticationError, OdooExecutionError, ValueError) as e:
+    except Exception as e:
         return format_error(e)
 
 
@@ -295,7 +286,7 @@ def list_models(search: str = "", profile: Optional[str] = None) -> str:
     try:
         result = op_list_models(search, profile)
         return format_result(result)
-    except (OdooConnectionError, OdooAuthenticationError, OdooExecutionError) as e:
+    except Exception as e:
         return format_error(e)
 
 
@@ -313,7 +304,7 @@ def list_fields(model: str, profile: Optional[str] = None) -> str:
     try:
         result = op_list_fields(model, profile)
         return format_result(result)
-    except (OdooConnectionError, OdooAuthenticationError, OdooExecutionError) as e:
+    except Exception as e:
         return format_error(e)
 
 
