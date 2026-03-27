@@ -30,14 +30,13 @@ from odoo_mcp_multi.operations import (
     op_list_fields,
     op_list_models,
     op_search_read,
+    op_test_connection,
     op_write,
 )
 from odoo_mcp_multi.utils import (
     OdooAuthenticationError,
     OdooConnectionError,
     OdooExecutionError,
-    create_client,
-    get_server_version,
 )
 
 
@@ -96,9 +95,8 @@ def cmd_add_profile(
     if test_connection:
         click.echo(f"Testing connection to {url}...")
         try:
-            client = create_client(url=url, database=database, user=user, password=password, timeout=30)
-            uid = client.authenticate()
-            click.secho(f"✓ Connection successful! Authenticated as UID {uid}", fg="green")
+            result = op_test_connection(url=url, database=database, user=user, password=password)
+            click.secho(f"✓ Connection successful! Authenticated as UID {result['uid']}", fg="green")
         except OdooConnectionError as e:
             click.secho(f"✗ Connection failed: {e}", fg="red")
             if not click.confirm("Save profile anyway?"):
@@ -223,11 +221,8 @@ def cmd_edit_profile(
     if test_connection:
         click.echo(f"Testing connection to {new_url}...")
         try:
-            client = create_client(
-                url=new_url, database=new_database, user=new_user, password=new_password, timeout=30
-            )
-            uid = client.authenticate()
-            click.secho(f"✓ Connection successful! Authenticated as UID {uid}", fg="green")
+            result = op_test_connection(url=new_url, database=new_database, user=new_user, password=new_password)
+            click.secho(f"✓ Connection successful! Authenticated as UID {result['uid']}", fg="green")
         except OdooConnectionError as e:
             click.secho(f"✗ Connection failed: {e}", fg="red")
             if not click.confirm("Save changes anyway?"):
@@ -265,22 +260,16 @@ def cmd_test(profile: str) -> None:
     click.echo(f"Testing connection to {odoo_profile.url}...")
 
     try:
-        client = create_client(
+        result = op_test_connection(
             url=odoo_profile.url,
             database=odoo_profile.database,
             user=odoo_profile.user,
             password=odoo_profile.password,
             protocol=odoo_profile.protocol,
-            timeout=30,
         )
-        uid = client.authenticate()
-        click.secho(f"✓ Connection successful! Authenticated as UID {uid}", fg="green")
-
-        # Try to get version info
-        version = get_server_version(odoo_profile.url)
-        if version:
-            click.echo(f"  Server version: {version.get('server_version', 'unknown')}")
-            click.echo(f"  Protocol: {odoo_profile.protocol}")
+        click.secho(f"✓ Connection successful! Authenticated as UID {result['uid']}", fg="green")
+        click.echo(f"  Server version: {result['server_version']}")
+        click.echo(f"  Protocol: {result['protocol']}")
 
     except OdooConnectionError as e:
         click.secho(f"✗ Connection failed: {e}", fg="red")

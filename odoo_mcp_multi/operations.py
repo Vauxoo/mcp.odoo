@@ -100,6 +100,51 @@ def _get_profile_object(profile_name: Optional[str] = None):
     return _resolve_profile(profile_name)
 
 
+def op_test_connection(
+    url: str,
+    database: str,
+    user: str,
+    password: str,
+    protocol: Optional[str] = None,
+    timeout: int = 30,
+) -> dict:
+    """Test connection and authentication to an Odoo instance.
+
+    This is the single source of truth for connection testing, used by
+    CLI commands (add-profile, edit-profile, test) and potentially MCP tools.
+
+    Args:
+        url: Odoo instance URL
+        database: Database name
+        user: Login username
+        password: Login password
+        protocol: Protocol to use (auto-detected if None)
+        timeout: Connection timeout in seconds
+
+    Returns:
+        Dict with uid, server_version (dict or None), and protocol.
+
+    Raises:
+        OdooConnectionError: If the server is unreachable.
+        OdooAuthenticationError: If credentials are rejected.
+    """
+    client = create_client(
+        url=url,
+        database=database,
+        user=user,
+        password=password,
+        protocol=protocol,
+        timeout=timeout,
+    )
+    uid = client.authenticate()
+    version = get_server_version(normalize_url(url))
+    return {
+        "uid": uid,
+        "server_version": version.get("server_version", "unknown") if version else "unknown",
+        "protocol": protocol or "auto",
+    }
+
+
 def op_list_profiles() -> list[dict]:
     """List all available Odoo connection profiles (safe, no passwords).
 

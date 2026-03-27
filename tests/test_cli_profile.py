@@ -156,10 +156,9 @@ def test_cli_edit_profile_not_found(mock_get):
 # ---------------------------------------------------------------------------
 
 
-@patch("odoo_mcp_multi.cli.get_server_version")
-@patch("odoo_mcp_multi.cli.create_client")
+@patch("odoo_mcp_multi.cli.op_test_connection")
 @patch("odoo_mcp_multi.cli.get_profile")
-def test_cli_test_command_success(mock_get_profile, mock_create_client, mock_version):
+def test_cli_test_command_success(mock_get_profile, mock_test_conn):
     profile = MagicMock()
     profile.url = "https://odoo.example.com"
     profile.database = "db"
@@ -168,10 +167,7 @@ def test_cli_test_command_success(mock_get_profile, mock_create_client, mock_ver
     profile.protocol = "auto"
     mock_get_profile.return_value = profile
 
-    mock_client = MagicMock()
-    mock_client.authenticate.return_value = 2
-    mock_create_client.return_value = mock_client
-    mock_version.return_value = {"server_version": "17.0"}
+    mock_test_conn.return_value = {"uid": 2, "server_version": "17.0", "protocol": "auto"}
 
     result = runner.invoke(main, ["test"])
     assert result.exit_code == 0
@@ -187,9 +183,9 @@ def test_cli_test_command_no_profile(mock_get_profile):
     assert "No default profile" in result.output or "not found" in result.output.lower()
 
 
-@patch("odoo_mcp_multi.cli.create_client")
+@patch("odoo_mcp_multi.cli.op_test_connection")
 @patch("odoo_mcp_multi.cli.get_profile")
-def test_cli_test_command_connection_failure(mock_get_profile, mock_create_client):
+def test_cli_test_command_connection_failure(mock_get_profile, mock_test_conn):
     from odoo_mcp_multi.utils import OdooConnectionError
 
     profile = MagicMock()
@@ -200,9 +196,7 @@ def test_cli_test_command_connection_failure(mock_get_profile, mock_create_clien
     profile.protocol = "auto"
     mock_get_profile.return_value = profile
 
-    mock_client = MagicMock()
-    mock_client.authenticate.side_effect = OdooConnectionError("Connection refused")
-    mock_create_client.return_value = mock_client
+    mock_test_conn.side_effect = OdooConnectionError("Connection refused")
 
     result = runner.invoke(main, ["test"])
     assert result.exit_code == 1
@@ -210,22 +204,20 @@ def test_cli_test_command_connection_failure(mock_get_profile, mock_create_clien
 
 
 # ---------------------------------------------------------------------------
-# add-profile (non-interactive via flags, --no-test to skip connection)
+# add-profile (non-interactive via flags)
 # ---------------------------------------------------------------------------
 
 
 @patch("odoo_mcp_multi.cli.add_profile")
-@patch("odoo_mcp_multi.cli.create_client")
-def test_cli_add_profile_all_flags(mock_create_client, mock_add):
+@patch("odoo_mcp_multi.cli.op_test_connection")
+def test_cli_add_profile_all_flags(mock_test_conn, mock_add):
     """Verify add-profile works non-interactively when all flags are provided.
 
     The --test flag (default=True) always runs a connection test, so we
-    mock create_client to return a successful authentication instead of
+    mock op_test_connection to return a successful result instead of
     hitting a real server.
     """
-    mock_client = MagicMock()
-    mock_client.authenticate.return_value = 1
-    mock_create_client.return_value = mock_client
+    mock_test_conn.return_value = {"uid": 1, "server_version": "17.0", "protocol": "auto"}
 
     result = runner.invoke(
         main,
@@ -244,3 +236,4 @@ def test_cli_add_profile_all_flags(mock_create_client, mock_add):
     saved = mock_add.call_args[0][0]
     assert saved.name == "staging"
     assert saved.url == "https://staging.example.com"
+
