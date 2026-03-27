@@ -100,7 +100,6 @@ def _get_profile_object(profile_name: Optional[str] = None):
     return _resolve_profile(profile_name)
 
 
-
 def op_list_profiles() -> list[dict]:
     """List all available Odoo connection profiles (safe, no passwords).
 
