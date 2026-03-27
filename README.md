@@ -1,5 +1,9 @@
 # odoo-mcp-multi
 
+<p align="center">
+  <img src="docs/banner.png" alt="Odoo MCP — Talk to Odoo like Jarvis" width="100%">
+</p>
+
 [![PyPI version](https://img.shields.io/pypi/v/odoo-mcp-multi.svg)](https://pypi.org/project/odoo-mcp-multi/)
 [![Python](https://img.shields.io/pypi/pyversions/odoo-mcp-multi.svg)](https://pypi.org/project/odoo-mcp-multi/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)

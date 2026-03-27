@@ -1,5 +1,9 @@
 # Odoo MCP Multi
 
+<p align="center">
+  <img src="../docs/banner.png" alt="Odoo MCP — Talk to Odoo like Jarvis" width="100%">
+</p>
+
 The **most tested, documented, and production-ready** MCP server for Odoo.
 Connects any MCP client (Antigravity, Claude Desktop, Cursor, VS Code) to
 **multiple Odoo instances simultaneously** — automatic protocol detection,
