@@ -11,7 +11,6 @@ test_config.py.
 import json
 from unittest.mock import MagicMock, patch
 
-import pytest
 from click.testing import CliRunner
 
 from odoo_mcp_multi.cli import main

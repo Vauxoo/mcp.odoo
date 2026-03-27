@@ -7,8 +7,6 @@ Odoo environments (saas~ versions, URL normalization, protocol selection).
 
 from unittest.mock import patch
 
-import pytest
-
 from odoo_mcp_multi.utils import (
     JsonRpcClient,
     Protocol,
@@ -19,7 +17,6 @@ from odoo_mcp_multi.utils import (
     parse_fields,
     parse_version,
 )
-
 
 # ---------------------------------------------------------------------------
 # normalize_url

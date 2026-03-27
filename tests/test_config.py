@@ -4,10 +4,9 @@ Uses pytest's tmp_path fixture to redirect the config directory,
 ensuring tests are hermetic — no real ~/.config/odoo-mcp/ is touched.
 """
 
-from pathlib import Path
-from unittest.mock import patch
 
 import pytest
+from pydantic import SecretStr
 
 from odoo_mcp_multi.config import (
     OdooProfile,
@@ -20,7 +19,6 @@ from odoo_mcp_multi.config import (
     save_profiles,
     set_default_profile,
 )
-from pydantic import SecretStr
 
 
 @pytest.fixture(autouse=True)

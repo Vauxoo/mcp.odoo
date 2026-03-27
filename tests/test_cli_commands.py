@@ -21,7 +21,11 @@ runner = CliRunner()
 
 @patch("odoo_mcp_multi.cli.op_search_read")
 def test_cli_search_read(mock_op):
-    mock_op.return_value = {"records": [{"id": 1, "name": "Test"}], "total": 1, "limit": 100, "offset": 0, "has_more": False, "next_offset": 100}
+    mock_op.return_value = {
+        "records": [{"id": 1, "name": "Test"}],
+        "total": 1, "limit": 100, "offset": 0,
+        "has_more": False, "next_offset": 100,
+    }
 
     result = runner.invoke(main, ["search-read", "--model", "res.partner", "--fields", "id,name"])
 
@@ -107,7 +111,11 @@ def test_cli_create(mock_op):
 
 @patch("odoo_mcp_multi.cli.op_export_records")
 def test_cli_export_records(mock_op):
-    mock_op.return_value = {"records": [{"id": "ext_1", "name": "A"}], "total": 1, "limit": 500, "offset": 0, "has_more": False, "next_offset": 500}
+    mock_op.return_value = {
+        "records": [{"id": "ext_1", "name": "A"}],
+        "total": 1, "limit": 500, "offset": 0,
+        "has_more": False, "next_offset": 500,
+    }
 
     result = runner.invoke(main, ["export-records", "--model", "res.partner", "--fields", "id,name"])
 
