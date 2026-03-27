@@ -76,7 +76,24 @@ odoo-mcp add-profile
 odoo-mcp run
 ```
 
-## 📋 1-Minute Setup (Copy-Paste Prompt)
+### 🗑️ Uninstall
+
+All platforms (pipx recommended install):
+
+```bash
+pipx uninstall odoo-mcp-multi
+```
+
+> Credentials are **not** removed automatically. Delete the profile file manually if needed:
+>
+> - **macOS / Linux**: `~/.config/odoo-mcp/profiles.json`
+> - **Windows**: `%USERPROFILE%\.config\odoo-mcp\profiles.json`
+
+If you used `pip install` directly instead:
+
+```bash
+pip uninstall odoo-mcp-multi
+```
 
 Paste this into your AI client (Antigravity, Claude, Cursor) to get started instantly:
 
