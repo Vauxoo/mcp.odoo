@@ -41,6 +41,3 @@ markdown_extensions:
 
 nav:
   - Home: index.md
-  - Skills Reference:
-    - MCP Tools: skills/mcp.md
-    - CLI Commands: skills/cli.md
