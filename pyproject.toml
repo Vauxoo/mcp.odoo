@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "odoo-mcp-multi"
-version = "0.3.20"
+version = "0.4.0"
 description = "MCP Server for connecting Claude/Cursor to multiple Odoo instances"
 readme = "README.md"
 license = {text = "MIT"}
@@ -64,7 +64,7 @@ ignore = []
 max-complexity = 15
 
 [tool.bumpversion]
-current_version = "0.3.20"
+current_version = "0.4.0"
 commit_message = "Bump version: {current_version} → {new_version} [skip ci]"
 parse = "(?P<major>\\d+)\\.(?P<minor>\\d+)\\.(?P<patch>\\d+)"
 serialize = ["{major}.{minor}.{patch}"]
