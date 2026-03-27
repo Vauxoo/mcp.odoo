@@ -8,7 +8,7 @@ the shared business logic in operations.py.
 from __future__ import annotations
 
 import json
-from typing import Optional, Union
+from typing import Any, Optional, Union
 
 from mcp.server.fastmcp import FastMCP
 
@@ -31,19 +31,19 @@ from odoo_mcp_multi.utils import (
 )
 
 # Global state for the fallback profile (if not specified in tool call)
-_fallback_profile: Optional[any] = None
+_fallback_profile: Optional[Any] = None
 
 # Create the MCP server
 mcp = FastMCP("odoo-mcp")
 
 
-def set_profile(profile: any) -> None:
+def set_profile(profile: Any) -> None:
     """Set the fallback profile for the MCP server. Used if no profile is provided in tool calls."""
     global _fallback_profile
     _fallback_profile = profile
 
 
-def format_result(data: any) -> str:
+def format_result(data: Any) -> str:
     """Format result data as JSON string.
 
     Args:
