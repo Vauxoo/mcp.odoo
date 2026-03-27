@@ -1,0 +1,32 @@
+# markdownlint-cli2 configuration
+# Docs: https://github.com/DavidAnson/markdownlint/blob/main/doc/Rules.md
+
+default: true
+
+# MD013 — Line length: disabled because tables and code blocks make it impractical
+MD013: false
+
+# MD060 — Table column style: disabled — valid tables with different column widths trigger false positives
+MD060: false
+
+# MD033 — Inline HTML: allowed for badges, alerts, and img tags in README
+MD033: false
+
+# MD041 — First line must be H1: disabled — some docs start with YAML front-matter or ---
+MD041: false
+
+# MD024 — Duplicate headers: allow within different parent sections
+MD024:
+  siblings_only: true
+
+# MD046 — Code block style: enforce fenced blocks (```) consistently
+MD046:
+  style: fenced
+
+# MD049 — Emphasis style: enforce asterisks (*) consistently
+MD049:
+  style: asterisk
+
+# MD050 — Strong style: enforce double-asterisks (**) consistently
+MD050:
+  style: asterisk
