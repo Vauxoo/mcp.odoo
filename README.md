@@ -33,7 +33,8 @@ Paste this into your AI client (Antigravity, Claude, Cursor) to get started inst
 > 1. Install: `pip install odoo-mcp-multi`
 > 2. Add a profile: `odoo-mcp add-profile` (enter your Odoo URL, database, user, and API key)
 > 3. Test connection: `odoo-mcp test`
-> 4. Add this to your MCP client config (`~/.gemini/antigravity/mcp_config.json` for Antigravity, `~/Library/Application Support/Claude/claude_desktop_config.json` for Claude Desktop, `.cursor/mcp.json` for Cursor):
+> 4. Add this block to your AI client's MCP config file (locate the right path for your tool and OS in the [⚙️ MCP Client Configuration](#️-mcp-client-configuration) section below):
+>
 >    ```json
 >    {
 >      "mcpServers": {
@@ -44,6 +45,7 @@ Paste this into your AI client (Antigravity, Claude, Cursor) to get started inst
 >      }
 >    }
 >    ```
+>
 > 5. Restart your AI client. You now have access to 10 Odoo tools: `search_read`, `write`, `create`, `export_records`, `import_records`, `execute_kw`, `list_models`, `list_fields`, `list_available_profiles`, `get_version`.
 
 ## 💻 CLI Operations
@@ -79,6 +81,7 @@ All data commands support `--profile / -p` and output JSON for composability.
 The server gracefully handles multiple Odoo instances simultaneously. You only need to declare one server definition in your AI client. You can optionally force a single fallback using `["run", "-p", "prod"]`.
 
 **Global Configuration Block:**
+
 ```json
 {
   "mcpServers": {
@@ -90,11 +93,16 @@ The server gracefully handles multiple Odoo instances simultaneously. You only n
 }
 ```
 
-Add the block above to your respective client configuration file:
-- **Antigravity**: `~/.gemini/antigravity/mcp_config.json`
-- **Claude Desktop**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- **Cursor**: `.cursor/mcp.json`
-- **VS Code**: `.vscode/mcp.json`
+Add the block above to your client's MCP config file. Paths vary by tool and OS:
+
+| Client | macOS | Linux | Windows |
+|--------|-------|-------|---------|
+| **Antigravity** | `~/.gemini/antigravity/mcp_config.json` | same | `%USERPROFILE%\.gemini\antigravity\mcp_config.json` |
+| **Claude Desktop** | `~/Library/Application Support/Claude/claude_desktop_config.json` | `~/.config/Claude/claude_desktop_config.json` | `%APPDATA%\Claude\claude_desktop_config.json` |
+| **Cursor** | `.cursor/mcp.json` *(project root)* | same | same |
+| **VS Code** | `.vscode/mcp.json` *(project root)* | same | same |
+
+> **Note:** For Cursor and VS Code the config file is **workspace-scoped** — place it at the root of your project. For a user-level (global) config, check your client's own documentation.
 
 ## 🛠 Available MCP Tools
 
@@ -113,36 +121,43 @@ Add the block above to your respective client configuration file:
 ## 💡 Usage Examples in Claude
 
 > "List all contacts containing 'John' in their name"
+
 ```python
 search_read(model="res.partner", domain="[('name', 'ilike', 'John')]", fields="name,email,phone")
 ```
 
-> "Create a new contact named Alice with email alice@example.com"
+> "Create a new contact named Alice with email <alice@example.com>"
+
 ```python
 create(model="res.partner", values='{"name": "Alice", "email": "alice@example.com"}')
 ```
 
 > "Confirm the sales order with ID 42"
+
 ```python
 execute_kw(model="sale.order", method="action_confirm", args="[[42]]")
 ```
 
 > "What fields does the invoice model have?"
+
 ```python
 list_fields(model="account.move")
 ```
 
 > "Export the name and external ID of all active partners"
+
 ```python
 export_records(model="res.partner", domain="[('active', '=', True)]", fields="id,name")
 ```
 
 > "Update the phone number of the partner with external ID 'base.res_partner_1' and create a new partner"
+
 ```python
 import_records(model="res.partner", fields="id,name,phone", rows='[{"id": "base.res_partner_1", "name": "Existing Partner", "phone": "12345"}, {"name": "New Partner", "phone": "67890"}]')
 ```
 
 ## 🛡 Security & Development
+
 - Credentials securely written to `~/.config/odoo-mcp/profiles.json` without raw logging.
 - Development mode requires `pip install -e ".[dev]"`. Code standard is heavily enforced by `ruff`.
 

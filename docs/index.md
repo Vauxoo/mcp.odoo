@@ -12,7 +12,7 @@ Welcome to the documentation for **Odoo MCP Multi**, an MCP (Model Context Proto
 
 ## Architecture
 
-```
+```text
 cli.py (Click) ──▶ operations.py (shared logic) ◀── server.py (MCP tools)
                            │
                   ┌────────┴────────┐

@@ -100,6 +100,7 @@ Review `docs/index.md` and any other pages under `docs/`. Update the feature lis
 #### 4c. Reference Skills
 
 If MCP tools or CLI commands were added/removed/changed, update:
+
 - `docs/skills/mcp.md` — MCP tool reference
 - `docs/skills/cli.md` — CLI command reference
 
@@ -127,7 +128,7 @@ git push origin HEAD --tags
 
 ## Release Checklist
 
-```
+```markdown
 - [ ] Tests pass (`pytest`)
 - [ ] Installation works (`pip install -e .`)
 - [ ] Linting clean (`ruff check` + `ruff format --check`)

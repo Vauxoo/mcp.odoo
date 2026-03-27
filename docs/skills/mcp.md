@@ -4,11 +4,39 @@ This reference documents each MCP tool provided by `odoo-mcp-multi`. Use this as
 
 ---
 
+## Client Configuration
+
+To register this server in your AI client, add the following block to the corresponding config file:
+
+```json
+{
+  "mcpServers": {
+    "odoo": {
+      "command": "odoo-mcp",
+      "args": ["run"]
+    }
+  }
+}
+```
+
+Config file paths vary by client and operating system:
+
+| Client | macOS | Linux | Windows |
+|--------|-------|-------|---------|
+| **Antigravity** | `~/.gemini/antigravity/mcp_config.json` | same | `%USERPROFILE%\.gemini\antigravity\mcp_config.json` |
+| **Claude Desktop** | `~/Library/Application Support/Claude/claude_desktop_config.json` | `~/.config/Claude/claude_desktop_config.json` | `%APPDATA%\Claude\claude_desktop_config.json` |
+| **Cursor** | `.cursor/mcp.json` *(project root)* | same | same |
+| **VS Code** | `.vscode/mcp.json` *(project root)* | same | same |
+
+> **Note:** Cursor and VS Code configs are workspace-scoped — place the file at the root of your project.
+
+---
+
 ## Pre-flight: Discover Available Profiles
 
 Always start by discovering which Odoo environments are configured:
 
-```
+```text
 Tool: list_available_profiles
 ```
 
@@ -181,7 +209,7 @@ get_version(profile="prod")
 | state is "sale" | `[('state', '=', 'sale')]` |
 | amount > 1000 | `[('amount_total', '>', 1000)]` |
 | date after 2024-01-01 | `[('create_date', '>=', '2024-01-01')]` |
-| country is Mexico or USA | `['|', ('country_id.code', '=', 'MX'), ('country_id.code', '=', 'US')]` |
+| country is Mexico or USA | `['\|', ('country_id.code', '=', 'MX'), ('country_id.code', '=', 'US')]` |
 
 ### Operators
 

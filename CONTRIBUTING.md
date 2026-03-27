@@ -11,6 +11,7 @@ If you've noticed a bug or have a feature request, make sure to check our **Issu
 1. Fork the repository and clone your fork locally.
 2. Ensure you have Python 3.10+ installed.
 3. Install the project along with its development dependencies:
+
    ```bash
    pip install -e ".[dev]"
    ```
