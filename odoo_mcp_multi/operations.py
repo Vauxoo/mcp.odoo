@@ -19,6 +19,50 @@ from odoo_mcp_multi.utils import (
 )
 
 
+def _resolve_profile(profile_name: Optional[str] = None):
+    """Resolve a profile name to an OdooProfile instance.
+
+    Resolution order:
+    1. If profile_name is given, look it up by name (raise if not found)
+    2. Try the MCP server's fallback profile (set at startup via CLI)
+    3. Try the default profile from the config file
+    4. Raise ValueError if nothing is configured
+
+    Args:
+        profile_name: Explicit profile name. If None, uses fallback/default.
+
+    Returns:
+        OdooProfile instance
+
+    Raises:
+        ValueError: If no profile can be resolved.
+    """
+    from odoo_mcp_multi.config import get_profile
+
+    if profile_name:
+        active_profile = get_profile(profile_name)
+        if not active_profile:
+            raise ValueError(f"Profile '{profile_name}' not found.")
+        return active_profile
+
+    # Try MCP fallback profile (only relevant when running as MCP server)
+    active_profile = None
+    try:
+        from odoo_mcp_multi.server import _fallback_profile
+
+        active_profile = _fallback_profile
+    except ImportError:
+        pass
+
+    if not active_profile:
+        active_profile = get_profile()  # Try default from config
+
+    if active_profile is None:
+        raise ValueError("No Odoo profile specified or configured as default.")
+
+    return active_profile
+
+
 def _get_client(profile_name: Optional[str] = None):
     """Get an Odoo client instance for the specified profile.
 
@@ -31,29 +75,9 @@ def _get_client(profile_name: Optional[str] = None):
     Raises:
         ValueError: If no profile is found or configured.
     """
-    from odoo_mcp_multi.config import get_profile
     from odoo_mcp_multi.utils import create_client
 
-    # Try MCP fallback profile first (only relevant when running as MCP server)
-    active_profile = None
-    if profile_name:
-        active_profile = get_profile(profile_name)
-        if not active_profile:
-            raise ValueError(f"Profile '{profile_name}' not found.")
-    else:
-        # Try import fallback from server module (may not exist in CLI context)
-        try:
-            from odoo_mcp_multi.server import _fallback_profile
-
-            active_profile = _fallback_profile
-        except ImportError:
-            pass
-
-        if not active_profile:
-            active_profile = get_profile()  # Try default from config
-
-    if active_profile is None:
-        raise ValueError("No Odoo profile specified or configured as default.")
+    active_profile = _resolve_profile(profile_name)
 
     return create_client(
         url=active_profile.url,
@@ -73,25 +97,8 @@ def _get_profile_object(profile_name: Optional[str] = None):
     Raises:
         ValueError: If no profile is found.
     """
-    from odoo_mcp_multi.config import get_profile
+    return _resolve_profile(profile_name)
 
-    active_profile = None
-    if profile_name:
-        active_profile = get_profile(profile_name)
-    else:
-        try:
-            from odoo_mcp_multi.server import _fallback_profile
-
-            active_profile = _fallback_profile
-        except ImportError:
-            pass
-        if not active_profile:
-            active_profile = get_profile()
-
-    if active_profile is None:
-        raise ValueError("No Odoo profile configured.")
-
-    return active_profile
 
 
 def op_list_profiles() -> list[dict]:
