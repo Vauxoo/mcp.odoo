@@ -13,14 +13,31 @@ MCP Server for connecting MCP clients (Antigravity, Claude Desktop, Cursor, VS C
 
 ## 🚀 Installation & Quick Start
 
-```bash
-# Install package
-pip install odoo-mcp-multi
+### ✅ Recommended: install with `pipx` (isolated, no venv management)
 
-# 1. Add your Odoo instance credentials
+`pipx` installs the package in an automatic isolated environment and exposes
+the `odoo-mcp` command globally — no virtualenvs, no Python version conflicts.
+
+```bash
+# Step 0: install pipx (once)
+brew install pipx          # macOS
+pip install pipx           # Linux / Windows
+
+# Install odoo-mcp-multi
+pipx install odoo-mcp-multi
+
+# Add your Odoo instance credentials
 odoo-mcp add-profile
 
-# 2. Start MCP server (Optional: lock to a specific profile with -p)
+# Start the MCP server
+odoo-mcp run
+```
+
+### Alternative: direct `pip install` (developer / existing venv)
+
+```bash
+pip install odoo-mcp-multi
+odoo-mcp add-profile
 odoo-mcp run
 ```
 
@@ -30,7 +47,10 @@ Paste this into your AI client (Antigravity, Claude, Cursor) to get started inst
 
 > **Install & configure the Odoo MCP server.** Run these steps:
 >
-> 1. Install: `pip install odoo-mcp-multi`
+> 1. Install (recommended — isolated, no venv needed):
+>    - macOS: `brew install pipx && pipx install odoo-mcp-multi`
+>    - Linux/Windows: `pip install pipx && pipx install odoo-mcp-multi`
+>    - Developer alternative: `pip install odoo-mcp-multi`
 > 2. Add a profile: `odoo-mcp add-profile` (enter your Odoo URL, database, user, and API key)
 > 3. Test connection: `odoo-mcp test`
 > 4. Add this block to your AI client's MCP config file (locate the right path for your tool and OS in the [⚙️ MCP Client Configuration](#️-mcp-client-configuration) section below):
