@@ -27,7 +27,7 @@ from odoo_mcp_multi.operations import (
 # ---------------------------------------------------------------------------
 
 
-@patch("odoo_mcp_multi.config.list_profiles")
+@patch("odoo_mcp_multi.operations.list_profiles")
 def test_op_list_profiles(mock_list):
     mock_list.return_value = [
         {"name": "prod", "url": "https://odoo.example.com", "database": "prod", "user": "admin", "is_default": True},
@@ -51,12 +51,15 @@ def test_op_search_read_basic(mock_get_client):
     mock_client = MagicMock()
     mock_get_client.return_value = mock_client
     mock_client.search_read.return_value = [{"id": 1, "name": "Test"}]
+    mock_client.execute_kw.return_value = 1  # search_count
 
     result = op_search_read(model="res.partner", domain="[]", fields="id,name", profile="test")
 
-    assert isinstance(result, list)
-    assert len(result) == 1
-    assert result[0]["name"] == "Test"
+    assert isinstance(result, dict)
+    assert len(result["records"]) == 1
+    assert result["records"][0]["name"] == "Test"
+    assert result["total"] == 1
+    assert result["has_more"] is False
     mock_client.search_read.assert_called_once()
 
 
@@ -65,10 +68,13 @@ def test_op_search_read_empty_fields(mock_get_client):
     mock_client = MagicMock()
     mock_get_client.return_value = mock_client
     mock_client.search_read.return_value = []
+    mock_client.execute_kw.return_value = 0  # search_count
 
     result = op_search_read(model="res.partner", profile="test")
 
-    assert result == []
+    assert result["records"] == []
+    assert result["total"] == 0
+    assert result["has_more"] is False
     mock_client.search_read.assert_called_once_with(
         model="res.partner", domain=[], fields=None, limit=100, offset=0, order=None
     )
@@ -148,25 +154,33 @@ def test_op_export_records(mock_get_client):
     mock_get_client.return_value = mock_client
 
     mock_client.execute_kw.side_effect = [
-        [42, 43],  # search
+        2,          # search_count
+        [42, 43],   # search
         {"datas": [["ext_42", "Partner A"], ["ext_43", "Partner B"]]},  # export_data
     ]
 
     result = op_export_records(model="res.partner", domain="[]", fields="id,name", profile="test")
 
-    assert len(result) == 2
-    assert result[0] == {"id": "ext_42", "name": "Partner A"}
-    assert result[1] == {"id": "ext_43", "name": "Partner B"}
+    assert result["total"] == 2
+    assert len(result["records"]) == 2
+    assert result["records"][0] == {"id": "ext_42", "name": "Partner A"}
+    assert result["records"][1] == {"id": "ext_43", "name": "Partner B"}
+    assert result["has_more"] is False
 
 
 @patch("odoo_mcp_multi.operations._get_client")
 def test_op_export_records_empty(mock_get_client):
     mock_client = MagicMock()
     mock_get_client.return_value = mock_client
-    mock_client.execute_kw.return_value = []  # search returns empty
+    mock_client.execute_kw.side_effect = [
+        0,   # search_count
+        [],  # search returns empty
+    ]
 
     result = op_export_records(model="res.partner", profile="test")
-    assert result == []
+    assert result["records"] == []
+    assert result["total"] == 0
+    assert result["has_more"] is False
 
 
 # ---------------------------------------------------------------------------

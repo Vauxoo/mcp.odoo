@@ -163,29 +163,32 @@ def export_records(
     domain: str = "[]",
     fields: str = "id,name",
     limit: int = 500,
+    offset: int = 0,
     profile: Optional[str] = None,
 ) -> str:
     """Export records from an Odoo model using native export_data.
 
-    This returns data as a JSON array of dictionaries mapping field names to values,
-    which is much easier to read and modify than standard search_read.
-    Crucially, if you request the 'id' field, Odoo will return the External ID (XML ID)
-    which is highly recommended for stable imports.
-    For relational fields, use Odoo's export syntax (e.g., 'country_id/id' to get the
-    external ID of the country, or 'category_id/id' for a list of external IDs).
+    This returns a JSON envelope with pagination metadata and an array of
+    dictionaries mapping field names to values. Check `has_more` to know if
+    additional pages exist, and use `next_offset` for the next call.
+
+    If you request the 'id' field, Odoo returns the External ID (XML ID),
+    which is recommended for stable imports.
+    For relational fields, use Odoo's export syntax (e.g., 'country_id/id').
 
     Args:
         model: Model name (e.g., 'res.partner')
         domain: Search domain as string (e.g., "[('name', 'ilike', 'John')]")
         fields: Comma-separated field names (e.g., "id,name,country_id/id")
         limit: Maximum number of records to export (default: 500)
+        offset: Number of records to skip for pagination (default: 0)
         profile: Optional name of the Odoo profile to connect to.
 
     Returns:
-        JSON array of exported records as dictionaries.
+        JSON with records array, total count, limit, offset, has_more, next_offset.
     """
     try:
-        result = op_export_records(model, domain, fields, limit, profile)
+        result = op_export_records(model, domain, fields, limit, offset, profile)
         return format_result(result)
     except Exception as e:
         return format_error(e)

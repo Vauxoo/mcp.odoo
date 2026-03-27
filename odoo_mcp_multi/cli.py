@@ -379,11 +379,12 @@ def cmd_create(model, values, profile) -> None:
 @click.option("--domain", "-d", default="[]", help="Search domain as string")
 @click.option("--fields", "-f", default="id,name", help="Comma-separated field names (e.g., 'id,name,country_id/id')")
 @click.option("--limit", "-l", default=500, type=int, help="Maximum number of records to export (default: 500)")
+@click.option("--offset", default=0, type=int, help="Number of records to skip for pagination (default: 0)")
 @click.option("--profile", "-p", default=None, help="Profile name to use")
-def cmd_export_records(model, domain, fields, limit, profile) -> None:
+def cmd_export_records(model, domain, fields, limit, offset, profile) -> None:
     """Export records using native export_data."""
     try:
-        result = op_export_records(model, domain, fields, limit, profile)
+        result = op_export_records(model, domain, fields, limit, offset, profile)
         _output(result)
     except (OdooConnectionError, OdooAuthenticationError, OdooExecutionError, ValueError) as e:
         _handle_error(e)

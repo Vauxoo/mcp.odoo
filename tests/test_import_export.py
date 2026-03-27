@@ -17,7 +17,8 @@ def test_export_records(mock_get_client):
     mock_get_client.return_value = mock_client
 
     mock_client.execute_kw.side_effect = [
-        [42, 43],  # return value for 'search'
+        2,          # return value for 'search_count'
+        [42, 43],   # return value for 'search'
         {  # return value for 'export_data'
             "datas": [
                 ["__export__.res_partner_42_99b00db5", "Partner A"],
@@ -29,15 +30,18 @@ def test_export_records(mock_get_client):
     result = op_export_records(model="res.partner", domain="[]", fields="id,name", profile="test")
 
     # Verify client calls
-    assert mock_client.execute_kw.call_count == 2
-    mock_client.execute_kw.assert_any_call("res.partner", "search", [[]], {"limit": 500})
+    assert mock_client.execute_kw.call_count == 3
+    mock_client.execute_kw.assert_any_call("res.partner", "search_count", [[]], {})
+    mock_client.execute_kw.assert_any_call("res.partner", "search", [[]], {"limit": 500, "offset": 0})
     mock_client.execute_kw.assert_any_call("res.partner", "export_data", [[42, 43], ["id", "name"]])
 
-    # Verify output structure is array of dicts
-    assert isinstance(result, list)
-    assert len(result) == 2
-    assert result[0] == {"id": "__export__.res_partner_42_99b00db5", "name": "Partner A"}
-    assert result[1] == {"id": "__export__.res_partner_43_99b00db5", "name": "Partner B"}
+    # Verify envelope structure
+    assert isinstance(result, dict)
+    assert result["total"] == 2
+    assert result["has_more"] is False
+    assert len(result["records"]) == 2
+    assert result["records"][0] == {"id": "__export__.res_partner_42_99b00db5", "name": "Partner A"}
+    assert result["records"][1] == {"id": "__export__.res_partner_43_99b00db5", "name": "Partner B"}
 
 
 @patch("odoo_mcp_multi.operations._get_client")

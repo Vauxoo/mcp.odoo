@@ -137,8 +137,10 @@ odoo-mcp search-read -m res.partner \
 | `--domain` | `-d` | `[]` | Odoo domain filter |
 | `--fields` | `-f` | all | Comma-separated field names |
 | `--limit` | `-l` | `100` | Max records |
-| `--offset` | `-o` | `0` | Records to skip |
+| `--offset` | | `0` | Records to skip (pagination) |
 | `--order` | | `""` | Sort order |
+
+Output is a **pagination envelope** with `records`, `total`, `has_more`, and `next_offset`.
 
 ---
 
@@ -190,6 +192,10 @@ odoo-mcp export-records -m res.partner \
 | `--model` | `-m` | *(required)* | Model name |
 | `--fields` | `-f` | `id,name` | Comma-separated fields |
 | `--domain` | `-d` | `[]` | Search domain |
+| `--limit` | `-l` | `500` | Max records to export |
+| `--offset` | | `0` | Records to skip (pagination) |
+
+Output is a **pagination envelope** with `records`, `total`, `has_more`, and `next_offset`.
 
 > **Tip:** Use `field/id` syntax to get External IDs of relational fields.
 

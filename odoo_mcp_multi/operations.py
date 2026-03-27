@@ -9,7 +9,9 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
+from odoo_mcp_multi.config import get_profile, list_profiles
 from odoo_mcp_multi.utils import (
+    create_client,
     get_server_version,
     normalize_url,
     parse_domain,
@@ -37,8 +39,6 @@ def _resolve_profile(profile_name: Optional[str] = None):
     Raises:
         ValueError: If no profile can be resolved.
     """
-    from odoo_mcp_multi.config import get_profile
-
     if profile_name:
         active_profile = get_profile(profile_name)
         if not active_profile:
@@ -48,6 +48,8 @@ def _resolve_profile(profile_name: Optional[str] = None):
     # Try MCP fallback profile (only relevant when running as MCP server)
     active_profile = None
     try:
+        # Lazy import: server.py imports operations.py, so this
+        # would be a circular import at module level.
         from odoo_mcp_multi.server import _fallback_profile
 
         active_profile = _fallback_profile
@@ -75,8 +77,6 @@ def _get_client(profile_name: Optional[str] = None):
     Raises:
         ValueError: If no profile is found or configured.
     """
-    from odoo_mcp_multi.utils import create_client
-
     active_profile = _resolve_profile(profile_name)
 
     return create_client(
@@ -107,8 +107,6 @@ def op_list_profiles() -> list[dict]:
     Returns:
         List of dicts with name, url, database, is_default.
     """
-    from odoo_mcp_multi.config import list_profiles
-
     profiles = list_profiles()
     return [
         {
@@ -129,7 +127,7 @@ def op_search_read(
     offset: int = 0,
     order: str = "",
     profile: Optional[str] = None,
-) -> list[dict]:
+) -> dict:
     """Search and read records from an Odoo model.
 
     Args:
@@ -142,14 +140,15 @@ def op_search_read(
         profile: Profile name to use
 
     Returns:
-        List of matching record dicts
+        Dict with records, total, limit, offset, has_more, next_offset
     """
     client = _get_client(profile)
     parsed_domain = parse_domain(domain)
     parsed_fields = parse_fields(fields) if fields else None
     parsed_order = order if order else None
 
-    return client.search_read(
+    total = client.execute_kw(model, "search_count", [parsed_domain], {})
+    records = client.search_read(
         model=model,
         domain=parsed_domain,
         fields=parsed_fields,
@@ -157,6 +156,15 @@ def op_search_read(
         offset=offset,
         order=parsed_order,
     )
+
+    return {
+        "records": records,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "has_more": (offset + limit) < total,
+        "next_offset": offset + limit,
+    }
 
 
 def op_write(
@@ -219,8 +227,9 @@ def op_export_records(
     domain: str = "[]",
     fields: str = "id,name",
     limit: int = 500,
+    offset: int = 0,
     profile: Optional[str] = None,
-) -> list[dict]:
+) -> dict:
     """Export records from an Odoo model using native export_data.
 
     Args:
@@ -228,33 +237,50 @@ def op_export_records(
         domain: Search domain as string
         fields: Comma-separated field names
         limit: Maximum number of records to export (default: 500)
+        offset: Number of records to skip (default: 0)
         profile: Profile name to use
 
     Returns:
-        List of dicts mapping field names to values
+        Dict with records, total, limit, offset, has_more, next_offset
     """
     client = _get_client(profile)
     parsed_domain = parse_domain(domain)
     parsed_fields = parse_fields(fields) if fields else ["id"]
 
-    search_result = client.execute_kw(model, "search", [parsed_domain], {"limit": limit})
+    total = client.execute_kw(model, "search_count", [parsed_domain], {})
+    search_result = client.execute_kw(model, "search", [parsed_domain], {"limit": limit, "offset": offset})
+
     if not search_result:
-        return []
+        return {
+            "records": [],
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+            "has_more": (offset + limit) < total,
+            "next_offset": offset + limit,
+        }
 
     export_result = client.execute_kw(model, "export_data", [search_result, parsed_fields])
 
     if not export_result or "datas" not in export_result:
-        return []
+        records = []
+    else:
+        datas = export_result["datas"]
+        records = []
+        for row in datas:
+            formatted_row = {}
+            for i, field_name in enumerate(parsed_fields):
+                formatted_row[field_name] = row[i] if i < len(row) else None
+            records.append(formatted_row)
 
-    datas = export_result["datas"]
-    formatted_result = []
-    for row in datas:
-        formatted_row = {}
-        for i, field_name in enumerate(parsed_fields):
-            formatted_row[field_name] = row[i] if i < len(row) else None
-        formatted_result.append(formatted_row)
-
-    return formatted_result
+    return {
+        "records": records,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "has_more": (offset + limit) < total,
+        "next_offset": offset + limit,
+    }
 
 
 def op_import_records(

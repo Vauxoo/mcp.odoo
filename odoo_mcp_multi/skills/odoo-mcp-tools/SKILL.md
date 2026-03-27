@@ -69,9 +69,24 @@ list_available_profiles()
 | `domain` | string | `[]` | Search domain |
 | `fields` | string | `""` | Comma-separated field names |
 | `limit` | int | `100` | Max records to return |
-| `offset` | int | `0` | Records to skip |
+| `offset` | int | `0` | Records to skip (pagination) |
 | `order` | string | `""` | Sort order (e.g., `name asc`) |
 | `profile` | string | *(default)* | Target profile name |
+
+Returns a **pagination envelope**:
+
+```json
+{
+  "records": [{"id": 1, "name": "Alice"}],
+  "total": 1500,
+  "limit": 100,
+  "offset": 0,
+  "has_more": true,
+  "next_offset": 100
+}
+```
+
+> **Important:** Always check `has_more` — if `true`, use `next_offset` to fetch the next page.
 
 ```python
 search_read(model="res.partner", domain="[('is_company', '=', True)]", fields="name,email", limit=10, profile="prod")
@@ -110,13 +125,16 @@ create(model="res.partner", values='{"name": "Alice", "email": "alice@example.co
 
 ### `export_records` — Native Export
 
-Export via Odoo's `export_data`. Returns an array of dicts — ideal for retrieving External IDs.
+Export via Odoo's `export_data`. Returns a **pagination envelope** with an array of
+dicts — ideal for retrieving External IDs.
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `model` | string | *(required)* | Model name |
 | `domain` | string | `[]` | Search domain |
 | `fields` | string | `id,name` | Comma-separated field names |
+| `limit` | int | `500` | Max records to export |
+| `offset` | int | `0` | Records to skip (pagination) |
 | `profile` | string | *(default)* | Target profile name |
 
 ```python
@@ -124,6 +142,7 @@ export_records(model="res.partner", domain="[('active', '=', True)]", fields="id
 ```
 
 > **Tip:** Use `field_id/id` syntax to export External IDs of relational fields.
+> Check `has_more` in the response to know if more pages exist.
 
 ---
 
