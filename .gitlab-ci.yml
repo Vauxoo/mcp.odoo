@@ -84,43 +84,38 @@ auto-release:
       git fetch --tags --prune --prune-tags
       LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
 
-      # Guard: if HEAD is already tagged, this pipeline is for a commit
-      # that was already released (e.g. two pipelines ran for the same SHA).
-      # Exit cleanly to avoid 'tag already exists' error 128.
+      # Guard: if HEAD is already tagged, nothing to do.
       if git describe --tags --exact-match HEAD 2>/dev/null; then
-        echo "==> HEAD is already tagged ($(git describe --tags --exact-match HEAD)). Nothing to release."
+        echo "==> HEAD is already tagged. Nothing to release."
         exit 0
       fi
 
-      # PUSH_COMMITS: only the commits that arrived in this push.
-      # Used for [skip release] guard — so a historical commit with
-      # [skip release] never permanently blocks future releases.
+      # Only inspect the commits that arrived in this push.
+      # Release is OPT-IN: without [patch|minor|major] we do nothing.
       if [ -n "$CI_COMMIT_BEFORE_SHA" ] && [ "$CI_COMMIT_BEFORE_SHA" != "0000000000000000000000000000000000000000" ]; then
         PUSH_COMMITS=$(git log ${CI_COMMIT_BEFORE_SHA}..HEAD --pretty=format:"%s" 2>/dev/null)
       else
         PUSH_COMMITS=$(git log --pretty=format:"%s" -5)
       fi
 
-      # RANGE_COMMITS: all commits since last tag — used for bump level detection.
-      if [ -n "$LAST_TAG" ]; then
-        RANGE_COMMITS=$(git log ${LAST_TAG}..HEAD --pretty=format:"%s" 2>/dev/null)
-      else
-        RANGE_COMMITS=$(git log --pretty=format:"%s" -20)
-      fi
-
       echo "==> Push commits:"
       echo "$PUSH_COMMITS"
 
-      if echo "$PUSH_COMMITS" | grep -qi "\[skip release\]"; then
-        echo "==> [skip release] found in push. Skipping."
-        exit 0
+      # Determine bump level — release only if an explicit marker is present.
+      # Default is NO release (inverted from the old model).
+      BUMP_LEVEL=""
+      if echo "$PUSH_COMMITS" | grep -qi "\[major\]"; then
+        BUMP_LEVEL="major"
+      elif echo "$PUSH_COMMITS" | grep -qi "\[minor\]"; then
+        BUMP_LEVEL="minor"
+      elif echo "$PUSH_COMMITS" | grep -qi "\[patch\]"; then
+        BUMP_LEVEL="patch"
       fi
 
-      BUMP_LEVEL="patch"
-      if echo "$RANGE_COMMITS" | grep -qi "\[major\]"; then
-        BUMP_LEVEL="major"
-      elif echo "$RANGE_COMMITS" | grep -qi "\[minor\]"; then
-        BUMP_LEVEL="minor"
+      if [ -z "$BUMP_LEVEL" ]; then
+        echo "==> No [patch|minor|major] found in push commits. Skipping release."
+        echo "==> To release, add [patch], [minor] or [major] to a commit message."
+        exit 0
       fi
       echo "==> Bump level: $BUMP_LEVEL"
 
@@ -130,9 +125,7 @@ auto-release:
       git remote set-url origin "https://release-bot:${RELEASE_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git"
 
       echo "==> Bumping version ($BUMP_LEVEL)..."
-      # Pass the actual git tag version as --current-version so bump-my-version
-      # always computes the next version from the real released tag, not from
-      # whatever is in pyproject.toml (which can lag when commits bypass bump).
+      # Use the git tag as --current-version (source of truth), not pyproject.toml.
       LAST_TAG_VERSION=$(echo "$LAST_TAG" | sed 's/^v//')
       if [ -n "$LAST_TAG_VERSION" ]; then
         echo "==> Using --current-version $LAST_TAG_VERSION (from git tag $LAST_TAG)"

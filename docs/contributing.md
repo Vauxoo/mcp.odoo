@@ -39,29 +39,33 @@ The CI blocks on all three. Run them locally before pushing.
 | `[REM]` | Removal |
 | `[CHG]` | Configuration / tooling change |
 
-### Bump Level Trailers
+### Release Markers (opt-in model)
 
-Append to any commit in your branch to control the release bump:
+**By default, merging to `main` does NOT create a release.**
+To trigger one, add exactly one marker anywhere in a commit message of the push:
 
-| Trailer | Effect |
-|---------|--------|
-| *(none)* | Patch: `0.3.x → 0.3.x+1` |
-| `[minor]` | Minor: `0.3.x → 0.4.0` |
-| `[major]` | Major: `0.3.x → 1.0.0` |
-| `[skip release]` | No release for **this push** |
+| Marker | Effect |
+|--------|--------|
+| *(none)* | No release — safe to merge freely |
+| `[patch]` | Patch: `0.4.1 → 0.4.2` |
+| `[minor]` | Minor: `0.4.x → 0.5.0` |
+| `[major]` | Major: `0.4.x → 1.0.0` |
 
-Example:
+Examples:
 
 ```text
-[IMP] server: Stabilize public API for 1.0 [major]
+[IMP] server: Add new tool for attachments [patch]
+[IMP] cli: Breaking change in profile format [major]
+[FIX] config: Fix typo in error message        ← no release
 ```
 
 ## Release Process
 
-Releases are fully automated. After a MR merges to `main`:
+Releases are fully automated and **opt-in**. After a MR merges to `main`:
 
 1. CI runs lint + test.
-2. `auto-release` job bumps the version, commits with `[skip ci]`, and pushes a tag.
-3. `publish:pypi` and `publish:gitlab` jobs deploy to PyPI and the GitLab package registry.
+2. If no `[patch|minor|major]` marker is found → pipeline exits cleanly, no release.
+3. If a marker is found → `auto-release` bumps the version, commits with `[skip ci]`,
+   pushes a tag, and triggers `publish:pypi` and `publish:gitlab`.
 
 You never need to run `bump-my-version` manually.
