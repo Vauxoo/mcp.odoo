@@ -5,18 +5,28 @@ build-backend = "hatchling.build"
 [project]
 name = "odoo-mcp-multi"
 version = "0.4.1"
-description = "MCP Server for connecting Claude/Cursor to multiple Odoo instances"
+description = "MCP server for Odoo — connect Claude, Cursor, VS Code and Antigravity to multiple Odoo instances via Model Context Protocol"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.10"
 authors = [
     { name = "Nhomar Hernandez", email = "info@vauxoo.com" }
 ]
-keywords = ["mcp", "odoo", "erp", "xmlrpc", "claude", "cursor"]
+maintainers = [
+    { name = "Nhomar Hernandez", email = "info@vauxoo.com" }
+]
+keywords = [
+    "mcp", "mcp-server", "model-context-protocol",
+    "odoo", "odoo-mcp", "odoo-ai", "odoo-erp", "odoo-integration",
+    "claude", "claude-desktop", "cursor", "vscode", "antigravity",
+    "erp", "xmlrpc", "json-rpc", "multi-instance", "multi-profile",
+    "ai", "llm", "agentic", "ai-tools",
+]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
     "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
@@ -24,6 +34,9 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Internet",
+    "Topic :: Office/Business",
+    "Topic :: System :: Systems Administration",
 ]
 dependencies = [
     "mcp[cli]>=1.0.0",
@@ -48,6 +61,8 @@ odoo-mcp = "odoo_mcp_multi.cli:main"
 [project.urls]
 Homepage = "https://git.vauxoo.com/nhomar/mcp.odoo"
 Repository = "https://git.vauxoo.com/nhomar/mcp.odoo"
+Documentation = "https://git.vauxoo.com/nhomar/mcp.odoo/-/blob/main/README.md"
+"Issue Tracker" = "https://git.vauxoo.com/nhomar/mcp.odoo/-/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["odoo_mcp_multi"]

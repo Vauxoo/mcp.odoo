@@ -252,3 +252,17 @@ import_records(model="res.partner", fields="id,name,phone", rows='[{"id": "base.
 
 - Credentials securely written to `~/.config/odoo-mcp/profiles.json` without raw logging.
 - Development mode requires `pip install -e ".[dev]"`. Code standard is heavily enforced by `ruff`.
+
+---
+
+<p align="center">
+  <a href="https://vauxoo.com">
+    <img src="https://git.vauxoo.com/nhomar/mcp.odoo/-/raw/main/docs/vauxoo.png"
+         alt="Vauxoo" height="24" style="vertical-align:middle">
+  </a>
+  &nbsp;
+  Maintained by <a href="https://nhomar.com"><strong>Nhomar Hernández</strong></a>
+  at <a href="https://vauxoo.com"><strong>Vauxoo</strong></a> — Odoo Gold Partner.
+  &nbsp;·&nbsp;
+  <a href="https://git.vauxoo.com/nhomar/mcp.odoo/-/issues">Report an Issue</a>
+</p>
