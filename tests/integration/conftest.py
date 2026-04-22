@@ -21,6 +21,7 @@ Environment variables (all optional — tests skip if missing):
     ODOO17_USER  admin
     ODOO17_PASS  admin
 """
+
 from __future__ import annotations
 
 import os

@@ -161,31 +161,23 @@ class TestDetectProtocol:
 
 class TestCreateClient:
     def test_jsonrpcs_returns_jsonrpc_client(self):
-        client = create_client(
-            "https://x.com", "db", user="user", password="pass", protocol=Protocol.JSONRPCS
-        )
+        client = create_client("https://x.com", "db", user="user", password="pass", protocol=Protocol.JSONRPCS)
         assert isinstance(client, JsonRpcClient)
         assert client.use_json2 is False
 
     def test_jsonrpc_returns_jsonrpc_client(self):
-        client = create_client(
-            "https://x.com", "db", user="user", password="pass", protocol=Protocol.JSONRPC
-        )
+        client = create_client("https://x.com", "db", user="user", password="pass", protocol=Protocol.JSONRPC)
         assert isinstance(client, JsonRpcClient)
         assert client.use_json2 is False
 
     def test_json2s_returns_json2_client(self):
         """JSON2S now returns the real Json2Client (Bearer token REST client)."""
-        client = create_client(
-            "https://x.com", "db", api_key="mykey", protocol=Protocol.JSON2S
-        )
+        client = create_client("https://x.com", "db", api_key="mykey", protocol=Protocol.JSON2S)
         assert isinstance(client, Json2Client)
 
     def test_json2_returns_json2_client(self):
         """JSON2 now returns the real Json2Client (Bearer token REST client)."""
-        client = create_client(
-            "https://x.com", "db", api_key="mykey", protocol=Protocol.JSON2
-        )
+        client = create_client("https://x.com", "db", api_key="mykey", protocol=Protocol.JSON2)
         assert isinstance(client, Json2Client)
 
     def test_json2s_without_api_key_raises(self):
@@ -196,32 +188,24 @@ class TestCreateClient:
             create_client("https://x.com", "db", protocol=Protocol.JSON2S)
 
     def test_xmlrpcs_returns_xmlrpc_client(self):
-        client = create_client(
-            "https://x.com", "db", user="user", password="pass", protocol=Protocol.XMLRPCS
-        )
+        client = create_client("https://x.com", "db", user="user", password="pass", protocol=Protocol.XMLRPCS)
         assert isinstance(client, XmlRpcClient)
 
     def test_string_protocol_is_accepted(self):
         """Protocol can be passed as a string (common in profile config)."""
-        client = create_client(
-            "https://x.com", "db", user="user", password="pass", protocol="jsonrpcs"
-        )
+        client = create_client("https://x.com", "db", user="user", password="pass", protocol="jsonrpcs")
         assert isinstance(client, JsonRpcClient)
 
     @patch("odoo_mcp_multi.utils.detect_protocol")
     def test_auto_delegates_to_detect_protocol(self, mock_detect):
         mock_detect.return_value = Protocol.JSONRPCS
-        client = create_client(
-            "https://x.com", "db", user="user", password="pass", protocol=Protocol.AUTO
-        )
+        client = create_client("https://x.com", "db", user="user", password="pass", protocol=Protocol.AUTO)
         assert isinstance(client, JsonRpcClient)
         mock_detect.assert_called_once()
 
     def test_url_is_normalized(self):
         """URL without scheme should be normalized before reaching the client."""
-        client = create_client(
-            "odoo.example.com", "db", user="user", password="pass", protocol=Protocol.JSONRPCS
-        )
+        client = create_client("odoo.example.com", "db", user="user", password="pass", protocol=Protocol.JSONRPCS)
         assert client.url == "https://odoo.example.com"
 
 

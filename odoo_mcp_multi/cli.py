@@ -8,7 +8,9 @@ the MCP tool interface. Both interfaces share logic via operations.py.
 from __future__ import annotations
 
 import json
+import os
 import sys
+from pathlib import Path
 
 import click
 
@@ -530,6 +532,89 @@ def cmd_list_fields(model, profile) -> None:
         _output(result)
     except (OdooConnectionError, OdooAuthenticationError, OdooExecutionError) as e:
         _handle_error(e)
+
+
+# ---------------------------------------------------------------------------
+# Skills management commands
+# ---------------------------------------------------------------------------
+
+AGENT_DIRS = {
+    "gemini": "$HOME/.gemini/skills",
+    "antigravity": "$HOME/.gemini/antigravity/skills",
+    "claude": "$HOME/.claude/skills",
+    "codex": "$HOME/.codex/skills",
+    "opencode": "$HOME/.opencode/skills",
+}
+
+
+@main.group("skills", invoke_without_command=True)
+@click.pass_context
+def cmd_skills(ctx: click.Context) -> None:
+    """Manage agentic skills provided by odoo-mcp.
+
+    If no subcommand is provided, this defaults to listing all available skills.
+    Use 'odoo-mcp skills install <agent>' to link skills into your preferred IDE.
+    """
+    if ctx.invoked_subcommand is None:
+        ctx.invoke(cmd_skills_list)
+
+
+@cmd_skills.command("list")
+def cmd_skills_list() -> None:
+    """List available skills bundled with odoo-mcp."""
+    skills_dir = Path(__file__).parent / "skills"
+    if not skills_dir.exists():
+        click.secho("No skills found in the package.", fg="yellow")
+        return
+
+    click.echo("Available skills in odoo-mcp:")
+    for item in sorted(skills_dir.iterdir()):
+        if item.is_dir() and (item / "SKILL.md").exists():
+            click.echo(f"  - {item.name}")
+
+
+@cmd_skills.command("install")
+@click.argument("agent", type=click.Choice(list(AGENT_DIRS.keys())))
+@click.option("--force", is_flag=True, help="Overwrite existing symlinks")
+def cmd_skills_install(agent: str, force: bool) -> None:
+    """Install skills to the specified agentic IDE via symbolic link."""
+    target_dir_str = AGENT_DIRS.get(agent)
+    if not target_dir_str:
+        click.secho(f"✗ Unknown agent: {agent}", fg="red", err=True)
+        sys.exit(1)
+
+    target_dir = Path(os.path.expandvars(target_dir_str)).expanduser()
+    skills_dir = Path(__file__).parent / "skills"
+
+    if not skills_dir.exists() or not any(skills_dir.iterdir()):
+        click.secho("✗ No skills found to install.", fg="red", err=True)
+        sys.exit(1)
+
+    # Ensure target directory exists
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    click.echo(f"Installing skills for {agent} into {target_dir}...")
+
+    for item in sorted(skills_dir.iterdir()):
+        if not item.is_dir() or not (item / "SKILL.md").exists():
+            continue
+
+        dest = target_dir / item.name
+
+        if (dest.exists() or dest.is_symlink()) and not force:
+            click.secho(f"  - Skipping {item.name}: already exists. Use --force to overwrite.", fg="yellow")
+            continue
+
+        if dest.exists() or dest.is_symlink():
+            dest.unlink()
+
+        try:
+            dest.symlink_to(item.absolute())
+            click.secho(f"  ✓ Linked {item.name}", fg="green")
+        except Exception as e:
+            click.secho(f"  ✗ Failed to link {item.name}: {e}", fg="red", err=True)
+
+    click.echo(f"\nSkills successfully installed for {agent}!")
 
 
 if __name__ == "__main__":

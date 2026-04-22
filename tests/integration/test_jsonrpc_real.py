@@ -3,12 +3,12 @@
 Run locally:
     pytest tests/integration/test_jsonrpc_real.py -v -m integration
 """
+
 from __future__ import annotations
 
 import pytest
 
 from .conftest import ODOO18_URL, requires_odoo18
-
 
 # ---------------------------------------------------------------------------
 # T22 — detect_protocol() against real Odoo 18
@@ -22,9 +22,7 @@ def test_t22_detect_protocol_returns_jsonrpcs():
     from odoo_mcp_multi.utils import Protocol, detect_protocol
 
     result = detect_protocol(ODOO18_URL)
-    assert result == Protocol.JSONRPCS, (
-        f"Expected Protocol.JSONRPCS for Odoo 18, got {result!r}"
-    )
+    assert result == Protocol.JSONRPCS, f"Expected Protocol.JSONRPCS for Odoo 18, got {result!r}"
 
 
 # ---------------------------------------------------------------------------
@@ -39,7 +37,8 @@ def test_t23_search_read_returns_partners(odoo18_client):
     result = odoo18_client.execute_kw(
         "res.partner",
         "search_read",
-        [[]], {"fields": ["id", "name"], "limit": 3},
+        [[]],
+        {"fields": ["id", "name"], "limit": 3},
     )
     assert isinstance(result, list)
     assert len(result) > 0

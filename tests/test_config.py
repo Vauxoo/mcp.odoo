@@ -4,7 +4,6 @@ Uses pytest's tmp_path fixture to redirect the config directory,
 ensuring tests are hermetic — no real ~/.config/odoo-mcp/ is touched.
 """
 
-
 import pytest
 from pydantic import SecretStr
 

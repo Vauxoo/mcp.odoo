@@ -3,6 +3,7 @@
 Run locally:
     pytest tests/integration/test_xmlrpc_real.py -v -m integration
 """
+
 from __future__ import annotations
 
 import pytest
@@ -24,7 +25,6 @@ from .conftest import (
     requires_odoo19,
 )
 
-
 # ---------------------------------------------------------------------------
 # T24 — XmlRpcClient smoke test on Odoo 17
 # ---------------------------------------------------------------------------
@@ -37,7 +37,8 @@ def test_t24_xmlrpc_search_read_real(odoo17_client):
     result = odoo17_client.execute_kw(
         "res.partner",
         "search_read",
-        [[]], {"fields": ["id", "name"], "limit": 3},
+        [[]],
+        {"fields": ["id", "name"], "limit": 3},
     )
     assert isinstance(result, list)
     assert len(result) > 0

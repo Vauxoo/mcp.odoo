@@ -25,35 +25,52 @@ Connects any MCP client (Antigravity, Claude Desktop, Cursor, VS Code) to
 - **Full CLI parity**: Every MCP tool is also available as a CLI command — same logic, no duplication (DRY).
 - **Integrated CLI**: Profile management, connection testing, and all Odoo data operations from your terminal.
 
-## 1-Minute Setup (Copy-Paste Prompt)
+## 1-Minute Setup (Copy-Paste Prompts)
 
-Paste the block below into your AI client (Antigravity, Claude, Cursor) to get started instantly.
-The block renders as plain text — copy it as-is:
+Paste the blocks below into your AI client (Antigravity, Claude, Cursor) to get started instantly. They are separated into three logical steps so you can execute what you need.
+
+### 1. Install the Package
+
+Copy and paste this prompt to have your agent install the package automatically:
 
 ```text
-Install & configure the Odoo MCP server. Run these steps:
+Please install the `odoo-mcp-multi` package. Use the best method for my OS:
+- macOS: `brew install pipx && pipx install odoo-mcp-multi`
+- Linux: `pip install pipx && pipx install odoo-mcp-multi`
+- Windows: `winget install Python.Python.3.12`, then `pip install pipx && pipx ensurepath`, then `pipx install odoo-mcp-multi`
+- Or simply use `pip install odoo-mcp-multi` if a python environment is already managed.
 
-1. Install (recommended — isolated, no venv needed):
-   - macOS: brew install pipx && pipx install odoo-mcp-multi
-   - Linux: pip install pipx && pipx install odoo-mcp-multi
-   - Windows: winget install Python.Python.3.12 -> new terminal ->
-     pip install pipx && pipx ensurepath -> new terminal ->
-     pipx install odoo-mcp-multi
-   - Developer alternative: pip install odoo-mcp-multi
-2. Add a profile: odoo-mcp add-profile (enter your Odoo URL, database, user, and API key)
-3. Test connection: odoo-mcp test
-4. Add this block to your AI client MCP config file:
-   {
-     "mcpServers": {
-       "odoo": {
-         "command": "odoo-mcp",
-         "args": ["run"]
-       }
-     }
-   }
-5. Restart your AI client. You now have access to 10 Odoo tools:
-   search_read, write, create, export_records, import_records,
-   execute_kw, list_models, list_fields, list_available_profiles, get_version.
+After installing, please run `odoo-mcp add-profile` to configure my credentials interactively, and then run `odoo-mcp test` to verify the connection.
+```
+
+### 2. Configure MCP
+
+Copy and paste this prompt to have your agent add the MCP server configuration:
+
+```text
+Please configure the `odoo-mcp` server in my MCP client settings.
+Add the following block to my configuration file (e.g. `mcp_config.json` for Antigravity, or `claude_desktop_config.json` for Claude):
+
+{
+  "mcpServers": {
+    "odoo": {
+      "command": "odoo-mcp",
+      "args": ["run"]
+    }
+  }
+}
+
+Once added, remind me to restart my AI client so I can use the 10 Odoo tools available.
+```
+
+### 3. Install Agentic Skills
+
+Copy and paste this prompt to have your agent install the built-in Odoo workflow skills:
+
+```text
+Please install the agentic skills bundled with the `odoo-mcp` package.
+Run the command `odoo-mcp skills install <agent_name>` where `<agent_name>` is your own identity (e.g., `gemini`, `antigravity`, `claude`, `codex`, or `opencode`). 
+This will automatically symlink the skills into my global skills directory so you can use them in future tasks.
 ```
 
 ## Installation & Quick Start

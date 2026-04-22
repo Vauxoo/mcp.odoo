@@ -17,8 +17,8 @@ def test_export_records(mock_get_client):
     mock_get_client.return_value = mock_client
 
     mock_client.execute_kw.side_effect = [
-        2,          # return value for 'search_count'
-        [42, 43],   # return value for 'search'
+        2,  # return value for 'search_count'
+        [42, 43],  # return value for 'search'
         {  # return value for 'export_data'
             "datas": [
                 ["__export__.res_partner_42_99b00db5", "Partner A"],

@@ -7,12 +7,12 @@ in CI unless those variables are provided.
 Run locally:
     pytest tests/integration/test_json2_real.py -v -m integration
 """
+
 from __future__ import annotations
 
 import pytest
 
 from .conftest import ODOO19_URL, requires_odoo19
-
 
 # ---------------------------------------------------------------------------
 # T19 — search_read
@@ -95,6 +95,4 @@ def test_t21_detect_protocol_returns_json2s():
     from odoo_mcp_multi.utils import Protocol, detect_protocol
 
     result = detect_protocol(ODOO19_URL)
-    assert result == Protocol.JSON2S, (
-        f"Expected Protocol.JSON2S for Odoo 19, got {result!r}"
-    )
+    assert result == Protocol.JSON2S, f"Expected Protocol.JSON2S for Odoo 19, got {result!r}"

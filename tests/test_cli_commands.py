@@ -23,8 +23,11 @@ runner = CliRunner()
 def test_cli_search_read(mock_op):
     mock_op.return_value = {
         "records": [{"id": 1, "name": "Test"}],
-        "total": 1, "limit": 100, "offset": 0,
-        "has_more": False, "next_offset": 100,
+        "total": 1,
+        "limit": 100,
+        "offset": 0,
+        "has_more": False,
+        "next_offset": 100,
     }
 
     result = runner.invoke(main, ["search-read", "--model", "res.partner", "--fields", "id,name"])
@@ -113,8 +116,11 @@ def test_cli_create(mock_op):
 def test_cli_export_records(mock_op):
     mock_op.return_value = {
         "records": [{"id": "ext_1", "name": "A"}],
-        "total": 1, "limit": 500, "offset": 0,
-        "has_more": False, "next_offset": 500,
+        "total": 1,
+        "limit": 500,
+        "offset": 0,
+        "has_more": False,
+        "next_offset": 500,
     }
 
     result = runner.invoke(main, ["export-records", "--model", "res.partner", "--fields", "id,name"])
@@ -243,3 +249,30 @@ def test_cli_search_read_help():
     assert result.exit_code == 0
     assert "--model" in result.output
     assert "--domain" in result.output
+
+
+# ---------------------------------------------------------------------------
+# skills
+# ---------------------------------------------------------------------------
+
+
+def test_cli_skills_help():
+    result = runner.invoke(main, ["skills", "--help"])
+    assert result.exit_code == 0
+    assert "list" in result.output
+    assert "install" in result.output
+
+
+def test_cli_skills_list():
+    result = runner.invoke(main, ["skills", "list"])
+    assert result.exit_code == 0
+    assert "Available skills in odoo-mcp:" in result.output
+    assert "odoo-mcp-cli" in result.output
+
+
+@patch("pathlib.Path.symlink_to")
+def test_cli_skills_install(mock_symlink):
+    result = runner.invoke(main, ["skills", "install", "antigravity", "--force"])
+    assert result.exit_code == 0
+    assert "Skills successfully installed for antigravity!" in result.output
+    assert mock_symlink.called

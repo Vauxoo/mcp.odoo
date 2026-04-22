@@ -26,8 +26,14 @@ runner = CliRunner()
 @patch("odoo_mcp_multi.cli.list_profiles")
 def test_cli_list_profiles_json(mock_list):
     mock_list.return_value = [
-        {"name": "prod", "url": "https://odoo.example.com", "database": "prod",
-         "user": "admin", "protocol": "auto", "is_default": True},
+        {
+            "name": "prod",
+            "url": "https://odoo.example.com",
+            "database": "prod",
+            "user": "admin",
+            "protocol": "auto",
+            "is_default": True,
+        },
     ]
     result = runner.invoke(main, ["list-profiles", "--json"])
     assert result.exit_code == 0
@@ -39,8 +45,14 @@ def test_cli_list_profiles_json(mock_list):
 @patch("odoo_mcp_multi.cli.list_profiles")
 def test_cli_list_profiles_human_readable(mock_list):
     mock_list.return_value = [
-        {"name": "prod", "url": "https://odoo.example.com", "database": "prod",
-         "user": "admin", "protocol": "auto", "is_default": True},
+        {
+            "name": "prod",
+            "url": "https://odoo.example.com",
+            "database": "prod",
+            "user": "admin",
+            "protocol": "auto",
+            "is_default": True,
+        },
     ]
     result = runner.invoke(main, ["list-profiles"])
     assert result.exit_code == 0
@@ -226,11 +238,16 @@ def test_cli_add_profile_all_flags(mock_test_conn, mock_add):
         main,
         [
             "add-profile",
-            "--name", "staging",
-            "--url", "https://staging.example.com",
-            "--database", "staging_db",
-            "--user", "admin",
-            "--password", "secret",
+            "--name",
+            "staging",
+            "--url",
+            "https://staging.example.com",
+            "--database",
+            "staging_db",
+            "--user",
+            "admin",
+            "--password",
+            "secret",
         ],
     )
     assert result.exit_code == 0
@@ -253,10 +270,14 @@ def test_cli_add_profile_with_api_key(mock_add):
         main,
         [
             "add-profile",
-            "--name", "prod19",
-            "--url", "https://odoo19.example.com",
-            "--database", "mydb",
-            "--api-key", "myapikey123",
+            "--name",
+            "prod19",
+            "--url",
+            "https://odoo19.example.com",
+            "--database",
+            "mydb",
+            "--api-key",
+            "myapikey123",
             "--no-test",
         ],
     )
@@ -275,9 +296,12 @@ def test_cli_add_profile_without_auth_fails():
         main,
         [
             "add-profile",
-            "--name", "bad",
-            "--url", "https://example.com",
-            "--database", "mydb",
+            "--name",
+            "bad",
+            "--url",
+            "https://example.com",
+            "--database",
+            "mydb",
             "--no-test",
         ],
     )

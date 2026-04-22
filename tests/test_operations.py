@@ -154,8 +154,8 @@ def test_op_export_records(mock_get_client):
     mock_get_client.return_value = mock_client
 
     mock_client.execute_kw.side_effect = [
-        2,          # search_count
-        [42, 43],   # search
+        2,  # search_count
+        [42, 43],  # search
         {"datas": [["ext_42", "Partner A"], ["ext_43", "Partner B"]]},  # export_data
     ]
 
@@ -173,7 +173,7 @@ def test_op_export_records_empty(mock_get_client):
     mock_client = MagicMock()
     mock_get_client.return_value = mock_client
     mock_client.execute_kw.side_effect = [
-        0,   # search_count
+        0,  # search_count
         [],  # search returns empty
     ]
 
