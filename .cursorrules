@@ -1,0 +1,23 @@
+# Agentic Repository Rules & Constraints
+
+## Identity Protocol
+
+- **Nombre del Usuario:** Gerónimo
+- **Nombre del Agente:** C3PO
+- **Nombre de los Subagentes:** R2D2
+
+## Push & Pipeline Rules
+
+1. **Verificación Pre-Push Mandatoria:** C3PO jamás debe hacer un `git push` a ciegas. Antes de cualquier `push` que invoques, debes **ejecutar localmente los linters (Ruff) y la suite de pruebas (Pytest)** para asegurar que el pipeline no se rompa (evitar "MR rojos").
+2. **Uso del Hook:** Tienes un hook local en `.git/hooks/pre-push` que simula el pipeline de GitLab. Confía en él. Si el hook falla o te previene hacer el push, **corrige los errores** inmediatamente.
+
+## Issue & Code Constraints
+
+1. **Reglas de Issues:**
+   - Cada implementación o feature discutida de forma autónoma debe quedar reflejada en el código o crear un Merge Request validado *limpio*.
+   - Deben seguirse estrictamente las convenciones de commit convencionales (`[IMP]`, `[FIX]`, `[ADD]`).
+   - Las validaciones manuales/pruebas se registran en los Walkthroughs generados al final.
+
+2. **Idioma de Código:** Todo el código (variables, funciones, documentación) **DEBE estar estrictamente en idioma Inglés** sin excepción.
+
+3. **Arquitectura No Destructiva:** No sobre-escribas pruebas unitarias o comportamientos de versiones anteriores a menos que el usuario lo solicite justificadamente. Respeta Mocks, Fallbacks y lógica de compatibilidad de Odoo >19 con Odoo <19.

@@ -11,39 +11,59 @@ import os
 from pathlib import Path
 from typing import Optional
 
-from pydantic import BaseModel, Field, SecretStr
+from pydantic import BaseModel, Field, SecretStr, model_validator
 
 
 class OdooProfile(BaseModel):
-    """Represents a single Odoo instance configuration."""
+    """Represents a single Odoo instance configuration.
+
+    Supports two authentication modes:
+    - **Legacy** (Odoo < 19): ``user`` + ``password`` via XML-RPC / JSON-RPC.
+    - **JSON-2** (Odoo ≥ 19): ``api_key`` as Bearer token via /json/2.
+
+    At least one of ``password`` or ``api_key`` must be provided.
+    """
 
     name: str = Field(..., description="Profile identifier (e.g., 'prod', 'staging')")
     url: str = Field(..., description="Odoo instance URL (e.g., 'https://odoo.example.com')")
     database: str = Field(..., description="Database name")
-    user: str = Field(..., description="Username for authentication")
-    password: SecretStr = Field(..., description="Password (stored securely)")
+    user: str = Field(default="", description="Username for authentication (legacy auth)")
+    password: Optional[SecretStr] = Field(default=None, description="Password (legacy auth, stored securely)")
+    api_key: Optional[SecretStr] = Field(default=None, description="API key for Odoo 19+ bearer auth")
     protocol: str = Field(default="auto", description="RPC protocol: auto, jsonrpcs, json2s, xmlrpcs")
+
+    @model_validator(mode="after")
+    def require_auth(self) -> "OdooProfile":
+        """Ensure at least one authentication credential is provided."""
+        if not self.password and not self.api_key:
+            raise ValueError("Either 'password' (legacy auth) or 'api_key' (Odoo 19+ JSON-2) is required.")
+        return self
 
     def to_dict(self) -> dict:
         """Convert profile to dictionary for JSON serialization."""
-        return {
+        d: dict = {
             "name": self.name,
             "url": self.url,
             "database": self.database,
             "user": self.user,
-            "password": self.password.get_secret_value(),
             "protocol": self.protocol,
         }
+        if self.password is not None:
+            d["password"] = self.password.get_secret_value()
+        if self.api_key is not None:
+            d["api_key"] = self.api_key.get_secret_value()
+        return d
 
     @classmethod
-    def from_dict(cls, data: dict) -> OdooProfile:
+    def from_dict(cls, data: dict) -> "OdooProfile":
         """Create profile from dictionary."""
         return cls(
             name=data["name"],
             url=data["url"],
             database=data["database"],
-            user=data["user"],
-            password=SecretStr(data["password"]),
+            user=data.get("user", ""),
+            password=SecretStr(data["password"]) if data.get("password") else None,
+            api_key=SecretStr(data["api_key"]) if data.get("api_key") else None,
             protocol=data.get("protocol", "auto"),
         )
 

@@ -74,3 +74,6 @@ Thumbs.db
 *.log
 site/
 .python-version
+
+# Integration test secrets — never commit real credentials
+tests/integration/.env.local.test

@@ -1,0 +1,11 @@
+{
+  "title": "Odoo 19+ External JSON-2 API (Migration from XML-RPC/JSON-RPC)",
+  "summary": "Complete reference for the new REST-style /json/2 endpoint introduced in Odoo 19. Replaces XML-RPC and JSON-RPC (scheduled for removal in Odoo 22, fall 2028). Uses Bearer API key instead of user/password, model+method in URL, all args named in JSON body. Critical for migrating odoo-mcp-multi to support Odoo 19+.",
+  "created": "2026-03-28",
+  "source": "https://www.odoo.com/documentation/19.0/developer/reference/external_api.html",
+  "tags": ["odoo", "api", "json2", "rest", "migration", "bearer", "odoo-mcp"],
+  "references": [
+    "https://www.odoo.com/documentation/19.0/developer/reference/external_api.html",
+    "https://www.odoo.com/documentation/19.0/developer/reference/backend/orm.html"
+  ]
+}

@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-04-20
+
+### Added
+
+- Added support for Odoo 19+ via the new JSON-2 API (`Json2Client`).
+- Added authentication support using `--api-key`.
+- Added documentation for Odoo 19+ API migration and differences.
+
+### Changed
+
+- CI Pipeline: Releases are now opt-in via commit message tokens (`[patch]`, `[minor]`, `[major]`).
+- Improved branding and SEO metadata (server name, footer, absolute URLs).
+- Added markdownlint check to CI and local `pre-push` hooks.
+- Set pyenv inside the pre-push hook for better environment isolation.
+
+### Fixed
+
+- Improved version suffix parsing and fixed JSON-2 `create` method.
+- Resolved markdownlint formatting issues breaking the CI pipeline.
+
 ## [0.3.0] - 2026-03-15
 
 ### Added

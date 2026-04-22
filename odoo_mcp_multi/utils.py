@@ -8,6 +8,7 @@ Includes automatic version detection for intelligent protocol selection.
 from __future__ import annotations
 
 import json
+import re
 import socket
 import xmlrpc.client
 from abc import ABC, abstractmethod
@@ -338,6 +339,155 @@ class JsonRpcClient(BaseOdooClient):
             raise
 
 
+# ---------------------------------------------------------------------------
+# Odoo 19+ JSON-2 REST client
+# ---------------------------------------------------------------------------
+
+# Maps (method_name) → (positional_arg_names, instance_method)
+# instance_method=True means ids come from args[0] and are sent in body
+_JSON2_METHOD_SIGNATURES: dict[str, tuple[list[str], bool]] = {
+    "search": (["domain"], False),
+    "search_read": (["domain"], False),
+    "read": (["ids", "fields"], True),
+    "write": (["ids", "vals"], True),
+    "create": (["vals_list"], False),
+    "unlink": (["ids"], True),
+    "fields_get": (["attributes"], False),
+    "export_data": (["ids", "fields_to_export", "raw_data"], True),
+    "name_search": (["name"], False),
+    "copy": (["ids"], True),
+}
+
+
+class Json2Client(BaseOdooClient):
+    """REST client for Odoo 19+ /json/2 API endpoint.
+
+    Uses Bearer token (API key) for authentication — no user/password per call.
+    All method arguments are sent as named parameters in the JSON body.
+    Model and method are encoded in the URL path.
+
+    Reference:
+        https://www.odoo.com/documentation/19.0/developer/reference/external_api.html
+
+    Note:
+        XML-RPC and JSON-RPC are deprecated in Odoo 19 and scheduled for
+        removal in Odoo 22 (fall 2028). This client is the forward-compatible
+        replacement.
+    """
+
+    def __init__(
+        self,
+        url: str,
+        database: str,
+        api_key: str | SecretStr,
+        timeout: int = 120,
+        # user/password accepted but ignored for backward compat with factory
+        user: str = "",
+        password: str | SecretStr = "",
+    ) -> None:
+        # BaseOdooClient requires user/password — pass empty strings
+        super().__init__(
+            url=normalize_url(url),
+            database=database,
+            user=user,
+            password=password or SecretStr(""),
+            timeout=timeout,
+        )
+        if isinstance(api_key, SecretStr):
+            self._api_key: str = api_key.get_secret_value()
+        else:
+            self._api_key = api_key
+
+    def _headers(self) -> dict[str, str]:
+        """Build the required HTTP headers for every JSON-2 request."""
+        h = {
+            "Authorization": f"bearer {self._api_key}",
+            "Content-Type": "application/json; charset=utf-8",
+            "User-Agent": "odoo-mcp-multi",
+        }
+        if self.database:
+            h["X-Odoo-Database"] = self.database
+        return h
+
+    def _build_body(
+        self,
+        method: str,
+        args: list,
+        kwargs: dict,
+    ) -> dict:
+        """Translate positional args + kwargs into a named-parameter JSON body.
+
+        JSON-2 does not support positional arguments — every parameter must be
+        named.  We use ``_JSON2_METHOD_SIGNATURES`` for the 10 common ORM
+        methods and fall back to a best-effort merge for unknown methods.
+        """
+        args = list(args or [])
+        body: dict = dict(kwargs or {})
+
+        sig = _JSON2_METHOD_SIGNATURES.get(method)
+        if sig is not None:
+            arg_names, is_instance = sig
+            for i, name in enumerate(arg_names):
+                if i < len(args):
+                    body[name] = args[i]
+            if is_instance and "ids" in body and body["ids"] is not None:
+                # ids already populated from args[0] — keep it
+                pass
+            elif is_instance:
+                # ids not provided — nothing to set
+                pass
+        else:
+            # Unknown method: zip positional args with generic names
+            for i, val in enumerate(args):
+                body.setdefault(f"_arg{i}", val)
+
+        return body
+
+    def authenticate(self) -> None:  # type: ignore[override]
+        """No-op: JSON-2 uses Bearer token — no UID needed."""
+        return None
+
+    def execute_kw(
+        self,
+        model: str,
+        method: str,
+        args: list | None = None,
+        kwargs: dict | None = None,
+    ) -> object:
+        """Execute an Odoo ORM method via the /json/2 REST endpoint."""
+        url = f"{self.url}/json/2/{model}/{method}"
+        body = self._build_body(method, args or [], kwargs or {})
+
+        try:
+            response = httpx.post(
+                url,
+                headers=self._headers(),
+                json=body,
+                timeout=self.timeout,
+            )
+        except httpx.TimeoutException as e:
+            raise OdooExecutionError(f"Request timed out: {e}") from e
+        except httpx.RequestError as e:
+            raise OdooConnectionError(f"Connection error: {e}") from e
+
+        if response.status_code == 401:
+            try:
+                msg = response.json().get("message", "Unauthorized")
+            except Exception:
+                msg = response.text or "Unauthorized"
+            raise OdooAuthenticationError(f"JSON-2 auth failed (401): {msg}")
+
+        if response.status_code >= 400:
+            try:
+                err = response.json()
+                msg = err.get("message", response.text)
+            except Exception:
+                msg = response.text
+            raise OdooExecutionError(f"JSON-2 error ({response.status_code}): {msg}")
+
+        return response.json()
+
+
 class XmlRpcClient(BaseOdooClient):
     """XML-RPC client for legacy Odoo instances (6.1 - 19.0)."""
 
@@ -413,12 +563,32 @@ class XmlRpcClient(BaseOdooClient):
 def get_server_version(url: str, timeout: int = 30) -> Optional[dict]:
     """Get server version info without authentication.
 
-    Tries JSON-RPC first, falls back to XML-RPC.
+    Priority order:
+    1. GET /web/version (Odoo 19+, no auth needed, returns {version, version_info})
+    2. POST /jsonrpc  (Odoo 8.0–18.x, legacy JSON-RPC common service)
+    3. XML-RPC /xmlrpc/2/common (legacy fallback)
+
     Returns version dict or None if unreachable.
     """
     url = normalize_url(url)
 
-    # Try JSON-RPC first (works for 8.0+)
+    # 1. Try /web/version (Odoo 19+) — fast, no auth, standard HTTP GET
+    try:
+        response = httpx.get(f"{url}/web/version", timeout=timeout)
+        if response.status_code == 200:
+            data = response.json()
+            # Normalise to match the legacy version dict shape
+            if "version" in data:
+                data.setdefault("server_version", data["version"])
+                data.setdefault(
+                    "server_version_info",
+                    data.get("version_info", []),
+                )
+                return data
+    except Exception:
+        pass
+
+    # 2. Try JSON-RPC (Odoo 8.0–18.x)
     try:
         payload = {
             "jsonrpc": "2.0",
@@ -433,7 +603,7 @@ def get_server_version(url: str, timeout: int = 30) -> Optional[dict]:
     except Exception:
         pass
 
-    # Fall back to XML-RPC
+    # 3. Fall back to XML-RPC
     try:
         common = xmlrpc.client.ServerProxy(f"{url}/xmlrpc/2/common", allow_none=True)
         return common.version()
@@ -443,21 +613,27 @@ def get_server_version(url: str, timeout: int = 30) -> Optional[dict]:
     return None
 
 
-def parse_version(version_str: str) -> tuple[int, int]:
-    """Parse version string like '16.0' or 'saas~17.1' into (major, minor) tuple."""
+def parse_version(version_str: str) -> tuple[int, int, bool]:
+    """Parse version string like '16.0' or '19.0+e' into (major, minor, is_enterprise) tuple."""
     if not version_str:
-        return (0, 0)
+        return (0, 0, False)
+
+    is_enterprise = "+e" in version_str.lower()
 
     # Handle saas~ prefix
     clean = version_str.replace("saas~", "").replace("saas-", "")
 
     parts = clean.split(".")
     try:
-        major = int(parts[0]) if parts else 0
-        minor = int(parts[1]) if len(parts) > 1 else 0
-        return (major, minor)
-    except ValueError:
-        return (0, 0)
+        m_major = re.match(r"^\d+", parts[0]) if parts else None
+        major = int(m_major.group()) if m_major else 0
+
+        m_minor = re.match(r"^\d+", parts[1]) if len(parts) > 1 else None
+        minor = int(m_minor.group()) if m_minor else 0
+
+        return (major, minor, is_enterprise)
+    except Exception:
+        return (0, 0, is_enterprise)
 
 
 def detect_protocol(url: str, timeout: int = 30) -> Protocol:
@@ -474,7 +650,13 @@ def detect_protocol(url: str, timeout: int = 30) -> Protocol:
         return Protocol.XMLRPCS  # Can't detect, use legacy
 
     server_version = version_info.get("server_version", "")
-    major, _ = parse_version(server_version)
+    major, _, is_ent = parse_version(server_version)
+
+    # Optional debugging
+    import logging
+
+    _logger = logging.getLogger(__name__)
+    _logger.debug(f"Detected Odoo {'Enterprise' if is_ent else 'Community'} v{server_version}")
 
     if major >= 19:
         return Protocol.JSON2S
@@ -487,23 +669,30 @@ def detect_protocol(url: str, timeout: int = 30) -> Protocol:
 def create_client(
     url: str,
     database: str,
-    user: str,
-    password: str | SecretStr,
+    user: str = "",
+    password: str | SecretStr = "",
+    api_key: str | SecretStr = "",
     protocol: Protocol | str = Protocol.AUTO,
     timeout: int = 120,
 ) -> BaseOdooClient:
     """Create an appropriate Odoo client based on protocol.
 
+    For Odoo ≥ 19 (JSON2/JSON2S), pass ``api_key`` instead of ``password``.
+    For older versions (JSON-RPC, XML-RPC), pass ``user`` + ``password``.
+    When ``protocol=AUTO``, the version is detected and the right client
+    is selected automatically.
+
     Args:
         url: Odoo instance URL
         database: Database name
-        user: Username
-        password: Password
-        protocol: Protocol to use (auto, jsonrpcs, xmlrpcs, etc.)
+        user: Username (legacy auth — Odoo < 19)
+        password: Password (legacy auth — Odoo < 19)
+        api_key: Bearer API key (JSON-2 auth — Odoo ≥ 19)
+        protocol: Protocol to use (auto, json2s, jsonrpcs, xmlrpcs, etc.)
         timeout: Request timeout in seconds
 
     Returns:
-        Configured OdooClient instance
+        Configured Odoo client instance
     """
     if isinstance(protocol, str):
         protocol = Protocol(protocol.lower())
@@ -512,9 +701,14 @@ def create_client(
     if protocol == Protocol.AUTO:
         protocol = detect_protocol(url, timeout=min(timeout, 30))
 
-    # Create appropriate client
+    # Odoo 19+ JSON-2 REST client
     if protocol in (Protocol.JSON2, Protocol.JSON2S):
-        return JsonRpcClient(url, database, user, password, timeout, use_json2=True)
+        if not api_key:
+            raise OdooAuthenticationError(
+                "Protocol JSON2/JSON2S requires an 'api_key'. "
+                "Generate one via Settings > Users > Account Security > API Keys."
+            )
+        return Json2Client(url=url, database=database, api_key=api_key, timeout=timeout)
 
     if protocol in (Protocol.JSONRPC, Protocol.JSONRPCS):
         return JsonRpcClient(url, database, user, password, timeout, use_json2=False)

@@ -7,7 +7,10 @@ Odoo environments (saas~ versions, URL normalization, protocol selection).
 
 from unittest.mock import patch
 
+import pytest
+
 from odoo_mcp_multi.utils import (
+    Json2Client,
     JsonRpcClient,
     Protocol,
     XmlRpcClient,
@@ -53,33 +56,38 @@ class TestNormalizeUrl:
 
 class TestParseVersion:
     def test_standard_major_minor(self):
-        assert parse_version("16.0") == (16, 0)
+        assert parse_version("16.0") == (16, 0, False)
 
     def test_major_only_with_zero(self):
-        assert parse_version("17.0") == (17, 0)
+        assert parse_version("17.0") == (17, 0, False)
 
     def test_saas_tilde_prefix(self):
         """saas~17.1 is common in Odoo SaaS — must parse correctly."""
-        assert parse_version("saas~17.1") == (17, 1)
+        assert parse_version("saas~17.1") == (17, 1, False)
 
     def test_saas_dash_prefix(self):
-        assert parse_version("saas-16.3") == (16, 3)
+        assert parse_version("saas-16.3") == (16, 3, False)
 
     def test_empty_string(self):
-        assert parse_version("") == (0, 0)
+        assert parse_version("") == (0, 0, False)
 
     def test_major_version_19(self):
-        assert parse_version("19.0") == (19, 0)
+        assert parse_version("19.0") == (19, 0, False)
 
     def test_old_version_12(self):
-        assert parse_version("12.0") == (12, 0)
+        assert parse_version("12.0") == (12, 0, False)
 
     def test_non_numeric_returns_zero(self):
-        assert parse_version("unknown") == (0, 0)
+        assert parse_version("unknown") == (0, 0, False)
 
     def test_single_digit_only(self):
         # "16" with no minor — minor defaults to 0
-        assert parse_version("16") == (16, 0)
+        assert parse_version("16") == (16, 0, False)
+
+    def test_enterprise_suffix(self):
+        assert parse_version("19.0+e") == (19, 0, True)
+        assert parse_version("saas~17.4+e") == (17, 4, True)
+        assert parse_version("16.0+E") == (16, 0, True)
 
 
 # ---------------------------------------------------------------------------
@@ -153,44 +161,67 @@ class TestDetectProtocol:
 
 class TestCreateClient:
     def test_jsonrpcs_returns_jsonrpc_client(self):
-        client = create_client("https://x.com", "db", "user", "pass", Protocol.JSONRPCS)
+        client = create_client(
+            "https://x.com", "db", user="user", password="pass", protocol=Protocol.JSONRPCS
+        )
         assert isinstance(client, JsonRpcClient)
         assert client.use_json2 is False
 
     def test_jsonrpc_returns_jsonrpc_client(self):
-        client = create_client("https://x.com", "db", "user", "pass", Protocol.JSONRPC)
+        client = create_client(
+            "https://x.com", "db", user="user", password="pass", protocol=Protocol.JSONRPC
+        )
         assert isinstance(client, JsonRpcClient)
         assert client.use_json2 is False
 
     def test_json2s_returns_json2_client(self):
-        client = create_client("https://x.com", "db", "user", "pass", Protocol.JSON2S)
-        assert isinstance(client, JsonRpcClient)
-        assert client.use_json2 is True
+        """JSON2S now returns the real Json2Client (Bearer token REST client)."""
+        client = create_client(
+            "https://x.com", "db", api_key="mykey", protocol=Protocol.JSON2S
+        )
+        assert isinstance(client, Json2Client)
 
     def test_json2_returns_json2_client(self):
-        client = create_client("https://x.com", "db", "user", "pass", Protocol.JSON2)
-        assert isinstance(client, JsonRpcClient)
-        assert client.use_json2 is True
+        """JSON2 now returns the real Json2Client (Bearer token REST client)."""
+        client = create_client(
+            "https://x.com", "db", api_key="mykey", protocol=Protocol.JSON2
+        )
+        assert isinstance(client, Json2Client)
+
+    def test_json2s_without_api_key_raises(self):
+        """JSON2S without api_key must raise OdooAuthenticationError immediately."""
+        from odoo_mcp_multi.utils import OdooAuthenticationError
+
+        with pytest.raises(OdooAuthenticationError, match="api_key"):
+            create_client("https://x.com", "db", protocol=Protocol.JSON2S)
 
     def test_xmlrpcs_returns_xmlrpc_client(self):
-        client = create_client("https://x.com", "db", "user", "pass", Protocol.XMLRPCS)
+        client = create_client(
+            "https://x.com", "db", user="user", password="pass", protocol=Protocol.XMLRPCS
+        )
         assert isinstance(client, XmlRpcClient)
 
     def test_string_protocol_is_accepted(self):
         """Protocol can be passed as a string (common in profile config)."""
-        client = create_client("https://x.com", "db", "user", "pass", "jsonrpcs")
+        client = create_client(
+            "https://x.com", "db", user="user", password="pass", protocol="jsonrpcs"
+        )
         assert isinstance(client, JsonRpcClient)
 
     @patch("odoo_mcp_multi.utils.detect_protocol")
     def test_auto_delegates_to_detect_protocol(self, mock_detect):
         mock_detect.return_value = Protocol.JSONRPCS
-        client = create_client("https://x.com", "db", "user", "pass", Protocol.AUTO)
+        client = create_client(
+            "https://x.com", "db", user="user", password="pass", protocol=Protocol.AUTO
+        )
         assert isinstance(client, JsonRpcClient)
         mock_detect.assert_called_once()
 
     def test_url_is_normalized(self):
         """URL without scheme should be normalized before reaching the client."""
-        client = create_client("odoo.example.com", "db", "user", "pass", Protocol.JSONRPCS)
+        client = create_client(
+            "odoo.example.com", "db", user="user", password="pass", protocol=Protocol.JSONRPCS
+        )
         assert client.url == "https://odoo.example.com"
 
 

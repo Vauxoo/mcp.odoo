@@ -240,3 +240,79 @@ def test_list_profiles_no_password_exposed(tmp_path):
     profiles = list_profiles()
     for p in profiles:
         assert "password" not in p
+
+
+# ---------------------------------------------------------------------------
+# T14–T16: OdooProfile api_key support (Odoo 19+ JSON-2)
+# ---------------------------------------------------------------------------
+
+
+def test_profile_with_api_key_only():
+    """T14: OdooProfile accepts api_key without password for Odoo 19+."""
+    p = OdooProfile(
+        name="prod19",
+        url="https://odoo19.example.com",
+        database="mydb",
+        api_key=SecretStr("myapikey123"),
+    )
+    assert p.api_key is not None
+    assert p.api_key.get_secret_value() == "myapikey123"
+    assert p.password is None
+
+
+def test_profile_requires_at_least_one_auth():
+    """T15: OdooProfile raises ValidationError if neither password nor api_key given."""
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError):
+        OdooProfile(
+            name="bad",
+            url="https://example.com",
+            database="mydb",
+        )
+
+
+def test_profile_to_dict_with_api_key():
+    """T16: to_dict() includes api_key and omits password when only api_key set."""
+    p = OdooProfile(
+        name="prod19",
+        url="https://odoo19.example.com",
+        database="mydb",
+        api_key=SecretStr("myapikey123"),
+    )
+    d = p.to_dict()
+    assert d["api_key"] == "myapikey123"
+    assert "password" not in d
+
+
+def test_profile_from_dict_with_api_key():
+    """T16b: from_dict() loads a profile that only has api_key."""
+    data = {
+        "name": "prod19",
+        "url": "https://odoo19.example.com",
+        "database": "mydb",
+        "api_key": "myapikey123",
+        "protocol": "json2s",
+    }
+    p = OdooProfile.from_dict(data)
+    assert p.api_key is not None
+    assert p.api_key.get_secret_value() == "myapikey123"
+    assert p.password is None
+    assert p.protocol == "json2s"
+
+
+def test_profile_api_key_roundtrip(tmp_path):
+    """T16c: api_key survives save → load without corruption."""
+    profile = OdooProfile(
+        name="prod19",
+        url="https://odoo19.example.com",
+        database="mydb",
+        api_key=SecretStr("secretapikey"),
+        protocol="json2s",
+    )
+    from odoo_mcp_multi.config import ProfileConfig, load_profiles, save_profiles
+
+    config = ProfileConfig(profiles={"prod19": profile}, default_profile="prod19")
+    save_profiles(config)
+    loaded = load_profiles()
+    assert loaded.profiles["prod19"].api_key.get_secret_value() == "secretapikey"

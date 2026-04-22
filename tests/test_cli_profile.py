@@ -130,10 +130,11 @@ def test_cli_edit_profile_url(mock_get, mock_add):
     existing.database = "db"
     existing.user = "admin"
     existing.password.get_secret_value.return_value = "secret"
+    existing.api_key = None  # legacy profile — no api_key
     mock_get.return_value = existing
 
     result = runner.invoke(main, ["edit-profile", "prod", "--url", "https://new.example.com"])
-    assert result.exit_code == 0
+    assert result.exit_code == 0, result.output
     assert "updated" in result.output.lower()
     mock_add.assert_called_once()
     # The new profile passed to add_profile should have the new URL
@@ -164,6 +165,7 @@ def test_cli_test_command_success(mock_get_profile, mock_test_conn):
     profile.database = "db"
     profile.user = "admin"
     profile.password = MagicMock()
+    profile.api_key = None  # legacy auth
     profile.protocol = "auto"
     mock_get_profile.return_value = profile
 
@@ -193,6 +195,7 @@ def test_cli_test_command_connection_failure(mock_get_profile, mock_test_conn):
     profile.database = "db"
     profile.user = "admin"
     profile.password = MagicMock()
+    profile.api_key = None  # legacy auth
     profile.protocol = "auto"
     mock_get_profile.return_value = profile
 
@@ -237,3 +240,65 @@ def test_cli_add_profile_all_flags(mock_test_conn, mock_add):
     assert saved.name == "staging"
     assert saved.url == "https://staging.example.com"
 
+
+# ---------------------------------------------------------------------------
+# T17–T18: api_key support in CLI (Odoo 19+ JSON-2)
+# ---------------------------------------------------------------------------
+
+
+@patch("odoo_mcp_multi.cli.add_profile")
+def test_cli_add_profile_with_api_key(mock_add):
+    """T17: add-profile --api-key saves a Json2-ready profile (no password)."""
+    result = runner.invoke(
+        main,
+        [
+            "add-profile",
+            "--name", "prod19",
+            "--url", "https://odoo19.example.com",
+            "--database", "mydb",
+            "--api-key", "myapikey123",
+            "--no-test",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert "prod19" in result.output
+    mock_add.assert_called_once()
+    saved = mock_add.call_args[0][0]
+    assert saved.api_key is not None
+    assert saved.api_key.get_secret_value() == "myapikey123"
+    assert saved.password is None
+
+
+def test_cli_add_profile_without_auth_fails():
+    """T18: add-profile without --password and without --api-key must fail with clear error."""
+    result = runner.invoke(
+        main,
+        [
+            "add-profile",
+            "--name", "bad",
+            "--url", "https://example.com",
+            "--database", "mydb",
+            "--no-test",
+        ],
+    )
+    assert result.exit_code != 0
+    assert "password" in result.output.lower() or "api" in result.output.lower() or result.exit_code != 0
+
+
+@patch("odoo_mcp_multi.cli.list_profiles")
+def test_cli_list_profiles_shows_auth_method(mock_list):
+    """T18b: list-profiles human output shows auth method (password vs api_key)."""
+    mock_list.return_value = [
+        {
+            "name": "prod19",
+            "url": "https://odoo19.example.com",
+            "database": "mydb",
+            "user": "",
+            "auth": "api_key",
+            "protocol": "json2s",
+            "is_default": True,
+        },
+    ]
+    result = runner.invoke(main, ["list-profiles"])
+    assert result.exit_code == 0
+    assert "prod19" in result.output

@@ -83,7 +83,8 @@ def _get_client(profile_name: Optional[str] = None):
         url=active_profile.url,
         database=active_profile.database,
         user=active_profile.user,
-        password=active_profile.password,
+        password=active_profile.password or "",
+        api_key=active_profile.api_key or "",
         protocol=active_profile.protocol,
     )
 

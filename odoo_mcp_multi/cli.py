@@ -74,29 +74,62 @@ def main() -> None:
 @click.option("--name", prompt="Profile name", help="Unique identifier (e.g., 'prod', 'staging')")
 @click.option("--url", prompt="Odoo URL", help="Instance URL (e.g., 'https://odoo.example.com')")
 @click.option("--database", prompt="Database name", help="Odoo database name")
-@click.option("--user", prompt="Username", help="Odoo username")
-@click.option("--password", prompt="Password", hide_input=True, help="Odoo password")
+@click.option("--user", default=None, help="Odoo username (legacy auth, Odoo < 19)")
+@click.option("--password", default=None, hide_input=True, help="Odoo password (legacy auth, Odoo < 19)")
+@click.option("--api-key", "api_key", default=None, help="API key for Odoo 19+ Bearer auth (/json/2)")
+@click.option("--protocol", default="auto", help="RPC protocol: auto, json2s, jsonrpcs, xmlrpcs (default: auto)")
 @click.option("--default", "set_default", is_flag=True, help="Set as default profile")
-@click.option("--test", "test_connection", is_flag=True, default=True, help="Test connection before saving")
+@click.option("--test/--no-test", "test_connection", default=True, help="Test connection before saving")
 def cmd_add_profile(
     name: str,
     url: str,
     database: str,
-    user: str,
-    password: str,
+    user: str | None,
+    password: str | None,
+    api_key: str | None,
+    protocol: str,
     set_default: bool,
     test_connection: bool,
 ) -> None:
     """Add a new Odoo profile with credentials.
 
-    Starts an interactive wizard to collect Odoo connection details.
-    Optionally tests the connection before saving.
+    For Odoo < 19  (XML-RPC / JSON-RPC): use --user + --password.
+    For Odoo >= 19 (JSON-2 REST API):     use --api-key.
+
+    Examples:
+
+      odoo-mcp add-profile --name prod --url https://odoo.example.com \
+          --database mydb --user admin --password
+
+      odoo-mcp add-profile --name prod19 --url https://odoo19.example.com \
+          --database mydb --api-key YOUR_KEY --protocol json2s
     """
+    # Validation: require at least one auth method
+    if not password and not api_key:
+        click.secho(
+            "✗ Provide either --password (legacy) or --api-key (Odoo 19+).",
+            fg="red",
+        )
+        raise SystemExit(1)
+
     if test_connection:
         click.echo(f"Testing connection to {url}...")
         try:
-            result = op_test_connection(url=url, database=database, user=user, password=password)
-            click.secho(f"✓ Connection successful! Authenticated as UID {result['uid']}", fg="green")
+            if api_key:
+                # JSON-2 auth: no uid-based test yet — just check /web/version
+                from odoo_mcp_multi.utils import get_server_version, normalize_url
+
+                info = get_server_version(normalize_url(url))
+                if info is None:
+                    raise OdooConnectionError("Could not reach server (no version info)")
+                ver = info.get("server_version", info.get("version", "unknown"))
+                click.secho(f"✓ Server reachable! Odoo {ver}", fg="green")
+            else:
+                result = op_test_connection(url=url, database=database, user=user or "", password=password or "")
+                click.secho(
+                    f"✓ Connection successful! Authenticated as UID {result['uid']}",
+                    fg="green",
+                )
         except OdooConnectionError as e:
             click.secho(f"✗ Connection failed: {e}", fg="red")
             if not click.confirm("Save profile anyway?"):
@@ -110,11 +143,14 @@ def cmd_add_profile(
         name=name,
         url=url,
         database=database,
-        user=user,
-        password=password,
+        user=user or "",
+        password=password if password else None,
+        api_key=api_key if api_key else None,
+        protocol=protocol,
     )
     add_profile(profile, set_default=set_default)
-    click.secho(f"✓ Profile '{name}' saved successfully!", fg="green")
+    auth_method = f"api_key ({protocol})" if api_key else "password"
+    click.secho(f"✓ Profile '{name}' saved successfully! [auth: {auth_method}]", fg="green")
 
     if set_default:
         click.echo("  Set as default profile.")
@@ -139,10 +175,14 @@ def cmd_list_profiles(as_json: bool) -> None:
 
     for p in profiles:
         default_marker = " (default)" if p["is_default"] else ""
+        # Determine auth method for display
+        auth_display = p.get("auth", "password" if p.get("user") else "api_key")
         click.echo(f"  {p['name']}{default_marker}")
         click.echo(f"    URL:      {p['url']}")
         click.echo(f"    Database: {p['database']}")
-        click.echo(f"    User:     {p['user']}")
+        click.echo(f"    Auth:     {auth_display}")
+        if p.get("user"):
+            click.echo(f"    User:     {p['user']}")
         click.echo()
 
 
@@ -179,7 +219,19 @@ def cmd_set_default(name: str) -> None:
 @click.option("--database", default=None, help="New database name")
 @click.option("--user", default=None, help="New username")
 @click.option(
-    "--password", is_flag=False, flag_value="__PROMPT__", default=None, help="New password (prompts if flag used)"
+    "--password",
+    is_flag=False,
+    flag_value="__PROMPT__",
+    default=None,
+    help="New password (prompts if flag used without value)",
+)
+@click.option(
+    "--api-key",
+    "api_key",
+    is_flag=False,
+    flag_value="__PROMPT__",
+    default=None,
+    help="New API key for Odoo 19+ (prompts if flag used without value)",
 )
 @click.option("--test", "test_connection", is_flag=True, default=False, help="Test connection after editing")
 def cmd_edit_profile(
@@ -188,41 +240,67 @@ def cmd_edit_profile(
     database: str,
     user: str,
     password: str,
+    api_key: str,
     test_connection: bool,
 ) -> None:
     """Edit an existing profile.
 
-    Only the specified fields will be updated. Use --password to be prompted
-    for a new password, or provide other options directly.
+    Only the specified fields will be updated. Use --password or --api-key
+    (with or without a value) to be prompted for new credentials.
 
     Examples:
         odoo-mcp edit-profile prod --url https://new-url.com
         odoo-mcp edit-profile staging --user admin --password
+        odoo-mcp edit-profile prod19 --api-key
     """
     existing = get_profile(name)
     if existing is None:
         click.secho(f"✗ Profile '{name}' not found.", fg="red")
         sys.exit(1)
 
-    # Determine new values (keep existing if not provided)
     new_url = url if url else existing.url
     new_database = database if database else existing.database
     new_user = user if user else existing.user
 
-    # Handle password: prompt if flag used, keep existing otherwise
+    # Handle password update
+    new_password = None
     if password == "__PROMPT__":
         new_password = click.prompt("New password", hide_input=True)
     elif password:
         new_password = password
-    else:
+    elif existing.password is not None:
         new_password = existing.password.get_secret_value()
 
-    # Test connection if requested
+    # Handle api_key update
+    new_api_key = None
+    if api_key == "__PROMPT__":
+        new_api_key = click.prompt("New API key", hide_input=True)
+    elif api_key:
+        new_api_key = api_key
+    elif existing.api_key is not None:
+        new_api_key = existing.api_key.get_secret_value()
+
+    if not new_password and not new_api_key:
+        click.secho("✗ Profile must have either a password or an api_key.", fg="red")
+        sys.exit(1)
+
     if test_connection:
         click.echo(f"Testing connection to {new_url}...")
         try:
-            result = op_test_connection(url=new_url, database=new_database, user=new_user, password=new_password)
-            click.secho(f"✓ Connection successful! Authenticated as UID {result['uid']}", fg="green")
+            if new_api_key and not new_password:
+                from odoo_mcp_multi.utils import get_server_version, normalize_url
+
+                info = get_server_version(normalize_url(new_url))
+                ver = (info or {}).get("server_version", "unknown")
+                click.secho(f"✓ Server reachable! Odoo {ver}", fg="green")
+            else:
+                result = op_test_connection(
+                    url=new_url, database=new_database, user=new_user, password=new_password or ""
+                )
+                click.secho(
+                    f"✓ Connection successful! Authenticated as UID {result['uid']}",
+                    fg="green",
+                )
         except OdooConnectionError as e:
             click.secho(f"✗ Connection failed: {e}", fg="red")
             if not click.confirm("Save changes anyway?"):
@@ -232,13 +310,13 @@ def cmd_edit_profile(
             if not click.confirm("Save changes anyway?"):
                 return
 
-    # Create updated profile
     updated_profile = OdooProfile(
         name=name,
         url=new_url,
         database=new_database,
         user=new_user,
-        password=new_password,
+        password=new_password if new_password else None,
+        api_key=new_api_key if new_api_key else None,
     )
     add_profile(updated_profile, set_default=False)
     click.secho(f"✓ Profile '{name}' updated successfully!", fg="green")
@@ -260,16 +338,27 @@ def cmd_test(profile: str) -> None:
     click.echo(f"Testing connection to {odoo_profile.url}...")
 
     try:
-        result = op_test_connection(
-            url=odoo_profile.url,
-            database=odoo_profile.database,
-            user=odoo_profile.user,
-            password=odoo_profile.password,
-            protocol=odoo_profile.protocol,
-        )
-        click.secho(f"✓ Connection successful! Authenticated as UID {result['uid']}", fg="green")
-        click.echo(f"  Server version: {result['server_version']}")
-        click.echo(f"  Protocol: {result['protocol']}")
+        # api_key-only profiles (Odoo 19+ JSON-2): test with /web/version, no UID
+        if odoo_profile.api_key and not odoo_profile.password:
+            from odoo_mcp_multi.utils import get_server_version, normalize_url
+
+            info = get_server_version(normalize_url(odoo_profile.url))
+            if info is None:
+                raise OdooConnectionError("Could not reach server (no version info)")
+            ver = info.get("server_version", info.get("version", "unknown"))
+            click.secho(f"✓ Server reachable! Odoo {ver} [auth: api_key / JSON-2]", fg="green")
+            click.echo("  Protocol: json2s")
+        else:
+            result = op_test_connection(
+                url=odoo_profile.url,
+                database=odoo_profile.database,
+                user=odoo_profile.user,
+                password=odoo_profile.password,
+                protocol=odoo_profile.protocol,
+            )
+            click.secho(f"✓ Connection successful! Authenticated as UID {result['uid']}", fg="green")
+            click.echo(f"  Server version: {result['server_version']}")
+            click.echo(f"  Protocol: {result['protocol']}")
 
     except OdooConnectionError as e:
         click.secho(f"✗ Connection failed: {e}", fg="red")
