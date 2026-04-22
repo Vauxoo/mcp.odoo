@@ -259,6 +259,7 @@ class JsonRpcClient(BaseOdooClient):
                 f"{self.url}{self._endpoint}",
                 json=payload,
                 timeout=self.timeout,
+                headers={"User-Agent": "odoo-mcp-multi"},
             )
             try:
                 result = response.json()
@@ -574,7 +575,11 @@ def get_server_version(url: str, timeout: int = 30) -> Optional[dict]:
 
     # 1. Try /web/version (Odoo 19+) — fast, no auth, standard HTTP GET
     try:
-        response = httpx.get(f"{url}/web/version", timeout=timeout)
+        response = httpx.get(
+            f"{url}/web/version",
+            timeout=timeout,
+            headers={"User-Agent": "odoo-mcp-multi"},
+        )
         if response.status_code == 200:
             data = response.json()
             # Normalise to match the legacy version dict shape
@@ -596,7 +601,12 @@ def get_server_version(url: str, timeout: int = 30) -> Optional[dict]:
             "params": {"service": "common", "method": "version", "args": []},
             "id": 1,
         }
-        response = httpx.post(f"{url}/jsonrpc", json=payload, timeout=timeout)
+        response = httpx.post(
+            f"{url}/jsonrpc",
+            json=payload,
+            timeout=timeout,
+            headers={"User-Agent": "odoo-mcp-multi"},
+        )
         result = response.json()
         if "result" in result:
             return result["result"]
