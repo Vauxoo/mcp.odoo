@@ -6,6 +6,8 @@ Run: pytest tests/test_json2_client.py -v
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from pydantic import SecretStr
 
@@ -171,10 +173,8 @@ def test_json2_client_converts_args_to_named_params_search_read(httpx_mock, clie
         args=[domain],
         kwargs={"fields": ["name"], "limit": 10},
     )
-    import json as _json
-
     request = httpx_mock.get_requests()[0]
-    body = _json.loads(request.content)
+    body = json.loads(request.content)
     assert body["domain"] == domain
     assert body["fields"] == ["name"]
     assert body["limit"] == 10
@@ -198,10 +198,8 @@ def test_json2_client_ids_in_body_for_write(httpx_mock, client):
     vals = {"name": "Updated"}
     client.execute_kw("res.partner", "write", args=[ids, vals], kwargs={})
 
-    import json as _json
-
     request = httpx_mock.get_requests()[0]
-    body = _json.loads(request.content)
+    body = json.loads(request.content)
     assert body["ids"] == ids
     assert body["vals"] == vals
 
@@ -221,10 +219,8 @@ def test_json2_client_create_no_ids_in_body(httpx_mock, client):
     vals = {"name": "New Partner", "is_company": True}
     result = client.execute_kw("res.partner", "create", args=[[vals]], kwargs={})
 
-    import json as _json
-
     request = httpx_mock.get_requests()[0]
-    body = _json.loads(request.content)
+    body = json.loads(request.content)
     assert "ids" not in body
     assert body["vals_list"] == [vals]
     assert result == 42
@@ -295,10 +291,8 @@ def test_json2_client_search_count_sends_domain(httpx_mock, client):
     domain = [["country_id.name", "=", "Mexico"]]
     result = client.execute_kw("res.partner", "search_count", args=[domain], kwargs={})
 
-    import json as _json
-
     request = httpx_mock.get_requests()[0]
-    body = _json.loads(request.content)
+    body = json.loads(request.content)
     assert body["domain"] == domain
     assert "_arg0" not in body
     assert result == 42
@@ -319,10 +313,8 @@ def test_json2_client_default_get_sends_fields_list(httpx_mock, client):
     fields_list = ["name", "email"]
     result = client.execute_kw("res.partner", "default_get", args=[fields_list], kwargs={})
 
-    import json as _json
-
     request = httpx_mock.get_requests()[0]
-    body = _json.loads(request.content)
+    body = json.loads(request.content)
     assert body["fields_list"] == fields_list
     assert "_arg0" not in body
     assert result == {"name": False, "email": False}
@@ -344,10 +336,8 @@ def test_json2_client_load_sends_fields_and_data(httpx_mock, client):
     data = [["John", "john@example.com"], ["Jane", "jane@example.com"]]
     result = client.execute_kw("res.partner", "load", args=[fields, data], kwargs={})
 
-    import json as _json
-
     request = httpx_mock.get_requests()[0]
-    body = _json.loads(request.content)
+    body = json.loads(request.content)
     assert body["fields"] == fields
     assert body["data"] == data
     assert "_arg0" not in body

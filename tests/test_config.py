@@ -5,7 +5,7 @@ ensuring tests are hermetic — no real ~/.config/odoo-mcp/ is touched.
 """
 
 import pytest
-from pydantic import SecretStr
+from pydantic import SecretStr, ValidationError
 
 from odoo_mcp_multi.config import (
     OdooProfile,
@@ -285,8 +285,6 @@ def test_profile_with_api_key_only():
 
 def test_profile_requires_at_least_one_auth():
     """T15: OdooProfile raises ValidationError if neither password nor api_key given."""
-    from pydantic import ValidationError
-
     with pytest.raises(ValidationError):
         OdooProfile(
             name="bad",
@@ -333,8 +331,6 @@ def test_profile_api_key_roundtrip(tmp_path):
         api_key=SecretStr("secretapikey"),
         protocol="json2s",
     )
-    from odoo_mcp_multi.config import ProfileConfig, load_profiles, save_profiles
-
     config = ProfileConfig(profiles={"prod19": profile}, default_profile="prod19")
     save_profiles(config)
     loaded = load_profiles()
