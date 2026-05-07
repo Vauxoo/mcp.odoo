@@ -4,6 +4,8 @@
   <img src="https://git.vauxoo.com/nhomar/mcp.odoo/-/raw/main/docs/banner.png" alt="Odoo MCP — Talk to Odoo like Jarvis" width="100%">
 </p>
 
+[![coverage](https://git.vauxoo.com/nhomar/mcp.odoo/badges/main/coverage.svg)](coverage/)
+
 The **most tested, documented, and production-ready** MCP server for Odoo.
 Connects any MCP client (Antigravity, Claude Desktop, Cursor, VS Code) to
 **multiple Odoo instances simultaneously** — automatic protocol detection,

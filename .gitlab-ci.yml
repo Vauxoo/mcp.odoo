@@ -44,12 +44,15 @@ test:
   extends: .python-template
   stage: test
   script:
-    - pytest --cov=odoo_mcp_multi --cov-report=term --cov-report=xml
+    - pytest --cov=odoo_mcp_multi --cov-report=term --cov-report=xml --cov-report=html:htmlcov
   artifacts:
+    paths:
+      - htmlcov
     reports:
       coverage_report:
         coverage_format: cobertura
         path: coverage.xml
+    expire_in: 1 week
   coverage: '/(?i)total.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
@@ -154,8 +157,13 @@ auto-release:
 pages:
   extends: .python-template
   stage: deploy
+  needs:
+    - job: test
+      artifacts: true
   script:
     - mkdocs build -d public --strict
+    - mkdir -p public/coverage
+    - cp -r htmlcov/. public/coverage/
   artifacts:
     paths:
       - public
