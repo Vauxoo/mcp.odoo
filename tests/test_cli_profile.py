@@ -32,6 +32,7 @@ def test_cli_list_profiles_json(mock_list):
             "database": "prod",
             "user": "admin",
             "protocol": "auto",
+            "auth": "password",
             "is_default": True,
         },
     ]
@@ -51,6 +52,7 @@ def test_cli_list_profiles_human_readable(mock_list):
             "database": "prod",
             "user": "admin",
             "protocol": "auto",
+            "auth": "password",
             "is_default": True,
         },
     ]
@@ -225,13 +227,15 @@ def test_cli_test_command_connection_failure(mock_get_profile, mock_test_conn):
 
 @patch("odoo_mcp_multi.cli.add_profile")
 @patch("odoo_mcp_multi.cli.op_test_connection")
-def test_cli_add_profile_all_flags(mock_test_conn, mock_add):
+@patch("odoo_mcp_multi.utils.get_server_version")
+def test_cli_add_profile_all_flags(mock_version, mock_test_conn, mock_add):
     """Verify add-profile works non-interactively when all flags are provided.
 
     The --test flag (default=True) always runs a connection test, so we
     mock op_test_connection to return a successful result instead of
     hitting a real server.
     """
+    mock_version.return_value = {"server_version": "17.0", "version": "17.0"}
     mock_test_conn.return_value = {"uid": 1, "server_version": "17.0", "protocol": "auto"}
 
     result = runner.invoke(
@@ -264,7 +268,8 @@ def test_cli_add_profile_all_flags(mock_test_conn, mock_add):
 
 
 @patch("odoo_mcp_multi.cli.add_profile")
-def test_cli_add_profile_with_api_key(mock_add):
+@patch("odoo_mcp_multi.utils.get_server_version")
+def test_cli_add_profile_with_api_key(mock_version, mock_add):
     """T17: add-profile --api-key saves a Json2-ready profile (no password)."""
     result = runner.invoke(
         main,
@@ -281,6 +286,7 @@ def test_cli_add_profile_with_api_key(mock_add):
             "--no-test",
         ],
     )
+    # get_server_version returns None (unreachable or unknown) — api_key stays as-is
     assert result.exit_code == 0, result.output
     assert "prod19" in result.output
     mock_add.assert_called_once()
@@ -290,7 +296,8 @@ def test_cli_add_profile_with_api_key(mock_add):
     assert saved.password is None
 
 
-def test_cli_add_profile_without_auth_fails():
+@patch("odoo_mcp_multi.utils.get_server_version", return_value=None)
+def test_cli_add_profile_without_auth_fails(mock_version):
     """T18: add-profile without --password and without --api-key must fail with clear error."""
     result = runner.invoke(
         main,
@@ -326,3 +333,39 @@ def test_cli_list_profiles_shows_auth_method(mock_list):
     result = runner.invoke(main, ["list-profiles"])
     assert result.exit_code == 0
     assert "prod19" in result.output
+
+
+@patch("odoo_mcp_multi.cli.add_profile")
+@patch("odoo_mcp_multi.utils.get_server_version")
+def test_cli_add_profile_v19_auto_migrates_password_to_api_key(mock_version, mock_add):
+    """T19: When server is Odoo 19+ and --password is given, it auto-migrates to api_key."""
+    mock_version.return_value = {
+        "server_version": "19.0+e",
+        "version": "19.0",
+        "version_info": [19, 0, 0, "final", 0, "e"],
+    }
+
+    result = runner.invoke(
+        main,
+        [
+            "add-profile",
+            "--name",
+            "auto19",
+            "--url",
+            "https://odoo19.example.com",
+            "--database",
+            "mydb",
+            "--user",
+            "admin",
+            "--password",
+            "my_api_key_value",
+            "--no-test",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert "api_key" in result.output.lower()
+    mock_add.assert_called_once()
+    saved = mock_add.call_args[0][0]
+    assert saved.api_key is not None
+    assert saved.api_key.get_secret_value() == "my_api_key_value"
+    assert saved.password is None

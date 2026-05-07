@@ -348,6 +348,7 @@ class JsonRpcClient(BaseOdooClient):
 # instance_method=True means ids come from args[0] and are sent in body
 _JSON2_METHOD_SIGNATURES: dict[str, tuple[list[str], bool]] = {
     "search": (["domain"], False),
+    "search_count": (["domain"], False),
     "search_read": (["domain"], False),
     "read": (["ids", "fields"], True),
     "write": (["ids", "vals"], True),
@@ -356,7 +357,12 @@ _JSON2_METHOD_SIGNATURES: dict[str, tuple[list[str], bool]] = {
     "fields_get": (["attributes"], False),
     "export_data": (["ids", "fields_to_export", "raw_data"], True),
     "name_search": (["name"], False),
+    "name_get": (["ids"], True),
+    "default_get": (["fields_list"], False),
     "copy": (["ids"], True),
+    "check_access_rights": (["operation"], False),
+    "check_access_rule": (["ids", "operation"], True),
+    "load": (["fields", "data"], False),
 }
 
 

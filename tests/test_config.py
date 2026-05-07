@@ -241,6 +241,30 @@ def test_list_profiles_no_password_exposed(tmp_path):
         assert "password" not in p
 
 
+def test_list_profiles_auth_field_password(tmp_path):
+    """Auth field should be 'password' when profile uses password auth."""
+    add_profile(_make_profile("prod"))
+    profiles = list_profiles()
+    assert profiles[0]["auth"] == "password"
+
+
+def test_list_profiles_auth_field_api_key(tmp_path):
+    """Auth field should be 'api_key' when profile uses api_key auth."""
+    profile = OdooProfile(
+        name="prod19",
+        url="https://odoo19.example.com",
+        database="mydb",
+        api_key=SecretStr("myapikey123"),
+        user="admin@example.com",
+    )
+    add_profile(profile)
+    profiles = list_profiles()
+    api_key_profiles = [p for p in profiles if p["name"] == "prod19"]
+    assert api_key_profiles[0]["auth"] == "api_key"
+    # user is informational only — auth must NOT be inferred from user presence
+    assert api_key_profiles[0]["user"] == "admin@example.com"
+
+
 # ---------------------------------------------------------------------------
 # T14–T16: OdooProfile api_key support (Odoo 19+ JSON-2)
 # ---------------------------------------------------------------------------

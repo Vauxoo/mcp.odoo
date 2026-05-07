@@ -278,3 +278,78 @@ def test_get_server_version_uses_web_version_endpoint(httpx_mock):
     assert result is not None
     version = result.get("server_version", "") or result.get("version", "")
     assert "19" in str(version)
+
+
+# ---------------------------------------------------------------------------
+# T14 — search_count: domain must be a named parameter
+# ---------------------------------------------------------------------------
+
+
+def test_json2_client_search_count_sends_domain(httpx_mock, client):
+    """T14: search_count translates args[0] → body.domain (not _arg0)."""
+    httpx_mock.add_response(
+        method="POST",
+        url=f"{BASE_URL}/json/2/res.partner/search_count",
+        json=42,
+    )
+    domain = [["country_id.name", "=", "Mexico"]]
+    result = client.execute_kw("res.partner", "search_count", args=[domain], kwargs={})
+
+    import json as _json
+
+    request = httpx_mock.get_requests()[0]
+    body = _json.loads(request.content)
+    assert body["domain"] == domain
+    assert "_arg0" not in body
+    assert result == 42
+
+
+# ---------------------------------------------------------------------------
+# T15 — default_get: fields_list must be a named parameter
+# ---------------------------------------------------------------------------
+
+
+def test_json2_client_default_get_sends_fields_list(httpx_mock, client):
+    """T15: default_get translates args[0] → body.fields_list."""
+    httpx_mock.add_response(
+        method="POST",
+        url=f"{BASE_URL}/json/2/res.partner/default_get",
+        json={"name": False, "email": False},
+    )
+    fields_list = ["name", "email"]
+    result = client.execute_kw("res.partner", "default_get", args=[fields_list], kwargs={})
+
+    import json as _json
+
+    request = httpx_mock.get_requests()[0]
+    body = _json.loads(request.content)
+    assert body["fields_list"] == fields_list
+    assert "_arg0" not in body
+    assert result == {"name": False, "email": False}
+
+
+# ---------------------------------------------------------------------------
+# T16 — load: fields and data must be named parameters
+# ---------------------------------------------------------------------------
+
+
+def test_json2_client_load_sends_fields_and_data(httpx_mock, client):
+    """T16: load translates args[0] → body.fields, args[1] → body.data."""
+    httpx_mock.add_response(
+        method="POST",
+        url=f"{BASE_URL}/json/2/res.partner/load",
+        json={"ids": [1, 2], "messages": []},
+    )
+    fields = ["name", "email"]
+    data = [["John", "john@example.com"], ["Jane", "jane@example.com"]]
+    result = client.execute_kw("res.partner", "load", args=[fields, data], kwargs={})
+
+    import json as _json
+
+    request = httpx_mock.get_requests()[0]
+    body = _json.loads(request.content)
+    assert body["fields"] == fields
+    assert body["data"] == data
+    assert "_arg0" not in body
+    assert "_arg1" not in body
+    assert result == {"ids": [1, 2], "messages": []}

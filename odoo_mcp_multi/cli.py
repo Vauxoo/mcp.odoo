@@ -98,12 +98,16 @@ def cmd_add_profile(
     For Odoo < 19  (XML-RPC / JSON-RPC): use --user + --password.
     For Odoo >= 19 (JSON-2 REST API):     use --api-key.
 
+    When the server is Odoo 19+ and --password is provided instead of
+    --api-key, the credential is automatically stored as api_key
+    (the JSON-2 protocol requires a Bearer token, not user/password).
+
     Examples:
 
-      odoo-mcp add-profile --name prod --url https://odoo.example.com \
+      odoo-mcp add-profile --name prod --url https://odoo.example.com \\
           --database mydb --user admin --password
 
-      odoo-mcp add-profile --name prod19 --url https://odoo19.example.com \
+      odoo-mcp add-profile --name prod19 --url https://odoo19.example.com \\
           --database mydb --api-key YOUR_KEY --protocol json2s
     """
     # Validation: require at least one auth method
@@ -114,17 +118,36 @@ def cmd_add_profile(
         )
         raise SystemExit(1)
 
+    # Detect server version to auto-migrate password → api_key for Odoo 19+
+    from odoo_mcp_multi.utils import get_server_version, normalize_url, parse_version
+
+    server_major = 0
+    try:
+        version_info = get_server_version(normalize_url(url))
+        if version_info:
+            ver_str = version_info.get("server_version", version_info.get("version", ""))
+            server_major, _, _ = parse_version(ver_str)
+    except Exception:
+        pass
+
+    if server_major >= 19 and password and not api_key:
+        # Odoo 19+ requires Bearer token — treat the provided password as api_key
+        api_key = password
+        password = None
+        click.secho(
+            f"⚠ Odoo {server_major} detected — credential stored as api_key (Bearer token).",
+            fg="yellow",
+        )
+
     if test_connection:
         click.echo(f"Testing connection to {url}...")
         try:
             if api_key:
-                # JSON-2 auth: no uid-based test yet — just check /web/version
-                from odoo_mcp_multi.utils import get_server_version, normalize_url
-
-                info = get_server_version(normalize_url(url))
-                if info is None:
+                if version_info is None:
+                    version_info = get_server_version(normalize_url(url))
+                if version_info is None:
                     raise OdooConnectionError("Could not reach server (no version info)")
-                ver = info.get("server_version", info.get("version", "unknown"))
+                ver = version_info.get("server_version", version_info.get("version", "unknown"))
                 click.secho(f"✓ Server reachable! Odoo {ver}", fg="green")
             else:
                 result = op_test_connection(url=url, database=database, user=user or "", password=password or "")
@@ -177,8 +200,7 @@ def cmd_list_profiles(as_json: bool) -> None:
 
     for p in profiles:
         default_marker = " (default)" if p["is_default"] else ""
-        # Determine auth method for display
-        auth_display = p.get("auth", "password" if p.get("user") else "api_key")
+        auth_display = p.get("auth", "unknown")
         click.echo(f"  {p['name']}{default_marker}")
         click.echo(f"    URL:      {p['url']}")
         click.echo(f"    Database: {p['database']}")

@@ -208,12 +208,21 @@ def list_profiles() -> list[dict]:
     """List all configured profiles.
 
     Returns:
-        List of dicts with profile name, url, database, and user
+        List of dicts with profile name, url, database, user, auth, and protocol
     """
     config = load_profiles()
     result = []
 
     for name, profile in config.profiles.items():
+        # Auth type is determined by which credential is set,
+        # not by the presence of a user string (informational in Odoo 19+).
+        if profile.api_key:
+            auth = "api_key"
+        elif profile.password:
+            auth = "password"
+        else:
+            auth = "none"
+
         result.append(
             {
                 "name": name,
@@ -221,6 +230,7 @@ def list_profiles() -> list[dict]:
                 "database": profile.database,
                 "user": profile.user,
                 "protocol": profile.protocol,
+                "auth": auth,
                 "is_default": name == config.default_profile,
             }
         )
