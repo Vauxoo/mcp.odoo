@@ -105,7 +105,7 @@ replace = "assert __version__ == \"{new_version}\""
 
 [tool.pytest.ini_options]
 minversion = "7.0"
-addopts = "-ra -q --cov=odoo_mcp_multi --cov-report=term-missing --cov-report=xml --ignore=tests/integration"
+addopts = "-ra -q --cov=odoo_mcp_multi --cov-report=term-missing --cov-report=xml --cov-context=test --ignore=tests/integration"
 testpaths = [
     "tests",
 ]
@@ -127,3 +127,7 @@ exclude_lines = [
     "pass",
     "raise ImportError",
 ]
+
+[tool.coverage.html]
+show_contexts = true
+

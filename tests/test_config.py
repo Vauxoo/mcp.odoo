@@ -4,17 +4,22 @@ Uses pytest's tmp_path fixture to redirect the config directory,
 ensuring tests are hermetic — no real ~/.config/odoo-mcp/ is touched.
 """
 
+from unittest.mock import MagicMock
+
 import pytest
 from pydantic import SecretStr, ValidationError
 
 from odoo_mcp_multi.config import (
     OdooProfile,
     ProfileConfig,
+    _get_auth_type,
     add_profile,
     get_profile,
     list_profiles,
     load_profiles,
     remove_profile,
+    rename_profile,
+    resolve_profile,
     save_profiles,
     set_default_profile,
 )
@@ -35,6 +40,28 @@ def _make_profile(name: str = "test", url: str = "https://odoo.example.com") -> 
         user="admin",
         password=SecretStr("secret"),
     )
+
+
+# ---------------------------------------------------------------------------
+# get_config_dir
+# ---------------------------------------------------------------------------
+
+
+def test_get_config_dir_creates_directory(tmp_path, monkeypatch):
+    """Exercises the real get_config_dir by patching Path.home."""
+    import importlib
+
+    import odoo_mcp_multi.config as config_module
+
+    monkeypatch.setattr("pathlib.Path.home", staticmethod(lambda: tmp_path))
+    # Reload to get the original function (autouse fixture replaced it)
+    importlib.reload(config_module)
+
+    result = config_module.get_config_dir()
+
+    expected = tmp_path / ".config" / "odoo-mcp"
+    assert result == expected
+    assert result.is_dir()
 
 
 # ---------------------------------------------------------------------------
@@ -189,6 +216,65 @@ def test_remove_last_profile_leaves_no_default(tmp_path):
     assert config.default_profile is None
 
 
+def test_remove_non_default_profile_preserves_default(tmp_path):
+    """Removing a non-default profile must not change the current default."""
+    add_profile(_make_profile("prod"))
+    add_profile(_make_profile("staging"))
+    assert load_profiles().default_profile == "prod"
+
+    remove_profile("staging")
+    config = load_profiles()
+    assert config.default_profile == "prod"
+    assert "staging" not in config.profiles
+
+
+# ---------------------------------------------------------------------------
+# rename_profile
+# ---------------------------------------------------------------------------
+
+
+def test_rename_profile_success(tmp_path):
+    add_profile(_make_profile("old"))
+    success, msg = rename_profile("old", "new")
+    assert success is True
+    assert get_profile("old") is None
+    assert get_profile("new") is not None
+
+
+def test_rename_profile_not_found(tmp_path):
+    success, msg = rename_profile("nonexistent", "new")
+    assert success is False
+    assert "not found" in msg.lower()
+
+
+def test_rename_profile_target_exists(tmp_path):
+    add_profile(_make_profile("alpha"))
+    add_profile(_make_profile("beta"))
+    success, msg = rename_profile("alpha", "beta")
+    assert success is False
+    assert "already exists" in msg.lower()
+
+
+def test_rename_profile_updates_default(tmp_path):
+    """When the default profile is renamed, the default must follow."""
+    add_profile(_make_profile("prod"))
+    assert load_profiles().default_profile == "prod"
+
+    rename_profile("prod", "production")
+    config = load_profiles()
+    assert config.default_profile == "production"
+
+
+def test_rename_profile_preserves_default_when_not_default(tmp_path):
+    """Renaming a non-default profile must not change the current default."""
+    add_profile(_make_profile("prod"))
+    add_profile(_make_profile("staging"))
+    assert load_profiles().default_profile == "prod"
+
+    rename_profile("staging", "stg")
+    assert load_profiles().default_profile == "prod"
+
+
 # ---------------------------------------------------------------------------
 # set_default_profile
 # ---------------------------------------------------------------------------
@@ -265,6 +351,18 @@ def test_list_profiles_auth_field_api_key(tmp_path):
     assert api_key_profiles[0]["user"] == "admin@example.com"
 
 
+def test_get_auth_type_none():
+    """Defensive: _get_auth_type returns 'none' when both credentials are missing.
+
+    This can happen if profiles.json is manually edited. The model_validator
+    prevents it during normal creation, so we test the helper directly.
+    """
+    profile = MagicMock()
+    profile.api_key = None
+    profile.password = None
+    assert _get_auth_type(profile) == "none"
+
+
 # ---------------------------------------------------------------------------
 # T14–T16: OdooProfile api_key support (Odoo 19+ JSON-2)
 # ---------------------------------------------------------------------------
@@ -335,3 +433,41 @@ def test_profile_api_key_roundtrip(tmp_path):
     save_profiles(config)
     loaded = load_profiles()
     assert loaded.profiles["prod19"].api_key.get_secret_value() == "secretapikey"
+
+
+# ---------------------------------------------------------------------------
+# resolve_profile
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_profile_explicit_name(tmp_path):
+    """Explicit profile_name returns that profile."""
+    add_profile(_make_profile("prod"))
+    result = resolve_profile("prod")
+    assert result.name == "prod"
+
+
+def test_resolve_profile_explicit_name_not_found(tmp_path):
+    with pytest.raises(ValueError, match="not found"):
+        resolve_profile("nonexistent")
+
+
+def test_resolve_profile_fallback(tmp_path):
+    """When no name is given, fallback is used before default."""
+    fallback = _make_profile("fallback")
+    add_profile(_make_profile("default"))  # exists but should not be used
+    result = resolve_profile(fallback=fallback)
+    assert result.name == "fallback"
+
+
+def test_resolve_profile_default(tmp_path):
+    """When no name or fallback, uses the default profile."""
+    add_profile(_make_profile("prod"))
+    result = resolve_profile()
+    assert result.name == "prod"
+
+
+def test_resolve_profile_nothing_configured(tmp_path):
+    """Raises ValueError when no profile can be resolved."""
+    with pytest.raises(ValueError, match="No Odoo profile specified"):
+        resolve_profile()

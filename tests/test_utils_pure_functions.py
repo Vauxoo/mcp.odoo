@@ -122,33 +122,33 @@ class TestParseFields:
 
 
 class TestDetectProtocol:
-    @patch("odoo_mcp_multi.utils.get_server_version")
+    @patch("odoo_mcp_multi.version.get_server_version")
     def test_odoo_19_returns_json2s(self, mock_version):
         mock_version.return_value = {"server_version": "19.0"}
         assert detect_protocol("https://x.com") == Protocol.JSON2S
 
-    @patch("odoo_mcp_multi.utils.get_server_version")
+    @patch("odoo_mcp_multi.version.get_server_version")
     def test_odoo_17_returns_jsonrpcs(self, mock_version):
         mock_version.return_value = {"server_version": "17.0"}
         assert detect_protocol("https://x.com") == Protocol.JSONRPCS
 
-    @patch("odoo_mcp_multi.utils.get_server_version")
+    @patch("odoo_mcp_multi.version.get_server_version")
     def test_odoo_12_returns_jsonrpcs(self, mock_version):
         mock_version.return_value = {"server_version": "12.0"}
         assert detect_protocol("https://x.com") == Protocol.JSONRPCS
 
-    @patch("odoo_mcp_multi.utils.get_server_version")
+    @patch("odoo_mcp_multi.version.get_server_version")
     def test_saas_version_17_returns_jsonrpcs(self, mock_version):
         mock_version.return_value = {"server_version": "saas~17.1"}
         assert detect_protocol("https://x.com") == Protocol.JSONRPCS
 
-    @patch("odoo_mcp_multi.utils.get_server_version")
+    @patch("odoo_mcp_multi.version.get_server_version")
     def test_unreachable_server_returns_xmlrpcs(self, mock_version):
         """If server is unreachable, fall back to XML-RPC (most compatible)."""
         mock_version.return_value = None
         assert detect_protocol("https://x.com") == Protocol.XMLRPCS
 
-    @patch("odoo_mcp_multi.utils.get_server_version")
+    @patch("odoo_mcp_multi.version.get_server_version")
     def test_unknown_version_returns_xmlrpcs(self, mock_version):
         mock_version.return_value = {"server_version": "unknown"}
         assert detect_protocol("https://x.com") == Protocol.XMLRPCS
@@ -196,7 +196,7 @@ class TestCreateClient:
         client = create_client("https://x.com", "db", user="user", password="pass", protocol="jsonrpcs")
         assert isinstance(client, JsonRpcClient)
 
-    @patch("odoo_mcp_multi.utils.detect_protocol")
+    @patch("odoo_mcp_multi.client.detect_protocol")
     def test_auto_delegates_to_detect_protocol(self, mock_detect):
         mock_detect.return_value = Protocol.JSONRPCS
         client = create_client("https://x.com", "db", user="user", password="pass", protocol=Protocol.AUTO)
@@ -233,3 +233,72 @@ class TestJsonRpcClientEndpoint:
         client._uid = 7
         result = client.authenticate()
         assert result == 7
+
+
+# ---------------------------------------------------------------------------
+# Json2Client._build_body — pure transformation, no I/O
+# ---------------------------------------------------------------------------
+
+
+class TestJson2ClientBuildBody:
+    """_build_body translates positional args into named params for JSON-2."""
+
+    def _make_client(self):
+        return Json2Client(url="https://x.com", database="db", api_key="key")
+
+    def test_known_method_maps_args_by_name(self):
+        """search_read([domain]) → {domain: domain}."""
+        client = self._make_client()
+        body = client._build_body("search_read", [[("active", "=", True)]], {})
+        assert body == {"domain": [("active", "=", True)]}
+
+    def test_known_method_with_kwargs(self):
+        """kwargs are merged into body alongside mapped args."""
+        client = self._make_client()
+        body = client._build_body("search_read", [[]], {"limit": 10, "fields": ["name"]})
+        assert body["domain"] == []
+        assert body["limit"] == 10
+        assert body["fields"] == ["name"]
+
+    def test_known_method_fewer_args_than_signature(self):
+        """If fewer args than the signature expects, only map what's provided."""
+        client = self._make_client()
+        body = client._build_body("read", [], {})
+        assert "ids" not in body
+
+    def test_unknown_method_uses_generic_arg_names(self):
+        """Unknown methods get _arg0, _arg1, etc."""
+        client = self._make_client()
+        body = client._build_body("custom_method", ["a", "b"], {"key": "val"})
+        assert body["_arg0"] == "a"
+        assert body["_arg1"] == "b"
+        assert body["key"] == "val"
+
+    def test_unknown_method_no_args(self):
+        """Unknown method with no args returns just kwargs."""
+        client = self._make_client()
+        body = client._build_body("ping", [], {"check": True})
+        assert body == {"check": True}
+
+    def test_write_maps_ids_and_vals(self):
+        """write([ids, vals]) → {ids: [...], vals: {...}}."""
+        client = self._make_client()
+        body = client._build_body("write", [[1, 2], {"name": "X"}], {})
+        assert body["ids"] == [1, 2]
+        assert body["vals"] == {"name": "X"}
+
+    def test_authenticate_is_noop(self):
+        """JSON-2 uses Bearer token — authenticate returns None."""
+        client = self._make_client()
+        assert client.authenticate() is None
+
+    def test_headers_include_bearer_and_database(self):
+        client = self._make_client()
+        h = client._headers()
+        assert h["Authorization"] == "bearer key"
+        assert h["X-Odoo-Database"] == "db"
+
+    def test_headers_omit_database_when_empty(self):
+        client = Json2Client(url="https://x.com", database="", api_key="key")
+        h = client._headers()
+        assert "X-Odoo-Database" not in h

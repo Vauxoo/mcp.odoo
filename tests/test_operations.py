@@ -7,8 +7,6 @@ ensuring both MCP and CLI get correct behavior.
 import json
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from odoo_mcp_multi.operations import (
     op_create,
     op_execute_kw,
@@ -98,22 +96,16 @@ def test_op_write(mock_get_client):
     mock_client.write.assert_called_once_with("res.partner", [1, 2], {"name": "Updated"})
 
 
-@patch("odoo_mcp_multi.operations._get_client")
-def test_op_write_no_ids(mock_get_client):
-    mock_client = MagicMock()
-    mock_get_client.return_value = mock_client
-
-    with pytest.raises(ValueError, match="No record IDs provided"):
-        op_write(model="res.partner", ids="", values='{"name": "X"}', profile="test")
+def test_op_write_no_ids():
+    result = op_write(model="res.partner", ids="", values='{"name": "X"}', profile="test")
+    assert result["success"] is False
+    assert "No record IDs" in result["error"]
 
 
-@patch("odoo_mcp_multi.operations._get_client")
-def test_op_write_no_values(mock_get_client):
-    mock_client = MagicMock()
-    mock_get_client.return_value = mock_client
-
-    with pytest.raises(ValueError, match="No values provided"):
-        op_write(model="res.partner", ids="[1]", values="{}", profile="test")
+def test_op_write_no_values():
+    result = op_write(model="res.partner", ids="[1]", values="{}", profile="test")
+    assert result["success"] is False
+    assert "No values provided" in result["error"]
 
 
 # ---------------------------------------------------------------------------
@@ -134,13 +126,10 @@ def test_op_create(mock_get_client):
     mock_client.create.assert_called_once_with("res.partner", {"name": "New Partner"})
 
 
-@patch("odoo_mcp_multi.operations._get_client")
-def test_op_create_no_values(mock_get_client):
-    mock_client = MagicMock()
-    mock_get_client.return_value = mock_client
-
-    with pytest.raises(ValueError, match="No values provided"):
-        op_create(model="res.partner", values="{}", profile="test")
+def test_op_create_no_values():
+    result = op_create(model="res.partner", values="{}", profile="test")
+    assert result["success"] is False
+    assert "No values provided" in result["error"]
 
 
 # ---------------------------------------------------------------------------
@@ -183,6 +172,50 @@ def test_op_export_records_empty(mock_get_client):
     assert result["has_more"] is False
 
 
+@patch("odoo_mcp_multi.operations._get_client")
+def test_op_export_records_search_error(mock_get_client):
+    """Search-phase failure returns a verbose error dict."""
+    mock_get_client.side_effect = RuntimeError("Connection refused")
+
+    result = op_export_records(model="res.partner", profile="test")
+    assert result["success"] is False
+    assert "failed during search" in result["error"]
+
+
+@patch("odoo_mcp_multi.operations._get_client")
+def test_op_export_records_export_data_error(mock_get_client):
+    """export_data failure returns an error dict with ids_found context."""
+    mock_client = MagicMock()
+    mock_get_client.return_value = mock_client
+    mock_client.execute_kw.side_effect = [
+        5,  # search_count
+        [1, 2],  # search
+        RuntimeError("Timeout"),  # export_data
+    ]
+
+    result = op_export_records(model="res.partner", fields="id,name", profile="test")
+    assert result["success"] is False
+    assert "failed during export_data" in result["error"]
+    assert result["ids_found"] == 2
+    assert result["total"] == 5
+
+
+@patch("odoo_mcp_multi.operations._get_client")
+def test_op_export_records_no_datas_key(mock_get_client):
+    """export_data returning None or missing 'datas' yields empty records."""
+    mock_client = MagicMock()
+    mock_get_client.return_value = mock_client
+    mock_client.execute_kw.side_effect = [
+        1,  # search_count
+        [42],  # search
+        None,  # export_data returns None
+    ]
+
+    result = op_export_records(model="res.partner", fields="id", profile="test")
+    assert result["records"] == []
+    assert result["total"] == 1
+
+
 # ---------------------------------------------------------------------------
 # op_import_records
 # ---------------------------------------------------------------------------
@@ -202,21 +235,57 @@ def test_op_import_records_success(mock_get_client):
 
 
 @patch("odoo_mcp_multi.operations._get_client")
-def test_op_import_records_no_fields(mock_get_client):
+def test_op_import_records_list_rows(mock_get_client):
+    """Rows as arrays (positional) are accepted and None → False coerced."""
     mock_client = MagicMock()
     mock_get_client.return_value = mock_client
+    mock_client.execute_kw.return_value = {"ids": [45], "messages": []}
 
-    with pytest.raises(ValueError, match="No fields provided"):
-        op_import_records(model="res.partner", fields="", rows='[{"name":"X"}]', profile="test")
+    rows_json = json.dumps([["ext_id", None]])
+    result = op_import_records(model="res.partner", fields="id,name", rows=rows_json, profile="test")
+
+    assert result["ids"] == [45]
+    mock_client.execute_kw.assert_called_once_with("res.partner", "load", [["id", "name"], [["ext_id", False]]])
+
+
+@patch("odoo_mcp_multi.operations._get_client")
+def test_op_import_records_no_fields(mock_get_client):
+    result = op_import_records(model="res.partner", fields="", rows='[{"name":"X"}]', profile="test")
+    assert result["success"] is False
+    assert "No fields provided" in result["error"]
 
 
 @patch("odoo_mcp_multi.operations._get_client")
 def test_op_import_records_no_rows(mock_get_client):
+    result = op_import_records(model="res.partner", fields="id,name", rows="[]", profile="test")
+    assert result["success"] is False
+    assert "No rows provided" in result["error"]
+
+
+@patch("odoo_mcp_multi.operations._get_client")
+def test_op_import_records_invalid_row_type(mock_get_client):
+    """Passing a non-dict/non-list row returns a verbose error."""
+    rows_json = json.dumps(["just a string"])
+    result = op_import_records(model="res.partner", fields="id", rows=rows_json, profile="test")
+    assert result["success"] is False
+    assert "Row formatting failed" in result["error"]
+    assert "str" in result["error"]
+
+
+@patch("odoo_mcp_multi.operations._get_client")
+def test_op_import_records_server_error(mock_get_client):
+    """Server-side failures return an error dict with context."""
     mock_client = MagicMock()
     mock_get_client.return_value = mock_client
+    mock_client.execute_kw.side_effect = RuntimeError("Connection reset")
 
-    with pytest.raises(ValueError, match="No rows provided"):
-        op_import_records(model="res.partner", fields="id,name", rows="[]", profile="test")
+    rows_json = json.dumps([{"id": "x1", "name": "Test"}])
+    result = op_import_records(model="res.partner", fields="id,name", rows=rows_json, profile="test")
+
+    assert result["success"] is False
+    assert "Connection reset" in result["error"]
+    assert result["fields"] == ["id", "name"]
+    assert result["row_count"] == 1
 
 
 # ---------------------------------------------------------------------------
@@ -242,7 +311,7 @@ def test_op_execute_kw(mock_get_client):
 # ---------------------------------------------------------------------------
 
 
-@patch("odoo_mcp_multi.operations._get_profile_object")
+@patch("odoo_mcp_multi.operations.resolve_profile")
 @patch("odoo_mcp_multi.operations.get_server_version")
 def test_op_get_version(mock_get_version, mock_get_profile):
     mock_profile = MagicMock()
@@ -254,7 +323,7 @@ def test_op_get_version(mock_get_version, mock_get_profile):
     assert result["server_version"] == "17.0"
 
 
-@patch("odoo_mcp_multi.operations._get_profile_object")
+@patch("odoo_mcp_multi.operations.resolve_profile")
 @patch("odoo_mcp_multi.operations.get_server_version")
 def test_op_get_version_error(mock_get_version, mock_get_profile):
     mock_profile = MagicMock()
@@ -262,8 +331,9 @@ def test_op_get_version_error(mock_get_version, mock_get_profile):
     mock_get_profile.return_value = mock_profile
     mock_get_version.return_value = None
 
-    with pytest.raises(ValueError, match="Could not retrieve version"):
-        op_get_version(profile="test")
+    result = op_get_version(profile="test")
+    assert result["success"] is False
+    assert "Could not retrieve version" in result["error"]
 
 
 # ---------------------------------------------------------------------------
@@ -280,8 +350,9 @@ def test_op_list_models(mock_get_client):
     ]
 
     result = op_list_models(search="partner", profile="test")
-    assert len(result) == 1
-    assert result[0]["model"] == "res.partner"
+    assert result["success"] is True
+    assert len(result["models"]) == 1
+    assert result["models"][0]["model"] == "res.partner"
 
 
 @patch("odoo_mcp_multi.operations._get_client")
@@ -291,7 +362,8 @@ def test_op_list_models_no_search(mock_get_client):
     mock_client.search_read.return_value = []
 
     result = op_list_models(profile="test")
-    assert result == []
+    assert result["success"] is True
+    assert result["models"] == []
     mock_client.search_read.assert_called_once_with(
         model="ir.model", domain=[], fields=["name", "model", "info"], limit=50, order="model"
     )
@@ -311,5 +383,6 @@ def test_op_list_fields(mock_get_client):
     }
 
     result = op_list_fields(model="res.partner", profile="test")
-    assert "name" in result
-    assert result["name"]["type"] == "char"
+    assert result["success"] is True
+    assert "name" in result["fields"]
+    assert result["fields"]["name"]["type"] == "char"

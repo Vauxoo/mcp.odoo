@@ -1,8 +1,8 @@
 """FastMCP server implementation for Odoo.
 
 Thin MCP wrapper layer that delegates to shared operations module.
-Each tool handles JSON serialization and error formatting around
-the shared business logic in operations.py.
+Operations never raise — they return error dicts with ``success=False``
+when something goes wrong, so this layer is a pure pass-through.
 """
 
 from __future__ import annotations
@@ -23,10 +23,12 @@ from odoo_mcp_multi.operations import (
     op_list_profiles,
     op_search_read,
     op_write,
+    set_fallback_profile,
 )
 
-# Global state for the fallback profile (if not specified in tool call)
-_fallback_profile: Optional[Any] = None
+# Re-export set_fallback_profile so cli.py can call server.set_fallback_profile()
+# without importing operations directly for this one function.
+set_profile = set_fallback_profile
 
 # Create the MCP server — branded name and instructions are sent to the
 # AI client at connection time via the MCP protocol.
@@ -46,39 +48,16 @@ mcp = FastMCP(
         "- Pass 'profile' to target a specific instance (prod, staging, dev…).\n"
         "- search_read and export_records return pagination envelopes — check "
         "'has_more' and use 'next_offset' to fetch additional pages.\n"
+        "- If a result contains 'success': false, read the 'error' field for "
+        "a verbose explanation of what went wrong.\n"
         "- Report issues at https://git.vauxoo.com/nhomar/mcp.odoo/-/issues"
     ),
 )
 
 
-def set_profile(profile: Any) -> None:
-    """Set the fallback profile for the MCP server. Used if no profile is provided in tool calls."""
-    global _fallback_profile
-    _fallback_profile = profile
-
-
-def format_result(data: Any) -> str:
-    """Format result data as JSON string.
-
-    Args:
-        data: Result to format
-
-    Returns:
-        JSON string representation
-    """
+def _json(data: Any) -> str:
+    """Serialize any result to JSON for MCP transport."""
     return json.dumps(data, indent=2, default=str, ensure_ascii=False)
-
-
-def format_error(error: Exception) -> str:
-    """Format an error as a JSON response.
-
-    Args:
-        error: Exception to format
-
-    Returns:
-        JSON error string
-    """
-    return json.dumps({"error": str(error), "type": type(error).__name__}, ensure_ascii=False)
 
 
 @mcp.tool()
@@ -91,10 +70,7 @@ def list_available_profiles() -> str:
     Returns:
         JSON array containing names and basic info of available profiles.
     """
-    try:
-        return format_result(op_list_profiles())
-    except Exception as e:
-        return format_error(e)
+    return _json(op_list_profiles())
 
 
 @mcp.tool()
@@ -121,11 +97,7 @@ def search_read(
     Returns:
         JSON array of matching records
     """
-    try:
-        result = op_search_read(model, domain, fields, limit, offset, order, profile)
-        return format_result(result)
-    except Exception as e:
-        return format_error(e)
+    return _json(op_search_read(model, domain, fields, limit, offset, order, profile))
 
 
 @mcp.tool()
@@ -146,11 +118,7 @@ def write(
     Returns:
         JSON with success status or error
     """
-    try:
-        result = op_write(model, ids, values, profile)
-        return format_result(result)
-    except Exception as e:
-        return format_error(e)
+    return _json(op_write(model, ids, values, profile))
 
 
 @mcp.tool()
@@ -169,11 +137,7 @@ def create(
     Returns:
         JSON with the created record ID or error
     """
-    try:
-        result = op_create(model, values, profile)
-        return format_result(result)
-    except Exception as e:
-        return format_error(e)
+    return _json(op_create(model, values, profile))
 
 
 @mcp.tool()
@@ -206,11 +170,7 @@ def export_records(
     Returns:
         JSON with records array, total count, limit, offset, has_more, next_offset.
     """
-    try:
-        result = op_export_records(model, domain, fields, limit, offset, profile)
-        return format_result(result)
-    except Exception as e:
-        return format_error(e)
+    return _json(op_export_records(model, domain, fields, limit, offset, profile))
 
 
 @mcp.tool()
@@ -237,11 +197,7 @@ def import_records(
     Returns:
         JSON with success status, created/updated IDs, and any detailed parsed error messages.
     """
-    try:
-        result = op_import_records(model, fields, rows, profile)
-        return format_result(result)
-    except Exception as e:
-        return format_error(e)
+    return _json(op_import_records(model, fields, rows, profile))
 
 
 @mcp.tool()
@@ -272,11 +228,7 @@ def execute_kw(
         - Send an email: model='mail.mail', method='send', args='[[123]]'
         - Get default values: model='res.partner', method='default_get', args='[["name", "email"]]'
     """
-    try:
-        result = op_execute_kw(model, method, args, kwargs, profile)
-        return format_result(result)
-    except Exception as e:
-        return format_error(e)
+    return _json(op_execute_kw(model, method, args, kwargs, profile))
 
 
 @mcp.tool()
@@ -289,11 +241,7 @@ def get_version(profile: Optional[str] = None) -> str:
     Returns:
         JSON with server version details
     """
-    try:
-        result = op_get_version(profile)
-        return format_result(result)
-    except Exception as e:
-        return format_error(e)
+    return _json(op_get_version(profile))
 
 
 @mcp.tool()
@@ -307,11 +255,7 @@ def list_models(search: str = "", profile: Optional[str] = None) -> str:
     Returns:
         JSON array of model information (name, model, info)
     """
-    try:
-        result = op_list_models(search, profile)
-        return format_result(result)
-    except Exception as e:
-        return format_error(e)
+    return _json(op_list_models(search, profile))
 
 
 @mcp.tool()
@@ -325,11 +269,7 @@ def list_fields(model: str, profile: Optional[str] = None) -> str:
     Returns:
         JSON object with field definitions
     """
-    try:
-        result = op_list_fields(model, profile)
-        return format_result(result)
-    except Exception as e:
-        return format_error(e)
+    return _json(op_list_fields(model, profile))
 
 
 def run_server() -> None:

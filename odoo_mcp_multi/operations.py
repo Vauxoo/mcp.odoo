@@ -2,67 +2,32 @@
 
 This module contains the core logic shared between the MCP server (server.py)
 and the CLI (cli.py). Each function accepts parsed Python types and returns
-Python dicts/lists, keeping both interfaces DRY.
+Python dicts/lists — never raises exceptions to the caller. Errors are always
+returned as dicts with ``success=False`` and a verbose ``error`` message for
+agent consumption.
 """
 
 from __future__ import annotations
 
 from typing import Any, Optional
 
-from odoo_mcp_multi.config import get_profile, list_profiles
-from odoo_mcp_multi.utils import (
-    create_client,
-    get_server_version,
-    normalize_url,
-    parse_domain,
-    parse_fields,
-    parse_ids,
-    parse_json_arg,
-)
+from odoo_mcp_multi.client import create_client
+from odoo_mcp_multi.config import list_profiles, resolve_profile
+from odoo_mcp_multi.parsers import normalize_url, parse_domain, parse_fields, parse_ids, parse_json_arg
+from odoo_mcp_multi.version import get_server_version
+
+# MCP server sets this at startup via set_fallback_profile()
+_fallback_profile: Optional[Any] = None
 
 
-def _resolve_profile(profile_name: Optional[str] = None):
-    """Resolve a profile name to an OdooProfile instance.
+def set_fallback_profile(profile: Any) -> None:
+    """Set the fallback profile for operations when no profile is specified.
 
-    Resolution order:
-    1. If profile_name is given, look it up by name (raise if not found)
-    2. Try the MCP server's fallback profile (set at startup via CLI)
-    3. Try the default profile from the config file
-    4. Raise ValueError if nothing is configured
-
-    Args:
-        profile_name: Explicit profile name. If None, uses fallback/default.
-
-    Returns:
-        OdooProfile instance
-
-    Raises:
-        ValueError: If no profile can be resolved.
+    Called by the MCP server at startup to inject its configured profile
+    without creating circular imports.
     """
-    if profile_name:
-        active_profile = get_profile(profile_name)
-        if not active_profile:
-            raise ValueError(f"Profile '{profile_name}' not found.")
-        return active_profile
-
-    # Try MCP fallback profile (only relevant when running as MCP server)
-    active_profile = None
-    try:
-        # Lazy import: server.py imports operations.py, so this
-        # would be a circular import at module level.
-        from odoo_mcp_multi.server import _fallback_profile
-
-        active_profile = _fallback_profile
-    except ImportError:
-        pass
-
-    if not active_profile:
-        active_profile = get_profile()  # Try default from config
-
-    if active_profile is None:
-        raise ValueError("No Odoo profile specified or configured as default.")
-
-    return active_profile
+    global _fallback_profile
+    _fallback_profile = profile
 
 
 def _get_client(profile_name: Optional[str] = None):
@@ -77,7 +42,7 @@ def _get_client(profile_name: Optional[str] = None):
     Raises:
         ValueError: If no profile is found or configured.
     """
-    active_profile = _resolve_profile(profile_name)
+    active_profile = resolve_profile(profile_name, fallback=_fallback_profile)
 
     return create_client(
         url=active_profile.url,
@@ -87,18 +52,6 @@ def _get_client(profile_name: Optional[str] = None):
         api_key=active_profile.api_key or "",
         protocol=active_profile.protocol,
     )
-
-
-def _get_profile_object(profile_name: Optional[str] = None):
-    """Get the profile object (for operations that need URL, not a client).
-
-    Returns:
-        OdooProfile instance
-
-    Raises:
-        ValueError: If no profile is found.
-    """
-    return _resolve_profile(profile_name)
 
 
 def op_test_connection(
@@ -123,21 +76,22 @@ def op_test_connection(
         timeout: Connection timeout in seconds
 
     Returns:
-        Dict with uid, server_version (dict or None), and protocol.
-
-    Raises:
-        OdooConnectionError: If the server is unreachable.
-        OdooAuthenticationError: If credentials are rejected.
+        Dict with uid, server_version, and protocol on success,
+        or {success: False, error: "..."} on failure.
     """
-    client = create_client(
-        url=url,
-        database=database,
-        user=user,
-        password=password,
-        protocol=protocol,
-        timeout=timeout,
-    )
-    uid = client.authenticate()
+    try:
+        client = create_client(
+            url=url,
+            database=database,
+            user=user,
+            password=password,
+            protocol=protocol,
+            timeout=timeout,
+        )
+        uid = client.authenticate()
+    except Exception as exc:
+        return {"success": False, "error": f"Connection test failed: {exc}"}
+
     version = get_server_version(normalize_url(url))
     return {
         "uid": uid,
@@ -185,22 +139,26 @@ def op_search_read(
         profile: Profile name to use
 
     Returns:
-        Dict with records, total, limit, offset, has_more, next_offset
+        Dict with records, total, limit, offset, has_more, next_offset,
+        or an error dict with success=False for agent consumption.
     """
-    client = _get_client(profile)
-    parsed_domain = parse_domain(domain)
-    parsed_fields = parse_fields(fields) if fields else None
-    parsed_order = order if order else None
+    try:
+        client = _get_client(profile)
+        parsed_domain = parse_domain(domain)
+        parsed_fields = parse_fields(fields) if fields else None
+        parsed_order = order if order else None
 
-    total = client.execute_kw(model, "search_count", [parsed_domain], {})
-    records = client.search_read(
-        model=model,
-        domain=parsed_domain,
-        fields=parsed_fields,
-        limit=limit,
-        offset=offset,
-        order=parsed_order,
-    )
+        total = client.execute_kw(model, "search_count", [parsed_domain], {})
+        records = client.search_read(
+            model=model,
+            domain=parsed_domain,
+            fields=parsed_fields,
+            limit=limit,
+            offset=offset,
+            order=parsed_order,
+        )
+    except Exception as exc:
+        return {"success": False, "error": f"search_read on '{model}' failed: {exc}"}
 
     return {
         "records": records,
@@ -227,18 +185,27 @@ def op_write(
         profile: Profile name to use
 
     Returns:
-        Dict with success status and updated_ids
+        Dict with success status and updated_ids,
+        or an error dict with success=False for agent consumption.
     """
-    client = _get_client(profile)
     parsed_ids = parse_ids(ids)
-    parsed_values = parse_json_arg(values, {})
-
     if not parsed_ids:
-        raise ValueError("No record IDs provided")
-    if not parsed_values:
-        raise ValueError("No values provided")
+        return {"success": False, "error": "No record IDs provided. Pass a JSON array or comma-separated list."}
 
-    result = client.write(model, parsed_ids, parsed_values)
+    parsed_values = parse_json_arg(values, {})
+    if not parsed_values:
+        return {"success": False, "error": "No values provided. Pass a JSON object with field names and values."}
+
+    try:
+        client = _get_client(profile)
+        result = client.write(model, parsed_ids, parsed_values)
+    except Exception as exc:
+        return {
+            "success": False,
+            "error": f"write on '{model}' failed: {exc}",
+            "ids": parsed_ids,
+        }
+
     return {"success": result, "updated_ids": parsed_ids}
 
 
@@ -255,15 +222,19 @@ def op_create(
         profile: Profile name to use
 
     Returns:
-        Dict with success=True and id of created record
+        Dict with success=True and id of created record,
+        or an error dict with success=False for agent consumption.
     """
-    client = _get_client(profile)
     parsed_values = parse_json_arg(values, {})
-
     if not parsed_values:
-        raise ValueError("No values provided")
+        return {"success": False, "error": "No values provided. Pass a JSON object with field names and values."}
 
-    record_id = client.create(model, parsed_values)
+    try:
+        client = _get_client(profile)
+        record_id = client.create(model, parsed_values)
+    except Exception as exc:
+        return {"success": False, "error": f"create on '{model}' failed: {exc}"}
+
     return {"success": True, "id": record_id}
 
 
@@ -286,46 +257,67 @@ def op_export_records(
         profile: Profile name to use
 
     Returns:
-        Dict with records, total, limit, offset, has_more, next_offset
+        Dict with records, total, limit, offset, has_more, next_offset,
+        or an error dict with success=False for agent consumption.
     """
-    client = _get_client(profile)
-    parsed_domain = parse_domain(domain)
-    parsed_fields = parse_fields(fields) if fields else ["id"]
+    try:
+        client = _get_client(profile)
+        parsed_domain = parse_domain(domain)
+        parsed_fields = parse_fields(fields) if fields else ["id"]
 
-    total = client.execute_kw(model, "search_count", [parsed_domain], {})
-    search_result = client.execute_kw(model, "search", [parsed_domain], {"limit": limit, "offset": offset})
+        total = client.execute_kw(model, "search_count", [parsed_domain], {})
+        search_result = client.execute_kw(
+            model,
+            "search",
+            [parsed_domain],
+            {"limit": limit, "offset": offset},
+        )
+    except Exception as exc:
+        return {"success": False, "error": f"Export from '{model}' failed during search: {exc}"}
 
-    if not search_result:
-        return {
-            "records": [],
-            "total": total,
-            "limit": limit,
-            "offset": offset,
-            "has_more": (offset + limit) < total,
-            "next_offset": offset + limit,
-        }
-
-    export_result = client.execute_kw(model, "export_data", [search_result, parsed_fields])
-
-    if not export_result or "datas" not in export_result:
-        records = []
-    else:
-        datas = export_result["datas"]
-        records = []
-        for row in datas:
-            formatted_row = {}
-            for i, field_name in enumerate(parsed_fields):
-                formatted_row[field_name] = row[i] if i < len(row) else None
-            records.append(formatted_row)
-
-    return {
-        "records": records,
+    envelope = {
         "total": total,
         "limit": limit,
         "offset": offset,
         "has_more": (offset + limit) < total,
         "next_offset": offset + limit,
     }
+
+    if not search_result:
+        return {"records": [], **envelope}
+
+    try:
+        export_result = client.execute_kw(model, "export_data", [search_result, parsed_fields])
+    except Exception as exc:
+        return {
+            "success": False,
+            "error": f"Export from '{model}' failed during export_data: {exc}",
+            "ids_found": len(search_result),
+            **envelope,
+        }
+
+    datas = (export_result or {}).get("datas", [])
+    records = [
+        {field_name: row[i] if i < len(row) else None for i, field_name in enumerate(parsed_fields)} for row in datas
+    ]
+
+    return {"records": records, **envelope}
+
+
+def _format_row(row: Any, field_names: list[str]) -> list:
+    """Normalize a single import row (dict or list) into a positional list.
+
+    Dicts are mapped by field_names order; lists are passed through with
+    None → False coercion (Odoo convention).
+
+    Raises:
+        TypeError: If row is neither dict nor list.
+    """
+    if isinstance(row, dict):
+        return [row.get(f, False) if row.get(f) is not None else False for f in field_names]
+    if isinstance(row, list):
+        return [val if val is not None else False for val in row]
+    raise TypeError(f"Expected dict or list, got {type(row).__name__}: {row!r}")
 
 
 def op_import_records(
@@ -339,33 +331,44 @@ def op_import_records(
     Args:
         model: Model name
         fields: Comma-separated field names
-        rows: JSON array of dictionaries with the data to import
+        rows: JSON array of dictionaries or arrays with the data to import
         profile: Profile name to use
 
     Returns:
-        Dict with ids and messages from Odoo's load()
+        Dict with ids and messages from Odoo's load(), or an error dict
+        with success=False and a verbose error message for agent consumption.
     """
-    client = _get_client(profile)
     parsed_fields = parse_fields(fields)
-    parsed_rows_raw = parse_json_arg(rows, [])
-
     if not parsed_fields:
-        raise ValueError("No fields provided for import.")
+        return {
+            "success": False,
+            "error": "No fields provided for import. Pass a comma-separated list of field names.",
+        }
+
+    parsed_rows_raw = parse_json_arg(rows, [])
     if not parsed_rows_raw:
-        raise ValueError("No rows provided for import.")
+        return {"success": False, "error": "No rows provided for import. Pass a JSON array of dicts or arrays."}
 
-    formatted_rows = []
-    for row in parsed_rows_raw:
-        if isinstance(row, dict):
-            formatted_row = [row.get(f, False) if row.get(f) is not None else False for f in parsed_fields]
-            formatted_rows.append(formatted_row)
-        elif isinstance(row, list):
-            mapped_row = [val if val is not None else False for val in row]
-            formatted_rows.append(mapped_row)
-        else:
-            raise ValueError("Rows must be a JSON array of dictionaries or arrays.")
+    try:
+        formatted_rows = [_format_row(row, parsed_fields) for row in parsed_rows_raw]
+    except TypeError as exc:
+        return {
+            "success": False,
+            "error": f"Row formatting failed: {exc}. Each row must be a JSON object (dict) or array (list).",
+        }
 
-    return client.execute_kw(model, "load", [parsed_fields, formatted_rows])
+    try:
+        client = _get_client(profile)
+        result = client.execute_kw(model, "load", [parsed_fields, formatted_rows])
+    except Exception as exc:
+        return {
+            "success": False,
+            "error": f"Import to '{model}' failed: {exc}",
+            "fields": parsed_fields,
+            "row_count": len(formatted_rows),
+        }
+
+    return result
 
 
 def op_execute_kw(
@@ -385,36 +388,46 @@ def op_execute_kw(
         profile: Profile name to use
 
     Returns:
-        Dict with success=True and result
+        Dict with success=True and result,
+        or an error dict with success=False for agent consumption.
     """
-    client = _get_client(profile)
-    parsed_args = parse_json_arg(args, [])
-    parsed_kwargs = parse_json_arg(kwargs, {})
+    try:
+        client = _get_client(profile)
+        parsed_args = parse_json_arg(args, [])
+        parsed_kwargs = parse_json_arg(kwargs, {})
+        result = client.execute_kw(model, method, parsed_args, parsed_kwargs)
+    except Exception as exc:
+        return {"success": False, "error": f"execute_kw '{model}.{method}' failed: {exc}"}
 
-    result = client.execute_kw(model, method, parsed_args, parsed_kwargs)
     return {"success": True, "result": result}
 
 
-def op_get_version(profile: Optional[str] = None) -> Any:
+def op_get_version(profile: Optional[str] = None) -> dict:
     """Get the Odoo server version information.
 
     Args:
         profile: Profile name to use
 
     Returns:
-        Version info dict from Odoo
+        Version info dict from Odoo,
+        or an error dict with success=False for agent consumption.
     """
-    active_profile = _get_profile_object(profile)
-    version = get_server_version(normalize_url(active_profile.url))
-    if version:
-        return version
-    raise ValueError("Could not retrieve version information")
+    try:
+        active_profile = resolve_profile(profile, fallback=_fallback_profile)
+        version = get_server_version(normalize_url(active_profile.url))
+    except Exception as exc:
+        return {"success": False, "error": f"Version lookup failed: {exc}"}
+
+    if not version:
+        return {"success": False, "error": "Could not retrieve version information. Server may be unreachable."}
+
+    return version
 
 
 def op_list_models(
     search: str = "",
     profile: Optional[str] = None,
-) -> list[dict]:
+) -> dict:
     """List available models in the Odoo instance.
 
     Args:
@@ -422,20 +435,26 @@ def op_list_models(
         profile: Profile name to use
 
     Returns:
-        List of model dicts with name, model, info
+        Dict with models list,
+        or an error dict with success=False for agent consumption.
     """
-    client = _get_client(profile)
-    domain: list = []
-    if search:
-        domain = ["|", ("name", "ilike", search), ("model", "ilike", search)]
+    try:
+        client = _get_client(profile)
+        domain: list = []
+        if search:
+            domain = ["|", ("name", "ilike", search), ("model", "ilike", search)]
 
-    return client.search_read(
-        model="ir.model",
-        domain=domain,
-        fields=["name", "model", "info"],
-        limit=50,
-        order="model",
-    )
+        models = client.search_read(
+            model="ir.model",
+            domain=domain,
+            fields=["name", "model", "info"],
+            limit=50,
+            order="model",
+        )
+    except Exception as exc:
+        return {"success": False, "error": f"list_models failed: {exc}"}
+
+    return {"success": True, "models": models}
 
 
 def op_list_fields(
@@ -449,7 +468,13 @@ def op_list_fields(
         profile: Profile name to use
 
     Returns:
-        Dict of field definitions
+        Dict with fields definitions,
+        or an error dict with success=False for agent consumption.
     """
-    client = _get_client(profile)
-    return client.execute_kw(model, "fields_get", [], {"attributes": ["string", "type", "required", "help"]})
+    try:
+        client = _get_client(profile)
+        fields = client.execute_kw(model, "fields_get", [], {"attributes": ["string", "type", "required", "help"]})
+    except Exception as exc:
+        return {"success": False, "error": f"list_fields on '{model}' failed: {exc}"}
+
+    return {"success": True, "fields": fields}

@@ -97,8 +97,7 @@ def get_config_dir() -> Path:
         Path to ~/.config/odoo-mcp/
     """
     config_dir = Path.home() / ".config" / "odoo-mcp"
-    if not config_dir.exists():
-        config_dir.mkdir(parents=True, mode=0o700)
+    config_dir.mkdir(parents=True, mode=0o700, exist_ok=True)
     return config_dir
 
 
@@ -135,9 +134,7 @@ def save_profiles(config: ProfileConfig) -> None:
     """
     config_path = get_config_path()
     config_dir = config_path.parent
-
-    if not config_dir.exists():
-        config_dir.mkdir(parents=True, mode=0o700)
+    config_dir.mkdir(parents=True, mode=0o700, exist_ok=True)
 
     with open(config_path, "w", encoding="utf-8") as f:
         json.dump(config.to_dict(), f, indent=2)
@@ -231,6 +228,15 @@ def rename_profile(old_name: str, new_name: str) -> tuple[bool, str]:
     return True, f"Profile '{old_name}' renamed to '{new_name}'."
 
 
+def _get_auth_type(profile: OdooProfile) -> str:
+    """Determine auth type from which credential is set on the profile."""
+    if profile.api_key:
+        return "api_key"
+    if profile.password:
+        return "password"
+    return "none"
+
+
 def list_profiles() -> list[dict]:
     """List all configured profiles.
 
@@ -238,31 +244,21 @@ def list_profiles() -> list[dict]:
         List of dicts with profile name, url, database, user, auth, and protocol
     """
     config = load_profiles()
-    result = []
+    if not config.profiles:
+        return []
 
-    for name, profile in config.profiles.items():
-        # Auth type is determined by which credential is set,
-        # not by the presence of a user string (informational in Odoo 19+).
-        if profile.api_key:
-            auth = "api_key"
-        elif profile.password:
-            auth = "password"
-        else:
-            auth = "none"
-
-        result.append(
-            {
-                "name": name,
-                "url": profile.url,
-                "database": profile.database,
-                "user": profile.user,
-                "protocol": profile.protocol,
-                "auth": auth,
-                "is_default": name == config.default_profile,
-            }
-        )
-
-    return result
+    return [
+        {
+            "name": name,
+            "url": profile.url,
+            "database": profile.database,
+            "user": profile.user,
+            "protocol": profile.protocol,
+            "auth": _get_auth_type(profile),
+            "is_default": name == config.default_profile,
+        }
+        for name, profile in config.profiles.items()
+    ]
 
 
 def set_default_profile(name: str) -> bool:
@@ -282,3 +278,42 @@ def set_default_profile(name: str) -> bool:
     config.default_profile = name
     save_profiles(config)
     return True
+
+
+def resolve_profile(
+    profile_name: Optional[str] = None,
+    fallback: Optional[OdooProfile] = None,
+) -> OdooProfile:
+    """Resolve a profile name to an OdooProfile instance.
+
+    Resolution order:
+    1. Explicit profile_name lookup (raises if not found)
+    2. Provided fallback (e.g. MCP server's startup profile)
+    3. Default profile from the config file
+    4. ValueError if nothing is configured
+
+    Args:
+        profile_name: Explicit profile name. If None, uses fallback/default.
+        fallback: Optional fallback profile (avoids circular imports
+            from server.py by letting the caller inject it).
+
+    Returns:
+        OdooProfile instance
+
+    Raises:
+        ValueError: If no profile can be resolved.
+    """
+    if profile_name:
+        profile = get_profile(profile_name)
+        if not profile:
+            raise ValueError(f"Profile '{profile_name}' not found.")
+        return profile
+
+    if fallback:
+        return fallback
+
+    default = get_profile()
+    if default:
+        return default
+
+    raise ValueError("No Odoo profile specified or configured as default.")

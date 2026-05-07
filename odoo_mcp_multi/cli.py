@@ -8,11 +8,17 @@ the MCP tool interface. Both interfaces share logic via operations.py.
 from __future__ import annotations
 
 import json
-import os
 import sys
 from pathlib import Path
 
 import click
+
+# Windows cp1252 consoles choke on Unicode glyphs — fall back to ASCII.
+try:
+    "\u2713\u2717".encode(sys.stdout.encoding or "utf-8")
+    TICK, CROSS = "\u2713", "\u2717"
+except (UnicodeEncodeError, LookupError):
+    TICK, CROSS = "[OK]", "[FAIL]"
 
 from odoo_mcp_multi import __version__
 from odoo_mcp_multi.config import (
@@ -23,6 +29,7 @@ from odoo_mcp_multi.config import (
     remove_profile,
     set_default_profile,
 )
+from odoo_mcp_multi.exceptions import OdooConnectionError
 from odoo_mcp_multi.operations import (
     op_create,
     op_execute_kw,
@@ -35,22 +42,11 @@ from odoo_mcp_multi.operations import (
     op_test_connection,
     op_write,
 )
-from odoo_mcp_multi.utils import (
-    OdooAuthenticationError,
-    OdooConnectionError,
-    OdooExecutionError,
-)
 
 
 def _output(data, as_json: bool = True) -> None:
     """Output data as formatted JSON to stdout."""
     click.echo(json.dumps(data, indent=2, default=str, ensure_ascii=False))
-
-
-def _handle_error(e: Exception) -> None:
-    """Print error and exit with code 1."""
-    click.secho(f"✗ Error: {e}", fg="red", err=True)
-    sys.exit(1)
 
 
 @click.group()
@@ -113,13 +109,14 @@ def cmd_add_profile(
     # Validation: require at least one auth method
     if not password and not api_key:
         click.secho(
-            "✗ Provide either --password (legacy) or --api-key (Odoo 19+).",
+            f"{CROSS} Provide either --password (legacy) or --api-key (Odoo 19+).",
             fg="red",
         )
         raise SystemExit(1)
 
     # Detect server version to auto-migrate password → api_key for Odoo 19+
-    from odoo_mcp_multi.utils import get_server_version, normalize_url, parse_version
+    from odoo_mcp_multi.parsers import normalize_url, parse_version
+    from odoo_mcp_multi.version import get_server_version
 
     server_major = 0
     try:
@@ -135,7 +132,7 @@ def cmd_add_profile(
         api_key = password
         password = None
         click.secho(
-            f"⚠ Odoo {server_major} detected — credential stored as api_key (Bearer token).",
+            f"[WARN] Odoo {server_major} detected — credential stored as api_key (Bearer token).",
             fg="yellow",
         )
 
@@ -148,19 +145,20 @@ def cmd_add_profile(
                 if version_info is None:
                     raise OdooConnectionError("Could not reach server (no version info)")
                 ver = version_info.get("server_version", version_info.get("version", "unknown"))
-                click.secho(f"✓ Server reachable! Odoo {ver}", fg="green")
+                click.secho(f"{TICK} Server reachable! Odoo {ver}", fg="green")
             else:
                 result = op_test_connection(url=url, database=database, user=user or "", password=password or "")
-                click.secho(
-                    f"✓ Connection successful! Authenticated as UID {result['uid']}",
-                    fg="green",
-                )
+                if result.get("success") is False:
+                    click.secho(f"{CROSS} Connection test failed: {result['error']}", fg="red")
+                    if not click.confirm("Save profile anyway?"):
+                        return
+                else:
+                    click.secho(
+                        f"{TICK} Connection successful! Authenticated as UID {result['uid']}",
+                        fg="green",
+                    )
         except OdooConnectionError as e:
-            click.secho(f"✗ Connection failed: {e}", fg="red")
-            if not click.confirm("Save profile anyway?"):
-                return
-        except OdooAuthenticationError as e:
-            click.secho(f"✗ Authentication failed: {e}", fg="red")
+            click.secho(f"{CROSS} Connection failed: {e}", fg="red")
             if not click.confirm("Save profile anyway?"):
                 return
 
@@ -175,7 +173,7 @@ def cmd_add_profile(
     )
     add_profile(profile, set_default=set_default)
     auth_method = f"api_key ({protocol})" if api_key else "password"
-    click.secho(f"✓ Profile '{name}' saved successfully! [auth: {auth_method}]", fg="green")
+    click.secho(f"{TICK} Profile '{name}' saved successfully! [auth: {auth_method}]", fg="green")
 
     if set_default:
         click.echo("  Set as default profile.")
@@ -220,9 +218,9 @@ def cmd_remove_profile(name: str, force: bool) -> None:
             return
 
     if remove_profile(name):
-        click.secho(f"✓ Profile '{name}' removed.", fg="green")
+        click.secho(f"{TICK} Profile '{name}' removed.", fg="green")
     else:
-        click.secho(f"✗ Profile '{name}' not found.", fg="red")
+        click.secho(f"{CROSS} Profile '{name}' not found.", fg="red")
         sys.exit(1)
 
 
@@ -231,9 +229,9 @@ def cmd_remove_profile(name: str, force: bool) -> None:
 def cmd_set_default(name: str) -> None:
     """Set the default profile."""
     if set_default_profile(name):
-        click.secho(f"✓ Default profile set to '{name}'.", fg="green")
+        click.secho(f"{TICK} Default profile set to '{name}'.", fg="green")
     else:
-        click.secho(f"✗ Profile '{name}' not found.", fg="red")
+        click.secho(f"{CROSS} Profile '{name}' not found.", fg="red")
         sys.exit(1)
 
 
@@ -298,7 +296,7 @@ def cmd_edit_profile(
     """
     existing = get_profile(name)
     if existing is None:
-        click.secho(f"✗ Profile '{name}' not found.", fg="red")
+        click.secho(f"{CROSS} Profile '{name}' not found.", fg="red")
         sys.exit(1)
 
     new_url = url if url else existing.url
@@ -309,32 +307,34 @@ def cmd_edit_profile(
     new_api_key = _resolve_secret(api_key, existing.api_key)
 
     if not new_password and not new_api_key:
-        click.secho("✗ Profile must have either a password or an api_key.", fg="red")
+        click.secho(f"{CROSS} Profile must have either a password or an api_key.", fg="red")
         sys.exit(1)
 
     if test_connection:
         click.echo(f"Testing connection to {new_url}...")
         try:
             if new_api_key and not new_password:
-                from odoo_mcp_multi.utils import get_server_version, normalize_url
+                from odoo_mcp_multi.parsers import normalize_url
+                from odoo_mcp_multi.version import get_server_version
 
                 info = get_server_version(normalize_url(new_url))
                 ver = (info or {}).get("server_version", "unknown")
-                click.secho(f"✓ Server reachable! Odoo {ver}", fg="green")
+                click.secho(f"{TICK} Server reachable! Odoo {ver}", fg="green")
             else:
                 result = op_test_connection(
                     url=new_url, database=new_database, user=new_user, password=new_password or ""
                 )
-                click.secho(
-                    f"✓ Connection successful! Authenticated as UID {result['uid']}",
-                    fg="green",
-                )
+                if result.get("success") is False:
+                    click.secho(f"{CROSS} Connection test failed: {result['error']}", fg="red")
+                    if not click.confirm("Save changes anyway?"):
+                        return
+                else:
+                    click.secho(
+                        f"{TICK} Connection successful! Authenticated as UID {result['uid']}",
+                        fg="green",
+                    )
         except OdooConnectionError as e:
-            click.secho(f"✗ Connection failed: {e}", fg="red")
-            if not click.confirm("Save changes anyway?"):
-                return
-        except OdooAuthenticationError as e:
-            click.secho(f"✗ Authentication failed: {e}", fg="red")
+            click.secho(f"{CROSS} Connection failed: {e}", fg="red")
             if not click.confirm("Save changes anyway?"):
                 return
 
@@ -354,7 +354,7 @@ def cmd_edit_profile(
     if effective_name != name:
         remove_profile(name)
 
-    click.secho(f"✓ Profile '{effective_name}' updated successfully!", fg="green")
+    click.secho(f"{TICK} Profile '{effective_name}' updated successfully!", fg="green")
 
 
 @main.command("test")
@@ -365,9 +365,9 @@ def cmd_test(profile: str) -> None:
 
     if odoo_profile is None:
         if profile:
-            click.secho(f"✗ Profile '{profile}' not found.", fg="red")
+            click.secho(f"{CROSS} Profile '{profile}' not found.", fg="red")
         else:
-            click.secho("✗ No default profile configured. Use 'odoo-mcp add-profile' first.", fg="red")
+            click.secho(f"{CROSS} No default profile configured. Use 'odoo-mcp add-profile' first.", fg="red")
         sys.exit(1)
 
     click.echo(f"Testing connection to {odoo_profile.url}...")
@@ -375,13 +375,14 @@ def cmd_test(profile: str) -> None:
     try:
         # api_key-only profiles (Odoo 19+ JSON-2): test with /web/version, no UID
         if odoo_profile.api_key and not odoo_profile.password:
-            from odoo_mcp_multi.utils import get_server_version, normalize_url
+            from odoo_mcp_multi.parsers import normalize_url
+            from odoo_mcp_multi.version import get_server_version
 
             info = get_server_version(normalize_url(odoo_profile.url))
             if info is None:
                 raise OdooConnectionError("Could not reach server (no version info)")
             ver = info.get("server_version", info.get("version", "unknown"))
-            click.secho(f"✓ Server reachable! Odoo {ver} [auth: api_key / JSON-2]", fg="green")
+            click.secho(f"{TICK} Server reachable! Odoo {ver} [auth: api_key / JSON-2]", fg="green")
             click.echo("  Protocol: json2s")
         else:
             result = op_test_connection(
@@ -391,15 +392,15 @@ def cmd_test(profile: str) -> None:
                 password=odoo_profile.password,
                 protocol=odoo_profile.protocol,
             )
-            click.secho(f"✓ Connection successful! Authenticated as UID {result['uid']}", fg="green")
+            if result.get("success") is False:
+                click.secho(f"{CROSS} Connection test failed: {result['error']}", fg="red")
+                sys.exit(1)
+            click.secho(f"{TICK} Connection successful! Authenticated as UID {result['uid']}", fg="green")
             click.echo(f"  Server version: {result['server_version']}")
             click.echo(f"  Protocol: {result['protocol']}")
 
     except OdooConnectionError as e:
-        click.secho(f"✗ Connection failed: {e}", fg="red")
-        sys.exit(1)
-    except OdooAuthenticationError as e:
-        click.secho(f"✗ Authentication failed: {e}", fg="red")
+        click.secho(f"{CROSS} Connection failed: {e}", fg="red")
         sys.exit(1)
 
 
@@ -419,7 +420,7 @@ def cmd_run(profile: str) -> None:
 
     if profile and odoo_profile is None:
         # The user explicitly asked for a profile that doesn't exist
-        click.secho(f"✗ Profile '{profile}' not found.", fg="red", err=True)
+        click.secho(f"{CROSS} Profile '{profile}' not found.", fg="red", err=True)
         sys.exit(1)
 
     if odoo_profile:
@@ -453,11 +454,7 @@ def cmd_run(profile: str) -> None:
 @click.option("--profile", "-p", default=None, help="Profile name to use")
 def cmd_search_read(model, domain, fields, limit, offset, order, profile) -> None:
     """Search and read records from an Odoo model."""
-    try:
-        result = op_search_read(model, domain, fields, limit, offset, order, profile)
-        _output(result)
-    except (OdooConnectionError, OdooAuthenticationError, OdooExecutionError, ValueError) as e:
-        _handle_error(e)
+    _output(op_search_read(model, domain, fields, limit, offset, order, profile))
 
 
 @main.command("write")
@@ -467,11 +464,7 @@ def cmd_search_read(model, domain, fields, limit, offset, order, profile) -> Non
 @click.option("--profile", "-p", default=None, help="Profile name to use")
 def cmd_write(model, ids, values, profile) -> None:
     """Update existing records in Odoo."""
-    try:
-        result = op_write(model, ids, values, profile)
-        _output(result)
-    except (OdooConnectionError, OdooAuthenticationError, OdooExecutionError, ValueError) as e:
-        _handle_error(e)
+    _output(op_write(model, ids, values, profile))
 
 
 @main.command("create")
@@ -480,11 +473,7 @@ def cmd_write(model, ids, values, profile) -> None:
 @click.option("--profile", "-p", default=None, help="Profile name to use")
 def cmd_create(model, values, profile) -> None:
     """Create a new record in Odoo."""
-    try:
-        result = op_create(model, values, profile)
-        _output(result)
-    except (OdooConnectionError, OdooAuthenticationError, OdooExecutionError, ValueError) as e:
-        _handle_error(e)
+    _output(op_create(model, values, profile))
 
 
 @main.command("export-records")
@@ -496,11 +485,7 @@ def cmd_create(model, values, profile) -> None:
 @click.option("--profile", "-p", default=None, help="Profile name to use")
 def cmd_export_records(model, domain, fields, limit, offset, profile) -> None:
     """Export records using native export_data."""
-    try:
-        result = op_export_records(model, domain, fields, limit, offset, profile)
-        _output(result)
-    except (OdooConnectionError, OdooAuthenticationError, OdooExecutionError, ValueError) as e:
-        _handle_error(e)
+    _output(op_export_records(model, domain, fields, limit, offset, profile))
 
 
 @main.command("import-records")
@@ -510,11 +495,7 @@ def cmd_export_records(model, domain, fields, limit, offset, profile) -> None:
 @click.option("--profile", "-p", default=None, help="Profile name to use")
 def cmd_import_records(model, fields, rows, profile) -> None:
     """Import records using native load."""
-    try:
-        result = op_import_records(model, fields, rows, profile)
-        _output(result)
-    except (OdooConnectionError, OdooAuthenticationError, OdooExecutionError, ValueError) as e:
-        _handle_error(e)
+    _output(op_import_records(model, fields, rows, profile))
 
 
 @main.command("execute-kw")
@@ -525,22 +506,14 @@ def cmd_import_records(model, fields, rows, profile) -> None:
 @click.option("--profile", "-p", default=None, help="Profile name to use")
 def cmd_execute_kw(model, method, args, kwargs, profile) -> None:
     """Execute any method on an Odoo model."""
-    try:
-        result = op_execute_kw(model, method, args, kwargs, profile)
-        _output(result)
-    except (OdooConnectionError, OdooAuthenticationError, OdooExecutionError, ValueError) as e:
-        _handle_error(e)
+    _output(op_execute_kw(model, method, args, kwargs, profile))
 
 
 @main.command("get-version")
 @click.option("--profile", "-p", default=None, help="Profile name to use")
 def cmd_get_version(profile) -> None:
     """Get the Odoo server version information."""
-    try:
-        result = op_get_version(profile)
-        _output(result)
-    except Exception as e:
-        _handle_error(e)
+    _output(op_get_version(profile))
 
 
 @main.command("list-models")
@@ -548,11 +521,7 @@ def cmd_get_version(profile) -> None:
 @click.option("--profile", "-p", default=None, help="Profile name to use")
 def cmd_list_models(search, profile) -> None:
     """List available models in the Odoo instance."""
-    try:
-        result = op_list_models(search, profile)
-        _output(result)
-    except (OdooConnectionError, OdooAuthenticationError, OdooExecutionError) as e:
-        _handle_error(e)
+    _output(op_list_models(search, profile))
 
 
 @main.command("list-fields")
@@ -560,11 +529,7 @@ def cmd_list_models(search, profile) -> None:
 @click.option("--profile", "-p", default=None, help="Profile name to use")
 def cmd_list_fields(model, profile) -> None:
     """List all fields of an Odoo model."""
-    try:
-        result = op_list_fields(model, profile)
-        _output(result)
-    except (OdooConnectionError, OdooAuthenticationError, OdooExecutionError) as e:
-        _handle_error(e)
+    _output(op_list_fields(model, profile))
 
 
 # ---------------------------------------------------------------------------
@@ -572,11 +537,11 @@ def cmd_list_fields(model, profile) -> None:
 # ---------------------------------------------------------------------------
 
 AGENT_DIRS = {
-    "gemini": "$HOME/.gemini/skills",
-    "antigravity": "$HOME/.gemini/antigravity/skills",
-    "claude": "$HOME/.claude/skills",
-    "codex": "$HOME/.codex/skills",
-    "opencode": "$HOME/.opencode/skills",
+    "gemini": "~/.gemini/skills",
+    "antigravity": "~/.gemini/antigravity/skills",
+    "claude": "~/.claude/skills",
+    "codex": "~/.codex/skills",
+    "opencode": "~/.opencode/skills",
 }
 
 
@@ -613,14 +578,14 @@ def cmd_skills_install(agent: str, force: bool) -> None:
     """Install skills to the specified agentic IDE via symbolic link."""
     target_dir_str = AGENT_DIRS.get(agent)
     if not target_dir_str:
-        click.secho(f"✗ Unknown agent: {agent}", fg="red", err=True)
+        click.secho(f"{CROSS} Unknown agent: {agent}", fg="red", err=True)
         sys.exit(1)
 
-    target_dir = Path(os.path.expandvars(target_dir_str)).expanduser()
+    target_dir = Path(target_dir_str).expanduser()
     skills_dir = Path(__file__).parent / "skills"
 
     if not skills_dir.exists() or not any(skills_dir.iterdir()):
-        click.secho("✗ No skills found to install.", fg="red", err=True)
+        click.secho(f"{CROSS} No skills found to install.", fg="red", err=True)
         sys.exit(1)
 
     # Ensure target directory exists
@@ -628,6 +593,9 @@ def cmd_skills_install(agent: str, force: bool) -> None:
 
     click.echo(f"Installing skills for {agent} into {target_dir}...")
 
+    linked = 0
+    failed = 0
+    skipped = 0
     for item in sorted(skills_dir.iterdir()):
         if not item.is_dir() or not (item / "SKILL.md").exists():
             continue
@@ -636,6 +604,7 @@ def cmd_skills_install(agent: str, force: bool) -> None:
 
         if (dest.exists() or dest.is_symlink()) and not force:
             click.secho(f"  - Skipping {item.name}: already exists. Use --force to overwrite.", fg="yellow")
+            skipped += 1
             continue
 
         if dest.exists() or dest.is_symlink():
@@ -643,11 +612,21 @@ def cmd_skills_install(agent: str, force: bool) -> None:
 
         try:
             dest.symlink_to(item.absolute())
-            click.secho(f"  ✓ Linked {item.name}", fg="green")
+            click.secho(f"  {TICK} Linked {item.name}", fg="green")
+            linked += 1
         except Exception as e:
-            click.secho(f"  ✗ Failed to link {item.name}: {e}", fg="red", err=True)
+            click.secho(f"  {CROSS} Failed to link {item.name}: {e}", fg="red", err=True)
+            failed += 1
 
-    click.echo(f"\nSkills successfully installed for {agent}!")
+    if failed:
+        click.secho(
+            f"\n{CROSS} Completed with errors: {linked} linked, {failed} failed, {skipped} skipped.",
+            fg="red",
+        )
+        sys.exit(1)
+    else:
+        msg = f"\n{TICK} Skills successfully installed for {agent}! ({linked} linked, {skipped} skipped)"
+        click.secho(msg, fg="green")
 
 
 if __name__ == "__main__":

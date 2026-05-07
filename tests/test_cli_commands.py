@@ -68,11 +68,13 @@ def test_cli_search_read_with_options(mock_op):
     mock_op.assert_called_once_with("res.partner", "[('active','=',True)]", "name", 10, 5, "name asc", "prod")
 
 
-@patch("odoo_mcp_multi.cli.op_search_read", side_effect=ValueError("No Odoo profile configured."))
+@patch("odoo_mcp_multi.cli.op_search_read", return_value={"success": False, "error": "No Odoo profile configured."})
 def test_cli_search_read_error(mock_op):
     result = runner.invoke(main, ["search-read", "--model", "res.partner"])
-    assert result.exit_code == 1
-    assert "Error" in result.output
+    assert result.exit_code == 0
+    output = json.loads(result.output)
+    assert output["success"] is False
+    assert "No Odoo profile" in output["error"]
 
 
 # ---------------------------------------------------------------------------
@@ -181,11 +183,13 @@ def test_cli_get_version(mock_op):
     assert output["server_version"] == "17.0"
 
 
-@patch("odoo_mcp_multi.cli.op_get_version", side_effect=ValueError("No Odoo profile configured."))
+@patch("odoo_mcp_multi.cli.op_get_version", return_value={"success": False, "error": "No Odoo profile configured."})
 def test_cli_get_version_error(mock_op):
     result = runner.invoke(main, ["get-version"])
-    assert result.exit_code == 1
-    assert "Error" in result.output
+    assert result.exit_code == 0
+    output = json.loads(result.output)
+    assert output["success"] is False
+    assert "No Odoo profile" in output["error"]
 
 
 # ---------------------------------------------------------------------------
