@@ -5,6 +5,58 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-05-07
+
+### Added
+
+- New modules extracted from monolithic `utils.py`:
+  - `client.py` — `BaseOdooClient`, `JsonRpcClient`, `Json2Client`, `XmlRpcClient`
+  - `exceptions.py` — `OdooConnectionError`, `OdooAuthenticationError`, `OdooExecutionError`
+  - `parsers.py` — `normalize_url`, `parse_domain`, `parse_fields`, `parse_version`, etc.
+  - `version.py` — `get_server_version`, `detect_protocol`, protocol strategy
+  - `utils.py` retained as backward-compatible re-export shim (zero breaking changes)
+- `set_fallback_profile()` in `operations.py` — clean dependency injection replacing circular import hack
+- Coverage contexts: `--cov-context=test` + `show_contexts=true` in HTML reports
+- Unit tests for `Json2Client._build_body` and `_headers` (204 total tests, 79% coverage)
+
+### Changed
+
+- **Unified error-dict contract**: all 10 operations return `{success: False, error: "..."}` on failure — no operation raises exceptions to the caller
+- `server.py` simplified to a pure pass-through layer — no `try/except`, single `_json()` helper
+- CLI commands reduced to one-liners: `_output(op_xxx(...))` — removed 9 dead `try/except` blocks
+- `_handle_error()`, `OdooAuthenticationError` and `OdooExecutionError` imports removed from CLI (dead code)
+- `_call()` in `JsonRpcClient` flattened — nested try blocks eliminated, diagnostic logic extracted to `_diagnose_non_json_response()`
+- `_build_body()` in `Json2Client` simplified with return-early pattern
+- `create_client()` refactored with guard clause for api_key validation
+- `skills install` now tracks `linked`/`failed`/`skipped` counts — only prints success when `failed == 0`, exits with code 1 on errors
+
+### Fixed
+
+- **Windows: `$HOME` path resolution** — `AGENT_DIRS` used `$HOME` which `os.path.expandvars` cannot resolve on Windows (uses `USERPROFILE`). Replaced with `~` and `Path.expanduser()` for cross-platform compatibility.
+- **Windows: cp1252 console encoding** — Unicode `✓`/`✗` characters crash PowerShell's default cp1252 console. Added `TICK`/`CROSS` constants with automatic fallback to `[OK]`/`[FAIL]`.
+- **Skills install false-success** — "Skills successfully installed" message no longer prints when symlink creation partially fails.
+
+### Validated
+
+- 60/60 integration tests against 4 production Odoo instances (v11.0, v16.0, v18.0, v19.0) across JSON-RPC and JSON-2 protocols:
+  - 16 read operations (search-read + export-records)
+  - 24 write operations (create + write + import-records)
+  - 20 failure-mode tests (server down + bad credentials)
+- Zero regressions between old (pipx v0.5.2) and new (local source) builds
+
+## [0.5.2] - 2026-04-28
+
+### Fixed
+
+- CI runner test trigger for tag pipeline validation
+
+## [0.5.1] - 2026-04-20
+
+### Added
+
+- `odoo-mcp skills` command group for agentic IDE skill discovery and installation
+- Anti-bot `User-Agent` header injection to bypass WAF mechanisms on Odoo instances
+
 ## [0.5.0] - 2026-04-20
 
 ### Added
