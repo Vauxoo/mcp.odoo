@@ -237,8 +237,24 @@ def cmd_set_default(name: str) -> None:
         sys.exit(1)
 
 
+def _resolve_secret(new_value: str | None, existing_secret) -> str | None:
+    """Resolve a secret field for edit-profile updates.
+
+    Handles three cases: interactive prompt (__PROMPT__), explicit new
+    value, or preserving the existing secret unchanged.
+    """
+    if new_value == "__PROMPT__":
+        return click.prompt("New value", hide_input=True)
+    if new_value:
+        return new_value
+    if existing_secret is not None:
+        return existing_secret.get_secret_value()
+    return None
+
+
 @main.command("edit-profile")
 @click.argument("name")
+@click.option("--new-name", default=None, help="Rename the profile")
 @click.option("--url", default=None, help="New Odoo URL")
 @click.option("--database", default=None, help="New database name")
 @click.option("--user", default=None, help="New username")
@@ -260,6 +276,7 @@ def cmd_set_default(name: str) -> None:
 @click.option("--test", "test_connection", is_flag=True, default=False, help="Test connection after editing")
 def cmd_edit_profile(
     name: str,
+    new_name: str,
     url: str,
     database: str,
     user: str,
@@ -269,13 +286,15 @@ def cmd_edit_profile(
 ) -> None:
     """Edit an existing profile.
 
-    Only the specified fields will be updated. Use --password or --api-key
-    (with or without a value) to be prompted for new credentials.
+    Only the specified fields will be updated. Use --new-name to rename,
+    --password or --api-key (with or without a value) to be prompted
+    for new credentials.
 
     Examples:
         odoo-mcp edit-profile prod --url https://new-url.com
         odoo-mcp edit-profile staging --user admin --password
         odoo-mcp edit-profile prod19 --api-key
+        odoo-mcp edit-profile old-name --new-name better-name
     """
     existing = get_profile(name)
     if existing is None:
@@ -286,23 +305,8 @@ def cmd_edit_profile(
     new_database = database if database else existing.database
     new_user = user if user else existing.user
 
-    # Handle password update
-    new_password = None
-    if password == "__PROMPT__":
-        new_password = click.prompt("New password", hide_input=True)
-    elif password:
-        new_password = password
-    elif existing.password is not None:
-        new_password = existing.password.get_secret_value()
-
-    # Handle api_key update
-    new_api_key = None
-    if api_key == "__PROMPT__":
-        new_api_key = click.prompt("New API key", hide_input=True)
-    elif api_key:
-        new_api_key = api_key
-    elif existing.api_key is not None:
-        new_api_key = existing.api_key.get_secret_value()
+    new_password = _resolve_secret(password, existing.password)
+    new_api_key = _resolve_secret(api_key, existing.api_key)
 
     if not new_password and not new_api_key:
         click.secho("✗ Profile must have either a password or an api_key.", fg="red")
@@ -334,8 +338,10 @@ def cmd_edit_profile(
             if not click.confirm("Save changes anyway?"):
                 return
 
+    effective_name = new_name if new_name and new_name != name else name
+
     updated_profile = OdooProfile(
-        name=name,
+        name=effective_name,
         url=new_url,
         database=new_database,
         user=new_user,
@@ -343,7 +349,12 @@ def cmd_edit_profile(
         api_key=new_api_key if new_api_key else None,
     )
     add_profile(updated_profile, set_default=False)
-    click.secho(f"✓ Profile '{name}' updated successfully!", fg="green")
+
+    # When renaming, remove the old profile key
+    if effective_name != name:
+        remove_profile(name)
+
+    click.secho(f"✓ Profile '{effective_name}' updated successfully!", fg="green")
 
 
 @main.command("test")

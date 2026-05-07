@@ -204,6 +204,33 @@ def remove_profile(name: str) -> bool:
     return True
 
 
+def rename_profile(old_name: str, new_name: str) -> tuple[bool, str]:
+    """Rename a profile.
+
+    Args:
+        old_name: Current profile name
+        new_name: Desired new name
+
+    Returns:
+        Tuple of (success, message)
+    """
+    config = load_profiles()
+
+    if old_name not in config.profiles:
+        return False, f"Profile '{old_name}' not found."
+
+    if new_name in config.profiles:
+        return False, f"Profile '{new_name}' already exists."
+
+    config.profiles[new_name] = config.profiles.pop(old_name)
+
+    if config.default_profile == old_name:
+        config.default_profile = new_name
+
+    save_profiles(config)
+    return True, f"Profile '{old_name}' renamed to '{new_name}'."
+
+
 def list_profiles() -> list[dict]:
     """List all configured profiles.
 

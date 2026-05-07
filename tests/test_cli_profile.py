@@ -166,6 +166,30 @@ def test_cli_edit_profile_not_found(mock_get):
     assert "not found" in result.output.lower()
 
 
+@patch("odoo_mcp_multi.cli.remove_profile")
+@patch("odoo_mcp_multi.cli.add_profile")
+@patch("odoo_mcp_multi.cli.get_profile")
+def test_cli_edit_profile_rename(mock_get, mock_add, mock_remove):
+    """--new-name renames the profile after saving field updates."""
+    existing = MagicMock()
+    existing.url = "https://odoo.example.com"
+    existing.database = "db"
+    existing.user = "admin"
+    existing.password.get_secret_value.return_value = "secret"
+    existing.api_key = None
+    mock_get.return_value = existing
+    mock_remove.return_value = True
+
+    result = runner.invoke(main, ["edit-profile", "old-name", "--new-name", "new-name"])
+    assert result.exit_code == 0, result.output
+    assert "new-name" in result.output
+    # Profile saved under the new name
+    saved = mock_add.call_args[0][0]
+    assert saved.name == "new-name"
+    # Old key removed
+    mock_remove.assert_called_once_with("old-name")
+
+
 # ---------------------------------------------------------------------------
 # test command (connection test)
 # ---------------------------------------------------------------------------
