@@ -363,45 +363,57 @@ def cmd_test(profile: str) -> None:
     """Test connection to an Odoo instance."""
     odoo_profile = get_profile(profile)
 
+    if odoo_profile is None and profile:
+        click.secho(f"{CROSS} Profile '{profile}' not found.", fg="red")
+        sys.exit(1)
+
     if odoo_profile is None:
-        if profile:
-            click.secho(f"{CROSS} Profile '{profile}' not found.", fg="red")
-        else:
-            click.secho(f"{CROSS} No default profile configured. Use 'odoo-mcp add-profile' first.", fg="red")
+        click.secho(f"{CROSS} No default profile configured. Use 'odoo-mcp add-profile' first.", fg="red")
         sys.exit(1)
 
     click.echo(f"Testing connection to {odoo_profile.url}...")
 
     try:
-        # api_key-only profiles (Odoo 19+ JSON-2): test with /web/version, no UID
-        if odoo_profile.api_key and not odoo_profile.password:
-            from odoo_mcp_multi.parsers import normalize_url
-            from odoo_mcp_multi.version import get_server_version
-
-            info = get_server_version(normalize_url(odoo_profile.url))
-            if info is None:
-                raise OdooConnectionError("Could not reach server (no version info)")
-            ver = info.get("server_version", info.get("version", "unknown"))
-            click.secho(f"{TICK} Server reachable! Odoo {ver} [auth: api_key / JSON-2]", fg="green")
-            click.echo("  Protocol: json2s")
-        else:
-            result = op_test_connection(
-                url=odoo_profile.url,
-                database=odoo_profile.database,
-                user=odoo_profile.user,
-                password=odoo_profile.password,
-                protocol=odoo_profile.protocol,
-            )
-            if result.get("success") is False:
-                click.secho(f"{CROSS} Connection test failed: {result['error']}", fg="red")
-                sys.exit(1)
-            click.secho(f"{TICK} Connection successful! Authenticated as UID {result['uid']}", fg="green")
-            click.echo(f"  Server version: {result['server_version']}")
-            click.echo(f"  Protocol: {result['protocol']}")
-
+        _test_profile_connection(odoo_profile)
     except OdooConnectionError as e:
         click.secho(f"{CROSS} Connection failed: {e}", fg="red")
         sys.exit(1)
+
+
+def _test_profile_connection(odoo_profile) -> None:
+    """Run the appropriate connectivity test based on the profile's auth mode.
+
+    Extracted to keep cmd_test focused on CLI concerns (exit codes, messages)
+    while this helper owns the protocol branching.
+    """
+    # api_key-only profiles (Odoo 19+ JSON-2): no UID, just version probe
+    if odoo_profile.api_key and not odoo_profile.password:
+        from odoo_mcp_multi.parsers import normalize_url
+        from odoo_mcp_multi.version import get_server_version
+
+        info = get_server_version(normalize_url(odoo_profile.url))
+        if info is None:
+            raise OdooConnectionError("Could not reach server (no version info)")
+        ver = info.get("server_version", info.get("version", "unknown"))
+        click.secho(f"{TICK} Server reachable! Odoo {ver} [auth: api_key / JSON-2]", fg="green")
+        click.echo("  Protocol: json2s")
+        return
+
+    # Legacy password auth — full authenticate round-trip
+    result = op_test_connection(
+        url=odoo_profile.url,
+        database=odoo_profile.database,
+        user=odoo_profile.user,
+        password=odoo_profile.password,
+        protocol=odoo_profile.protocol,
+    )
+    if result.get("success") is False:
+        click.secho(f"{CROSS} Connection test failed: {result['error']}", fg="red")
+        sys.exit(1)
+
+    click.secho(f"{TICK} Connection successful! Authenticated as UID {result['uid']}", fg="green")
+    click.echo(f"  Server version: {result['server_version']}")
+    click.echo(f"  Protocol: {result['protocol']}")
 
 
 @main.command("run")

@@ -393,3 +393,126 @@ def test_cli_add_profile_v19_auto_migrates_password_to_api_key(mock_version, moc
     assert saved.api_key is not None
     assert saved.api_key.get_secret_value() == "my_api_key_value"
     assert saved.password is None
+
+
+# ---------------------------------------------------------------------------
+# test command — explicit profile not found
+# ---------------------------------------------------------------------------
+
+
+@patch("odoo_mcp_multi.cli.get_profile")
+def test_cli_test_command_explicit_profile_not_found(mock_get_profile):
+    """When the user passes -p <name> and it doesn't exist, exit 1 with 'not found'."""
+    mock_get_profile.return_value = None
+    result = runner.invoke(main, ["test", "-p", "nonexistent"])
+    assert result.exit_code == 1
+    assert "not found" in result.output.lower()
+
+
+@patch("odoo_mcp_multi.cli.op_test_connection")
+@patch("odoo_mcp_multi.cli.get_profile")
+def test_cli_test_command_connection_test_returns_error_dict(mock_get_profile, mock_test_conn):
+    """When op_test_connection returns {success: False}, exit 1 with the error message."""
+    profile = MagicMock()
+    profile.url = "https://odoo.example.com"
+    profile.database = "db"
+    profile.user = "admin"
+    profile.password = MagicMock()
+    profile.api_key = None
+    profile.protocol = "auto"
+    mock_get_profile.return_value = profile
+
+    mock_test_conn.return_value = {"success": False, "error": "Authentication failed for user 'admin'"}
+
+    result = runner.invoke(main, ["test"])
+    assert result.exit_code == 1
+    assert "Authentication failed" in result.output
+
+
+# ---------------------------------------------------------------------------
+# run command
+# ---------------------------------------------------------------------------
+
+
+@patch("odoo_mcp_multi.cli.get_profile")
+def test_cli_run_explicit_profile_not_found(mock_get_profile):
+    """When -p <name> is given but doesn't exist, exit 1."""
+    mock_get_profile.return_value = None
+    result = runner.invoke(main, ["run", "-p", "nonexistent"])
+    assert result.exit_code == 1
+    assert "not found" in result.output.lower()
+
+
+@patch("odoo_mcp_multi.server.run_server")
+@patch("odoo_mcp_multi.server.set_profile")
+@patch("odoo_mcp_multi.cli.get_profile")
+def test_cli_run_with_profile(mock_get_profile, mock_set_profile, mock_run_server):
+    """When a profile is found, set_profile is called and run_server starts."""
+    profile = MagicMock()
+    profile.name = "prod"
+    profile.url = "https://odoo.example.com"
+    profile.database = "db"
+    profile.user = "admin"
+    mock_get_profile.return_value = profile
+
+    result = runner.invoke(main, ["run", "-p", "prod"])
+    assert result.exit_code == 0
+    mock_set_profile.assert_called_once_with(profile)
+    mock_run_server.assert_called_once()
+
+
+@patch("odoo_mcp_multi.server.run_server")
+@patch("odoo_mcp_multi.cli.get_profile")
+def test_cli_run_without_profile(mock_get_profile, mock_run_server):
+    """When no profile found and none requested, start without fallback."""
+    mock_get_profile.return_value = None
+
+    result = runner.invoke(main, ["run"])
+    assert result.exit_code == 0
+    assert "without a fallback profile" in result.output
+    mock_run_server.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# skills install — edge cases
+# ---------------------------------------------------------------------------
+
+
+def test_cli_skills_install_unknown_agent():
+    """Passing an unknown agent name to skills install should fail."""
+    result = runner.invoke(main, ["skills", "install", "unknown_agent"])
+    assert result.exit_code != 0
+    # Click itself will report the invalid choice
+    assert "invalid" in result.output.lower() or "error" in result.output.lower()
+
+
+@patch("odoo_mcp_multi.cli.Path")
+def test_cli_skills_install_no_skills_dir(mock_path_cls):
+    """When the skills directory doesn't exist, exit 1."""
+    # Make the Path(__file__).parent / "skills" not exist
+    mock_skills_dir = MagicMock()
+    mock_skills_dir.exists.return_value = False
+
+    mock_file_parent = MagicMock()
+    mock_file_parent.__truediv__ = MagicMock(return_value=mock_skills_dir)
+
+    # Path(__file__) returns something whose .parent gives our mock
+    mock_path_instance = MagicMock()
+    mock_path_instance.parent = mock_file_parent
+    mock_path_cls.return_value = mock_path_instance
+
+    # Target dir
+    mock_target = MagicMock()
+    mock_target.expanduser.return_value = mock_target
+    mock_path_cls.side_effect = lambda x: mock_target if x.startswith("~") else mock_path_instance
+
+    result = runner.invoke(main, ["skills", "install", "gemini"])
+    assert result.exit_code == 1
+
+
+@patch("pathlib.Path.symlink_to", side_effect=OSError("Permission denied"))
+def test_cli_skills_install_symlink_failure(mock_symlink):
+    """When symlink creation fails, report error and exit 1."""
+    result = runner.invoke(main, ["skills", "install", "antigravity", "--force"])
+    assert result.exit_code == 1
+    assert "failed" in result.output.lower() or "error" in result.output.lower()
