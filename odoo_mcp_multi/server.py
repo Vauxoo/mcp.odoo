@@ -115,6 +115,7 @@ def search_read(
     limit: int = 100,
     offset: int = 0,
     order: str = "",
+    format: str = "json",
     profile: Optional[str] = None,
 ) -> str:
     """Search and read records from an Odoo model.
@@ -126,15 +127,22 @@ def search_read(
         limit: Maximum number of records to return (default: 100)
         offset: Number of records to skip (default: 0)
         order: Sort order (e.g., "name asc, id desc")
+        format: Response data format. Choose based on your needs:
+            - 'json' (default): Full dict-of-dicts. Best when you need to parse/process values programmatically.
+            - 'compact': Array-of-arrays with headers. Same data, ~60% smaller. Best for exploring large datasets.
+            - 'table': Markdown table. Values truncated at 50 chars. Best for showing summaries to the user.
+            - 'html': HTML table. Full data, no truncation. Best for pasting into Odoo chatter/Knowledge/reports.
+            - 'csv': RFC 4180 CSV. Most token-efficient. Best for spreadsheet export or feeding back to import-records.
         profile: Optional name of the Odoo profile to connect to. If not provided, uses the default profile.
 
     Returns:
-        JSON with a pagination envelope: records, total, limit, offset, has_more, next_offset
+        JSON with pagination envelope (total, limit, offset, has_more, next_offset, format).
+        Data key varies by format: 'records' (json), 'headers'+'rows' (compact), 'data' (table/html).
     """
     denied = _check_permission("search_read", profile)
     if denied:
         return denied
-    return _json(op_search_read(model, domain, fields, limit, offset, order, profile))
+    return _json(op_search_read(model, domain, fields, limit, offset, order, format, profile))
 
 
 @mcp.tool()

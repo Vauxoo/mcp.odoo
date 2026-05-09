@@ -74,9 +74,24 @@ list_available_profiles()
 | `limit` | int | `100` | Max records to return |
 | `offset` | int | `0` | Records to skip (pagination) |
 | `order` | string | `""` | Sort order (e.g., `name asc`) |
+| `format` | string | `json` | Response format (see below) |
 | `profile` | string | *(default)* | Target profile name |
 
-Returns a **pagination envelope**:
+#### Response formats
+
+Choose the format based on what you need to do with the data:
+
+| Format | Data key | Token cost | Data loss | Best for |
+|--------|----------|-----------|-----------|----------|
+| `json` | `records` | High (baseline) | None | Parsing/processing values programmatically |
+| `compact` | `headers` + `rows` | ~40% of json | None | Exploring large datasets efficiently |
+| `table` | `data` (Markdown) | ~40% of json | Truncates >50 chars | Showing summaries to the user in chat |
+| `html` | `data` (HTML) | ~50% of json | None | Pasting into Odoo chatter/Knowledge/reports |
+| `csv` | `data` (CSV) | ~30% of json | None | Spreadsheet export or feeding back to `import_records` |
+
+All formats include the same **pagination envelope** (`total`, `limit`, `offset`, `has_more`, `next_offset`, `format`).
+
+**Default (json):**
 
 ```json
 {
@@ -85,14 +100,40 @@ Returns a **pagination envelope**:
   "limit": 100,
   "offset": 0,
   "has_more": true,
-  "next_offset": 100
+  "next_offset": 100,
+  "format": "json"
+}
+```
+
+**compact:**
+
+```json
+{
+  "headers": ["id", "name"],
+  "rows": [[1, "Alice"], [2, "Bob"]],
+  "total": 1500,
+  "has_more": true,
+  "format": "compact"
 }
 ```
 
 > **Important:** Always check `has_more` — if `true`, use `next_offset` to fetch the next page.
 
 ```python
+# Default JSON format
 search_read(model="res.partner", domain="[('is_company', '=', True)]", fields="name,email", limit=10, profile="prod")
+
+# Compact format for large datasets
+search_read(model="res.partner", fields="name,email,phone", limit=500, format="compact")
+
+# Markdown table for user-facing summaries
+search_read(model="sale.order", fields="name,partner_id,amount_total,state", format="table")
+
+# HTML for pasting into Odoo
+search_read(model="res.partner", fields="name,email", format="html")
+
+# CSV for spreadsheet export
+search_read(model="res.partner", fields="name,email,phone", format="csv")
 ```
 
 #### Pagination pattern

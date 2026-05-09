@@ -73,9 +73,242 @@ def test_op_search_read_empty_fields(mock_get_client):
     assert result["records"] == []
     assert result["total"] == 0
     assert result["has_more"] is False
+    assert result["format"] == "json"
     mock_client.search_read.assert_called_once_with(
         model="res.partner", domain=[], fields=None, limit=100, offset=0, order=None
     )
+
+
+# ---------------------------------------------------------------------------
+# search_read format parameter
+# ---------------------------------------------------------------------------
+
+SAMPLE_RECORDS = [
+    {"id": 1, "name": "Alice", "email": "alice@example.com"},
+    {"id": 2, "name": "Bob", "email": "bob@example.com"},
+]
+
+
+@patch("odoo_mcp_multi.operations._get_client")
+def test_op_search_read_format_json_default(mock_get_client):
+    """Default format=json returns records as list-of-dicts (backward compat)."""
+    mock_client = MagicMock()
+    mock_get_client.return_value = mock_client
+    mock_client.search_read.return_value = SAMPLE_RECORDS
+    mock_client.execute_kw.return_value = 2
+
+    result = op_search_read(model="res.partner", fields="id,name,email", profile="test")
+
+    assert "records" in result
+    assert result["records"] == SAMPLE_RECORDS
+    assert result["format"] == "json"
+    assert result["total"] == 2
+
+
+@patch("odoo_mcp_multi.operations._get_client")
+def test_op_search_read_format_compact(mock_get_client):
+    """compact format returns headers + rows array-of-arrays."""
+    mock_client = MagicMock()
+    mock_get_client.return_value = mock_client
+    mock_client.search_read.return_value = SAMPLE_RECORDS
+    mock_client.execute_kw.return_value = 2
+
+    result = op_search_read(model="res.partner", fields="id,name,email", format="compact", profile="test")
+
+    assert result["format"] == "compact"
+    assert result["headers"] == ["id", "name", "email"]
+    assert result["rows"] == [[1, "Alice", "alice@example.com"], [2, "Bob", "bob@example.com"]]
+    assert "records" not in result
+    assert result["total"] == 2
+
+
+@patch("odoo_mcp_multi.operations._get_client")
+def test_op_search_read_format_table(mock_get_client):
+    """table format returns Markdown table string in 'data' key."""
+    mock_client = MagicMock()
+    mock_get_client.return_value = mock_client
+    mock_client.search_read.return_value = SAMPLE_RECORDS
+    mock_client.execute_kw.return_value = 2
+
+    result = op_search_read(model="res.partner", fields="id,name,email", format="table", profile="test")
+
+    assert result["format"] == "table"
+    assert "data" in result
+    assert "records" not in result
+    lines = result["data"].split("\n")
+    assert "| id | name | email |" in lines[0]
+    assert "| --- | --- | --- |" in lines[1]
+    assert "Alice" in lines[2]
+    assert "Bob" in lines[3]
+
+
+@patch("odoo_mcp_multi.operations._get_client")
+def test_op_search_read_format_html(mock_get_client):
+    """html format returns HTML table string in 'data' key."""
+    mock_client = MagicMock()
+    mock_get_client.return_value = mock_client
+    mock_client.search_read.return_value = SAMPLE_RECORDS
+    mock_client.execute_kw.return_value = 2
+
+    result = op_search_read(model="res.partner", fields="id,name,email", format="html", profile="test")
+
+    assert result["format"] == "html"
+    assert "data" in result
+    assert "<table>" in result["data"]
+    assert "<th>name</th>" in result["data"]
+    assert "<td>Alice</td>" in result["data"]
+    assert "</table>" in result["data"]
+
+
+@patch("odoo_mcp_multi.operations._get_client")
+def test_op_search_read_format_csv(mock_get_client):
+    """csv format returns RFC 4180 CSV string in 'data' key."""
+    mock_client = MagicMock()
+    mock_get_client.return_value = mock_client
+    mock_client.search_read.return_value = SAMPLE_RECORDS
+    mock_client.execute_kw.return_value = 2
+
+    result = op_search_read(model="res.partner", fields="id,name,email", format="csv", profile="test")
+
+    assert result["format"] == "csv"
+    assert "data" in result
+    assert "records" not in result
+    lines = result["data"].split("\n")
+    assert lines[0] == "id,name,email"
+    assert lines[1] == "1,Alice,alice@example.com"
+    assert lines[2] == "2,Bob,bob@example.com"
+
+
+def test_op_search_read_format_invalid():
+    """Invalid format returns error without hitting RPC."""
+    result = op_search_read(model="res.partner", format="yaml", profile="test")
+    assert result["success"] is False
+    assert "Invalid format" in result["error"]
+    assert "yaml" in result["error"]
+
+
+# ---------------------------------------------------------------------------
+# Formatter unit tests (pure functions, no RPC)
+# ---------------------------------------------------------------------------
+
+
+def test_format_compact_empty():
+    from odoo_mcp_multi.operations import _format_compact
+
+    result = _format_compact([])
+    assert result == {"headers": [], "rows": []}
+
+
+def test_format_compact_preserves_all_data():
+    from odoo_mcp_multi.operations import _format_compact
+
+    records = [{"id": 1, "val": False}, {"id": 2, "val": None}]
+    result = _format_compact(records)
+    assert result["headers"] == ["id", "val"]
+    # False and None preserved as-is — no string coercion
+    assert result["rows"] == [[1, False], [2, None]]
+
+
+def test_format_table_empty():
+    from odoo_mcp_multi.operations import _format_table
+
+    assert _format_table([]) == ""
+
+
+def test_format_table_truncation():
+    """Values longer than TABLE_TRUNCATE_LEN are truncated with ellipsis."""
+    from odoo_mcp_multi.operations import _format_table
+
+    long_val = "A" * 100
+    records = [{"field": long_val}]
+    table = _format_table(records)
+
+    data_line = table.split("\n")[2]
+    # Value should be truncated to TABLE_TRUNCATE_LEN - 3 + "..."
+    assert "..." in data_line
+    assert "A" * 100 not in data_line
+    assert len(data_line) < len(long_val) + 10
+
+
+def test_format_table_pipe_escape():
+    """Pipe characters in values are escaped to preserve table structure."""
+    from odoo_mcp_multi.operations import _format_table
+
+    records = [{"name": "foo|bar"}]
+    table = _format_table(records)
+    data_line = table.split("\n")[2]
+    # The pipe should be escaped
+    assert "foo\\|bar" in data_line
+
+
+def test_format_table_false_values():
+    """Odoo False values render as empty strings in table format."""
+    from odoo_mcp_multi.operations import _format_table
+
+    records = [{"name": "Alice", "country": False}]
+    table = _format_table(records)
+    data_line = table.split("\n")[2]
+    assert "Alice" in data_line
+    # False should not appear as literal "False"
+    assert "False" not in data_line
+
+
+def test_format_html_empty():
+    from odoo_mcp_multi.operations import _format_html
+
+    assert _format_html([]) == "<table></table>"
+
+
+def test_format_html_false_values():
+    """Odoo False values render as empty strings in HTML format."""
+    from odoo_mcp_multi.operations import _format_html
+
+    records = [{"name": "Alice", "phone": False}]
+    html = _format_html(records)
+    assert "<td>Alice</td>" in html
+    assert "<td></td>" in html
+    assert "False" not in html
+
+
+def test_format_csv_empty():
+    from odoo_mcp_multi.operations import _format_csv
+
+    assert _format_csv([]) == ""
+
+
+def test_format_csv_quoting():
+    """Values containing commas or quotes are properly escaped per RFC 4180."""
+    from odoo_mcp_multi.operations import _format_csv
+
+    records = [{"name": 'Alice "Bob"', "note": "a,b,c"}]
+    csv_str = _format_csv(records)
+    lines = csv_str.split("\n")
+    assert lines[0] == "name,note"
+    # csv module wraps in double-quotes and escapes internal quotes
+    assert '"Alice ""Bob"""' in lines[1]
+    assert '"a,b,c"' in lines[1]
+
+
+def test_format_csv_false_values():
+    """Odoo False values render as empty strings in CSV format."""
+    from odoo_mcp_multi.operations import _format_csv
+
+    records = [{"name": "Alice", "phone": False}]
+    csv_str = _format_csv(records)
+    lines = csv_str.split("\n")
+    assert lines[1] == "Alice,"
+    assert "False" not in csv_str
+
+
+def test_cell_str_edge_cases():
+    from odoo_mcp_multi.operations import _cell_str
+
+    assert _cell_str(False) == ""
+    assert _cell_str(None) == ""
+    assert _cell_str(0) == "0"
+    assert _cell_str("") == ""
+    assert _cell_str(42) == "42"
+    assert _cell_str([1, 2]) == "[1, 2]"
 
 
 # ---------------------------------------------------------------------------

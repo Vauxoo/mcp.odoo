@@ -465,10 +465,18 @@ def cmd_run(profile: str) -> None:
 @click.option("--limit", "-l", default=100, type=int, help="Maximum number of records (default: 100)")
 @click.option("--offset", default=0, type=int, help="Number of records to skip (default: 0)")
 @click.option("--order", default="", help="Sort order (e.g., 'name asc, id desc')")
+@click.option(
+    "--format",
+    "-F",
+    "fmt",
+    default="json",
+    type=click.Choice(["json", "compact", "table", "html", "csv"], case_sensitive=False),
+    help="Output format: json (default), compact, table, html, or csv",
+)
 @click.option("--profile", "-p", default=None, help="Profile name to use")
-def cmd_search_read(model, domain, fields, limit, offset, order, profile) -> None:
+def cmd_search_read(model, domain, fields, limit, offset, order, fmt, profile) -> None:
     """Search and read records from an Odoo model."""
-    _output(op_search_read(model, domain, fields, limit, offset, order, profile))
+    _output(op_search_read(model, domain, fields, limit, offset, order, fmt, profile))
 
 
 @main.command("write")

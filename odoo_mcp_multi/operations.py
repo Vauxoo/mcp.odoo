@@ -9,6 +9,8 @@ agent consumption.
 
 from __future__ import annotations
 
+import csv
+import io
 from time import time
 from typing import Any, Optional
 
@@ -16,6 +18,11 @@ from odoo_mcp_multi.client import create_client
 from odoo_mcp_multi.config import list_profiles, resolve_profile
 from odoo_mcp_multi.parsers import normalize_url, parse_domain, parse_fields, parse_ids, parse_json_arg
 from odoo_mcp_multi.version import get_server_version
+
+VALID_FORMATS = frozenset({"json", "compact", "table", "html", "csv"})
+
+# Markdown table truncation threshold — balances readability with data fidelity.
+TABLE_TRUNCATE_LEN = 50
 
 # MCP server sets this at startup via set_fallback_profile()
 _fallback_profile: Optional[Any] = None
@@ -151,6 +158,96 @@ def op_list_profiles() -> list[dict]:
     ]
 
 
+def _format_compact(records: list[dict]) -> dict:
+    """Convert list-of-dicts to headers + rows array-of-arrays.
+
+    Preserves all data without truncation. Eliminates per-record key
+    repetition, yielding ~60% context reduction for typical payloads.
+    """
+    if not records:
+        return {"headers": [], "rows": []}
+    headers = list(records[0].keys())
+    rows = [[rec.get(h) for h in headers] for rec in records]
+    return {"headers": headers, "rows": rows}
+
+
+def _cell_str(val: Any) -> str:
+    """Convert a single value to a safe table cell string.
+
+    False is Odoo's convention for empty relational fields — rendered
+    as empty string for readability.
+    """
+    if val is False or val is None:
+        return ""
+    return str(val)
+
+
+def _format_table(records: list[dict]) -> str:
+    """Render records as a Markdown table.
+
+    Long values are truncated at TABLE_TRUNCATE_LEN chars to keep tables
+    scannable. Use json format for full-fidelity data.
+    """
+    if not records:
+        return ""
+    headers = list(records[0].keys())
+    lines = ["| " + " | ".join(str(h) for h in headers) + " |"]
+    lines.append("| " + " | ".join("---" for _ in headers) + " |")
+    for rec in records:
+        cells = []
+        for h in headers:
+            s = _cell_str(rec.get(h, ""))
+            if len(s) > TABLE_TRUNCATE_LEN:
+                s = s[: TABLE_TRUNCATE_LEN - 3] + "..."
+            # Pipe chars in values break Markdown table syntax
+            s = s.replace("|", "\\|")
+            cells.append(s)
+        lines.append("| " + " | ".join(cells) + " |")
+    return "\n".join(lines)
+
+
+def _format_html(records: list[dict]) -> str:
+    """Render records as an HTML table.
+
+    Useful for pasting into Odoo chatter, Knowledge articles, or reports
+    that accept raw HTML. No truncation — full data preserved.
+    """
+    if not records:
+        return "<table></table>"
+    headers = list(records[0].keys())
+    parts = ["<table>", "<thead><tr>"]
+    for h in headers:
+        parts.append(f"<th>{h}</th>")
+    parts.append("</tr></thead>")
+    parts.append("<tbody>")
+    for rec in records:
+        parts.append("<tr>")
+        for h in headers:
+            val = _cell_str(rec.get(h, ""))
+            parts.append(f"<td>{val}</td>")
+        parts.append("</tr>")
+    parts.append("</tbody></table>")
+    return "".join(parts)
+
+
+def _format_csv(records: list[dict]) -> str:
+    """Render records as RFC 4180 CSV.
+
+    Most token-efficient format — no structural overhead beyond delimiters.
+    Values are properly quoted/escaped via Python's csv module. Directly
+    importable into spreadsheets or back into odoo-mcp import-records.
+    """
+    if not records:
+        return ""
+    headers = list(records[0].keys())
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(headers)
+    for rec in records:
+        writer.writerow([_cell_str(rec.get(h, "")) for h in headers])
+    return buf.getvalue().rstrip("\r\n").replace("\r\n", "\n")
+
+
 def op_search_read(
     model: str,
     domain: str = "[]",
@@ -158,6 +255,7 @@ def op_search_read(
     limit: int = 100,
     offset: int = 0,
     order: str = "",
+    format: str = "json",
     profile: Optional[str] = None,
 ) -> dict:
     """Search and read records from an Odoo model.
@@ -169,12 +267,24 @@ def op_search_read(
         limit: Maximum number of records
         offset: Number of records to skip
         order: Sort order
+        format: Response format — 'json' (default), 'compact', 'table', 'html', or 'csv'.
+            json: Full dict-of-dicts (default, backward compatible).
+            compact: Array-of-arrays with headers — same data, ~60% smaller.
+            table: Markdown table — truncated values, good for chat summaries.
+            html: HTML table — full data, ready to paste into Odoo.
+            csv: RFC 4180 CSV — most token-efficient, directly importable.
         profile: Profile name to use
 
     Returns:
-        Dict with records, total, limit, offset, has_more, next_offset,
+        Dict with records/data, total, limit, offset, has_more, next_offset,
         or an error dict with success=False for agent consumption.
     """
+    if format not in VALID_FORMATS:
+        return {
+            "success": False,
+            "error": f"Invalid format '{format}'. Valid formats: {sorted(VALID_FORMATS)}",
+        }
+
     try:
         client = _get_client(profile)
         parsed_domain = parse_domain(domain)
@@ -193,14 +303,24 @@ def op_search_read(
     except Exception as exc:
         return {"success": False, "error": f"search_read on '{model}' failed: {exc}"}
 
-    return {
-        "records": records,
+    envelope = {
         "total": total,
         "limit": limit,
         "offset": offset,
         "has_more": (offset + limit) < total,
         "next_offset": offset + limit,
+        "format": format,
     }
+
+    if format == "compact":
+        return {**_format_compact(records), **envelope}
+    if format == "table":
+        return {"data": _format_table(records), **envelope}
+    if format == "html":
+        return {"data": _format_html(records), **envelope}
+    if format == "csv":
+        return {"data": _format_csv(records), **envelope}
+    return {"records": records, **envelope}
 
 
 def op_write(

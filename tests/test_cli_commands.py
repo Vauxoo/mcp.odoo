@@ -65,7 +65,21 @@ def test_cli_search_read_with_options(mock_op):
     )
 
     assert result.exit_code == 0
-    mock_op.assert_called_once_with("res.partner", "[('active','=',True)]", "name", 10, 5, "name asc", "prod")
+    mock_op.assert_called_once_with("res.partner", "[('active','=',True)]", "name", 10, 5, "name asc", "json", "prod")
+
+
+@patch("odoo_mcp_multi.cli.op_search_read")
+def test_cli_search_read_format_flag(mock_op):
+    """--format flag is passed through to op_search_read."""
+    mock_op.return_value = {"data": "| id |\n| --- |\n| 1 |", "total": 1, "format": "table"}
+
+    result = runner.invoke(
+        main,
+        ["search-read", "--model", "res.partner", "--format", "compact", "--profile", "dev"],
+    )
+
+    assert result.exit_code == 0
+    mock_op.assert_called_once_with("res.partner", "[]", "", 100, 0, "", "compact", "dev")
 
 
 @patch("odoo_mcp_multi.cli.op_search_read", return_value={"success": False, "error": "No Odoo profile configured."})
@@ -253,6 +267,11 @@ def test_cli_search_read_help():
     assert result.exit_code == 0
     assert "--model" in result.output
     assert "--domain" in result.output
+    assert "--format" in result.output
+    assert "compact" in result.output
+    assert "table" in result.output
+    assert "html" in result.output
+    assert "csv" in result.output
 
 
 # ---------------------------------------------------------------------------

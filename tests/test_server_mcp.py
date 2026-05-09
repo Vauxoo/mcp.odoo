@@ -86,7 +86,7 @@ async def test_search_read_defaults(mock_op):
     result = await mcp.call_tool("search_read", {"model": "res.partner"})
     data = _json_data(result)
     assert data["records"] == []
-    mock_op.assert_called_once_with("res.partner", "[]", "", 100, 0, "", None)
+    mock_op.assert_called_once_with("res.partner", "[]", "", 100, 0, "", "json", None)
 
 
 @pytest.mark.asyncio
@@ -94,7 +94,19 @@ async def test_search_read_defaults(mock_op):
 async def test_search_read_with_profile(mock_op):
     mock_op.return_value = {"records": [{"id": 1}], "total": 1, "has_more": False}
     await mcp.call_tool("search_read", {"model": "res.partner", "profile": "staging"})
-    mock_op.assert_called_once_with("res.partner", "[]", "", 100, 0, "", "staging")
+    mock_op.assert_called_once_with("res.partner", "[]", "", 100, 0, "", "json", "staging")
+
+
+@pytest.mark.asyncio
+@patch("odoo_mcp_multi.server.op_search_read")
+async def test_search_read_format_pass_through(mock_op):
+    """format parameter is passed through to the operation."""
+    mock_op.return_value = {"headers": ["id"], "rows": [[1]], "total": 1, "has_more": False, "format": "compact"}
+    result = await mcp.call_tool("search_read", {"model": "res.partner", "format": "compact"})
+    data = _json_data(result)
+    assert data["format"] == "compact"
+    assert data["headers"] == ["id"]
+    mock_op.assert_called_once_with("res.partner", "[]", "", 100, 0, "", "compact", None)
 
 
 @pytest.mark.asyncio
