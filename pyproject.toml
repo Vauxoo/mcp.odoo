@@ -48,6 +48,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0.0",
+    "pytest-asyncio>=0.23.0",
     "pytest-cov>=4.1.0",
     "pytest-httpx>=0.30.0",
     "python-dotenv>=1.0.0",
@@ -106,6 +107,7 @@ replace = "assert __version__ == \"{new_version}\""
 [tool.pytest.ini_options]
 minversion = "7.0"
 addopts = "-ra -q --cov=odoo_mcp_multi --cov-report=term-missing --cov-report=xml --cov-context=test --ignore=tests/integration"
+asyncio_mode = "auto"
 testpaths = [
     "tests",
 ]
