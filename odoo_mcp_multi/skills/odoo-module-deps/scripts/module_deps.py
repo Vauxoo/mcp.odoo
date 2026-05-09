@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 """Module dependency tree analyzer — CLI entry point.
 
-Fetches installed Odoo modules and their dependencies via odoo-mcp,
-builds the dependency graph client-side, and outputs a priority-sorted
-report where leaf modules (no dependents) appear first — useful for
-planning migration order.
+Fetches installed Odoo modules and their dependencies via the `odoo-mcp`
+CLI (subprocess), builds the dependency graph client-side, and outputs a
+priority-sorted report where leaf modules (no dependents) appear first —
+useful for planning migration order.
+
+This script is intentionally self-contained: it uses only the Python stdlib
+and relies on `odoo-mcp` being available in PATH (installed via pipx).
+No imports from `odoo_mcp_multi` are needed.
 
 Usage:
     python module_deps.py --profile vauxoo
@@ -14,12 +18,15 @@ Usage:
 
 from __future__ import annotations
 
+import argparse
+import json
+import subprocess
 import sys
+from pathlib import Path
 
-import click
-
-from odoo_mcp_multi.operations import op_search_read
-from odoo_mcp_multi.skills.module_deps_lib import (
+# Sibling library with pure graph logic (no external dependencies)
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from module_deps_lib import (  # noqa: E402
     DEFAULT_NATIVE_NAMES,
     _build_graph,
     _compute_levels,
@@ -28,89 +35,112 @@ from odoo_mcp_multi.skills.module_deps_lib import (
 )
 
 
+def _run_odoo_mcp(args: list[str]) -> dict:
+    """Run an odoo-mcp CLI command and return parsed JSON output."""
+    cmd = ["odoo-mcp", *args]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        print(f"Error running: {' '.join(cmd)}", file=sys.stderr)
+        print(result.stderr, file=sys.stderr)
+        sys.exit(1)
+    return json.loads(result.stdout)
+
+
 def _fetch_all_pages(model: str, domain: str, fields: str, profile: str) -> list[dict]:
-    """Paginate through all records, handling the envelope automatically."""
+    """Paginate through all records via the odoo-mcp CLI."""
     all_records: list[dict] = []
     offset = 0
     limit = 500
     while True:
-        result = op_search_read(
-            model=model,
-            domain=domain,
-            fields=fields,
-            limit=limit,
-            offset=offset,
-            profile=profile,
+        data = _run_odoo_mcp(
+            [
+                "search-read",
+                "-m",
+                model,
+                "--domain",
+                domain,
+                "--fields",
+                fields,
+                "--limit",
+                str(limit),
+                "--offset",
+                str(offset),
+                "-p",
+                profile,
+            ]
         )
-        if "success" in result and result["success"] is False:
-            click.echo(f"Error: {result['error']}", err=True)
-            sys.exit(1)
-        all_records.extend(result.get("records", []))
-        if not result.get("has_more", False):
+        records = data.get("records", [])
+        all_records.extend(records)
+        if not data.get("has_more", False):
             break
-        offset = result["next_offset"]
+        offset = data["next_offset"]
     return all_records
 
 
-@click.command()
-@click.option("--profile", "-p", required=True, help="Odoo profile to connect to")
-@click.option(
-    "--format",
-    "-F",
-    "fmt",
-    default="csv",
-    type=click.Choice(["csv", "table", "json"], case_sensitive=False),
-    help="Output format (default: csv)",
-)
-@click.option("--include-native", is_flag=True, default=False, help="Include native Odoo modules in the output")
-@click.option(
-    "--extra-native",
-    multiple=True,
-    help="Additional module names to treat as native (repeatable)",
-)
-def main(profile: str, fmt: str, include_native: bool, extra_native: tuple) -> None:
-    """Analyze Odoo module dependency tree for migration planning.
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Analyze Odoo module dependency tree for migration planning.",
+    )
+    parser.add_argument("--profile", "-p", required=True, help="Odoo profile to connect to")
+    parser.add_argument(
+        "--format",
+        "-F",
+        dest="fmt",
+        default="csv",
+        choices=["csv", "table", "json"],
+        help="Output format (default: csv)",
+    )
+    parser.add_argument(
+        "--include-native",
+        action="store_true",
+        default=False,
+        help="Include native Odoo modules in the output",
+    )
+    parser.add_argument(
+        "--extra-native",
+        action="append",
+        default=[],
+        help="Additional module names to treat as native (repeatable)",
+    )
+    args = parser.parse_args()
 
-    Outputs a priority-sorted list where Level 1 = base dependencies,
-    Level N = modules that depend on Level N-1. Migrate lower levels first.
-    """
-    click.echo("Fetching installed modules...", err=True)
+    print("Fetching installed modules...", file=sys.stderr)
     modules = _fetch_all_pages(
         model="ir.module.module",
         domain="[('state', '=', 'installed')]",
         fields="id,name,author",
-        profile=profile,
+        profile=args.profile,
     )
-    click.echo(f"  Found {len(modules)} installed modules", err=True)
+    print(f"  Found {len(modules)} installed modules", file=sys.stderr)
 
-    click.echo("Fetching module dependencies...", err=True)
+    print("Fetching module dependencies...", file=sys.stderr)
     deps = _fetch_all_pages(
         model="ir.module.module.dependency",
         domain="[]",
         fields="module_id,name",
-        profile=profile,
+        profile=args.profile,
     )
-    click.echo(f"  Found {len(deps)} dependency records", err=True)
+    print(f"  Found {len(deps)} dependency records", file=sys.stderr)
 
     # Build graph with ALL modules (including native) to preserve dependency
     # connectivity. Native modules are filtered from the OUTPUT, not the graph.
     downstream = _build_graph(modules, deps)
     levels = _compute_levels(modules, downstream)
 
-    if not include_native:
-        native_names = DEFAULT_NATIVE_NAMES | frozenset(extra_native)
+    if not args.include_native:
+        native_names = DEFAULT_NATIVE_NAMES | frozenset(args.extra_native)
         original_count = sum(len(level) for level in levels)
         levels = [[m for m in level if not _is_native(m, native_names)] for level in levels]
         levels = [level for level in levels if level]
         filtered = original_count - sum(len(level) for level in levels)
-        click.echo(f"  Filtered {filtered} native modules from output", err=True)
+        print(f"  Filtered {filtered} native modules from output", file=sys.stderr)
 
     levels = [level for level in levels if level]
 
     total_modules = sum(len(level) for level in levels)
-    click.echo(f"  Computed {len(levels)} dependency levels for {total_modules} modules", err=True)
+    print(f"  Computed {len(levels)} dependency levels for {total_modules} modules", file=sys.stderr)
 
-    click.echo(_format_output(levels, fmt))
+    print(_format_output(levels, args.fmt))
 
 
 if __name__ == "__main__":

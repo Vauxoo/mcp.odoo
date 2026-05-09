@@ -2,11 +2,25 @@
 
 Tests the pure graph logic (no RPC) — the BFS level computation,
 native module filtering, and output formatters.
+
+The lib file lives alongside the CLI script in the skills directory.
+We add its path to sys.path so tests can import it directly without
+requiring the odoo_mcp_multi package.
 """
 
 import json
+import sys
+from pathlib import Path
 
-from odoo_mcp_multi.skills.module_deps_lib import (
+# The pure graph library lives inside the skill's scripts/ directory,
+# not as a top-level package import. This allows the skill to be fully
+# self-contained and runnable from any Python environment.
+_scripts_dir = str(
+    Path(__file__).resolve().parent.parent / "odoo_mcp_multi" / "skills" / "odoo-module-deps" / "scripts"
+)
+sys.path.insert(0, _scripts_dir)
+
+from module_deps_lib import (  # noqa: E402
     DEFAULT_NATIVE_NAMES,
     _build_graph,
     _compute_levels,
