@@ -10,28 +10,59 @@
 [![pipeline status](https://git.vauxoo.com/nhomar/mcp.odoo/badges/main/pipeline.svg)](https://git.vauxoo.com/nhomar/mcp.odoo/-/pipelines)
 [![coverage](https://git.vauxoo.com/nhomar/mcp.odoo/badges/main/coverage.svg)](https://git.vauxoo.com/nhomar/mcp.odoo/-/commits/main)
 
-The **most tested, documented, and production-ready** MCP server for Odoo.
-Connects any MCP client (Antigravity, Claude Desktop, Cursor, VS Code) to
-**multiple Odoo instances simultaneously** — automatic protocol detection
-(JSON-RPC 8.0+, JSON2 19.0+, XML-RPC legacy), secure credential storage
-(Unix 600 permissions), 60+ tests, and full CLI parity for every MCP tool.
+MCP server and CLI that connects AI clients (Antigravity, Claude Desktop, Cursor,
+VS Code) to one or more Odoo instances. It exposes 11 tools for searching,
+creating, updating, deleting, exporting, and importing records through
+the [Model Context Protocol](https://modelcontextprotocol.io/). No Odoo module
+installation required. Works with Odoo 8.0 through 19.0+.
+
+## What Problem Does This Solve
+
+Other Odoo MCP servers require you to set environment variables for a single
+Odoo instance. When you work with multiple environments (production, staging,
+development, client instances), you must stop the server, change the variables,
+and restart.
+
+`odoo-mcp-multi` solves this with **named profiles** stored in a local config
+file. Each profile holds its own URL, database, and credentials. Any tool call
+or CLI command can target a different profile with a single `--profile` / `-p`
+flag — no server restart, no env var juggling. The server auto-detects which
+RPC protocol to use (XML-RPC for Odoo 8–18, JSON-RPC, or JSON/2 REST for
+Odoo 19+) based on the target instance version.
+
+Every MCP tool is also available as a CLI command with identical logic and
+output format. This means you can script Odoo operations in bash, pipe JSON
+through `jq`, and automate workflows without writing Python.
 
 ## Features
 
-- **Multi-profile management**: Store credentials for multiple environments (`prod`, `staging`, `dev`).
-- **Secure by default**: Credentials safely stored in `~/.config/odoo-mcp/` (`600` permissions).
-- **Multi-protocol Support**: JSON-RPC (8.0+), JSON2 (19.0+), XML-RPC (legacy) natively auto-detected.
-- **10 Native MCP tools**: `search_read`, `write`, `create`, `export_records`, `import_records`, `execute_kw`, `list_models`, `list_fields`, `list_available_profiles`, `get_version`.
-- **Full CLI parity**: Every MCP tool is also available as a CLI command — same logic, no duplication (DRY).
-- **Integrated CLI**: Profile management, connection testing, and all Odoo data operations from your terminal.
+- **Multi-profile management** — store credentials for `prod`, `staging`, `dev` (or any name) and switch with `-p`
+- **Auto protocol detection** — XML-RPC (8.0+), JSON-RPC, JSON/2 REST (19.0+) selected automatically per profile
+- **Secure credential storage** — `~/.config/odoo-mcp/profiles.json` with Unix `600` permissions (owner-read-only)
+- **11 MCP tools** — `search_read`, `write`, `unlink`, `create`, `export_records`, `import_records`, `execute_kw`, `list_models`, `list_fields`, `list_available_profiles`, `get_version`
+- **Full CLI parity** — every MCP tool works as a terminal command with JSON output, composable with `jq` and shell scripts
+- **Agentic skills** — ships two installable skill files for AI agents (`odoo-mcp skills install <agent>`)
+- **No Odoo module required** — connects through standard XML-RPC or the native `/json/2` REST API
+
+## How It Differs From Other Odoo MCP Servers
+
+| Capability | `odoo-mcp-multi` | `mcp-odoo` (tuanle96) | `mcp-server-odoo` (ivnvxd) |
+|---|---|---|---|
+| Multiple Odoo instances in one session | Named profiles, switch per-call | One instance per env-var set | One instance per env-var set |
+| Credential storage | Persistent file, `600` perms | Environment variables | Environment variables / `.env` |
+| Protocol detection | Automatic (XML-RPC / JSON-RPC / JSON/2) | Manual `ODOO_TRANSPORT` flag | XML-RPC only (YOLO mode) |
+| Odoo-side module required | No | No | Optional (recommended for prod) |
+| CLI with identical logic | Full parity (all 11 operations) | No CLI | No CLI |
+| Native `export_data` / `load` | `export_records` / `import_records` | No | No |
+| Agentic skills shipped | 2 installable skills | No | No |
+| Odoo 19+ JSON/2 REST support | Automatic with API key | Manual config | No |
+| Package distribution | PyPI (`pip install odoo-mcp-multi`) | PyPI (`pip install odoo-mcp`) | PyPI (`pip install mcp-server-odoo`) |
 
 ## 1-Minute Setup (Copy-Paste Prompts)
 
-Paste the blocks below into your AI client (Antigravity, Claude, Cursor) to get started instantly. They are separated into three logical steps so you can execute what you need.
+Paste the blocks below into your AI client (Antigravity, Claude, Cursor) to get started.
 
 ### 1. Install the Package
-
-Copy and paste this prompt to have your agent install the package automatically:
 
 ```text
 Please install the `odoo-mcp-multi` package. Use the best method for my OS:
@@ -44,8 +75,6 @@ After installing, please run `odoo-mcp add-profile` to configure my credentials 
 ```
 
 ### 2. Configure MCP
-
-Copy and paste this prompt to have your agent add the MCP server configuration:
 
 ```text
 Please configure the `odoo-mcp` server in my MCP client settings.
@@ -60,24 +89,21 @@ Add the following block to my configuration file (e.g. `mcp_config.json` for Ant
   }
 }
 
-Once added, remind me to restart my AI client so I can use the 10 Odoo tools available.
+Once added, remind me to restart my AI client so I can use the 11 Odoo tools available.
 ```
 
 ### 3. Install Agentic Skills
 
-Copy and paste this prompt to have your agent install the built-in Odoo workflow skills:
-
 ```text
 Please install the agentic skills bundled with the `odoo-mcp` package.
-Run the command `odoo-mcp skills install <agent_name>` where `<agent_name>` is your own identity (e.g., `gemini`, `antigravity`, `claude`, `codex`, or `opencode`). 
+Run the command `odoo-mcp skills install <agent_name>` where `<agent_name>` is your own identity (e.g., `gemini`, `antigravity`, `claude`, `codex`, or `opencode`).
 This will automatically symlink the skills into my global skills directory so you can use them in future tasks.
 ```
 
-## Installation & Quick Start
+## Installation
 
-`pipx` is the recommended installer for all platforms — it automatically creates
-an isolated virtual environment per tool and exposes `odoo-mcp` globally,
-with no virtualenv management required.
+`pipx` is the recommended installer for all platforms — it creates an
+isolated virtual environment and exposes `odoo-mcp` globally.
 
 ### macOS
 
@@ -116,7 +142,7 @@ odoo-mcp add-profile
 odoo-mcp run
 ```
 
-> **⚠️ Windows side corners:**
+> **Windows notes:**
 >
 > - **Two terminal restarts required**: `winget install` and `pipx ensurepath` both modify
 >   `PATH`. Each change only takes effect in a new terminal session.
@@ -157,39 +183,57 @@ If you used `pip install` directly instead:
 pip uninstall odoo-mcp-multi
 ```
 
+## Profile Management
+
+Profiles define how `odoo-mcp` connects to each Odoo instance. Each profile
+stores a URL, database name, and authentication credentials (user/password for
+Odoo < 19, or an API key for Odoo 19+).
+
+```bash
+# Interactive wizard (prompts for all fields)
+odoo-mcp add-profile
+
+# Non-interactive — Odoo < 19 (XML-RPC / JSON-RPC, user + password)
+odoo-mcp add-profile --name prod --url https://odoo.example.com \
+  --database mydb --user admin --password secret
+
+# Non-interactive — Odoo 19+ (JSON/2 REST, API key)
+odoo-mcp add-profile --name prod19 --url https://odoo19.example.com \
+  --database mydb --api-key YOUR_API_KEY --protocol json2s
+```
+
+| Command | Description |
+|---------|-------------|
+| `odoo-mcp add-profile` | Register a new Odoo instance |
+| `odoo-mcp list-profiles` | Show all configured profiles |
+| `odoo-mcp edit-profile NAME` | Modify an existing profile |
+| `odoo-mcp remove-profile NAME` | Delete a profile |
+| `odoo-mcp set-default NAME` | Set the default profile |
+| `odoo-mcp test -p NAME` | Test live connection |
+| `odoo-mcp run` | Start the MCP server process |
+
 ## CLI Operations
-
-All operations are available directly from your terminal. Use `odoo-mcp [COMMAND] --help` for specific flags.
-
-### Profile Management
-
-- `odoo-mcp add-profile`: Interactive wizard to register a new instance.
-- `odoo-mcp list-profiles`: Displays all configured profiles.
-- `odoo-mcp edit-profile NAME`: Modify credentials, URLs, or database of an existing profile.
-- `odoo-mcp remove-profile NAME`: Deletes a profile.
-- `odoo-mcp set-default NAME`: Sets the default profile.
-- `odoo-mcp test -p NAME`: Tests live connection to confirm credentials are working.
-- `odoo-mcp run`: **Starts the MCP server process.**
-
-### Odoo Data Operations
 
 All data commands support `--profile / -p` and output JSON for composability.
 
-- `odoo-mcp search-read -m MODEL`: Search and read records (`--domain`, `--fields`, `--limit`, `--offset`, `--order`).
-- `odoo-mcp write -m MODEL -i IDS -v VALUES`: Update existing records.
-- `odoo-mcp create -m MODEL -v VALUES`: Create a new record.
-- `odoo-mcp export-records -m MODEL`: Export via native `export_data` (`--fields`, `--domain`).
-- `odoo-mcp import-records -m MODEL -f FIELDS -r ROWS`: Import via native `load`.
-- `odoo-mcp execute-kw -m MODEL --method METHOD`: Execute any model method (`--args`, `--kwargs`).
-- `odoo-mcp get-version`: Retrieve server version info.
-- `odoo-mcp list-models`: List available models (`--search` to filter).
-- `odoo-mcp list-fields -m MODEL`: List all fields of a model.
+| Command | Description |
+|---------|-------------|
+| `odoo-mcp search-read -m MODEL` | Search and read records (`--domain`, `--fields`, `--limit`, `--offset`, `--order`) |
+| `odoo-mcp write -m MODEL -i IDS -v VALUES` | Update existing records |
+| `odoo-mcp unlink -m MODEL -i IDS` | Delete records |
+| `odoo-mcp create -m MODEL -v VALUES` | Create a new record |
+| `odoo-mcp export-records -m MODEL` | Export via native `export_data` (`--fields`, `--domain`) |
+| `odoo-mcp import-records -m MODEL -f FIELDS -r ROWS` | Import via native `load` |
+| `odoo-mcp execute-kw -m MODEL --method METHOD` | Execute any model method (`--args`, `--kwargs`) |
+| `odoo-mcp get-version` | Retrieve server version info |
+| `odoo-mcp list-models` | List available models (`--search` to filter) |
+| `odoo-mcp list-fields -m MODEL` | List all fields of a model |
 
 ## MCP Client Configuration
 
-The server gracefully handles multiple Odoo instances simultaneously. You only need to declare one server definition in your AI client. You can optionally force a single fallback using `["run", "-p", "prod"]`.
-
-**Global Configuration Block:**
+The server handles multiple Odoo instances simultaneously. You only need to
+declare one server definition in your AI client. To force a single default
+profile, use `["run", "-p", "prod"]`.
 
 ```json
 {
@@ -215,19 +259,24 @@ Add the block above to your client's MCP config file. Paths vary by tool and OS:
 
 ## Available MCP Tools
 
-*All tools accept an optional `profile` string parameter to dynamically select the target Odoo environment.*
+All tools accept an optional `profile` string parameter to select the target
+Odoo environment dynamically.
 
-- `list_available_profiles`: Discovers the local environments available.
-- `search_read`: Queries records from any model based on domains.
-- `write`: Updates values on existing records.
-- `create`: Instantiates new records in a model.
-- `export_records`: Native Odoo `export_data` returning a clean array of dicts (Useful for relational lookup and retrieving XML External IDs `id`).
-- `import_records`: Native Odoo `load` bulk processor. Updates existing records if External IDs are provided, or creates new ones.
-- `execute_kw`: Executes arbitrary backend methods (`action_confirm`, `send`, etc).
-- `list_models` / `list_fields`: Discovers the system's schema architecture.
-- `get_version`: Retrieves server version mapping.
+| Tool | Description |
+|------|-------------|
+| `list_available_profiles` | Discover configured environments |
+| `search_read` | Query records from any model based on domains |
+| `write` | Update values on existing records |
+| `unlink` | Delete records by ID |
+| `create` | Create new records in a model |
+| `export_records` | Native Odoo `export_data` returning dicts with External IDs |
+| `import_records` | Native Odoo `load` bulk processor (upsert by External ID) |
+| `execute_kw` | Execute arbitrary backend methods (`action_confirm`, `send`, etc.) |
+| `list_models` | Discover available models (`search` filter) |
+| `list_fields` | Inspect model schema (field names, types, metadata) |
+| `get_version` | Retrieve server version and protocol info |
 
-## Usage Examples in Claude
+## Usage Examples
 
 > "List all contacts containing 'John' in their name"
 
@@ -235,10 +284,16 @@ Add the block above to your client's MCP config file. Paths vary by tool and OS:
 search_read(model="res.partner", domain="[('name', 'ilike', 'John')]", fields="name,email,phone")
 ```
 
-> "Create a new contact named Alice with email <alice@example.com>"
+> "Create a new contact named Alice with email `alice@example.com`"
 
 ```python
 create(model="res.partner", values='{"name": "Alice", "email": "alice@example.com"}')
+```
+
+> "Delete archived partners"
+
+```python
+unlink(model="res.partner", ids="[10, 11, 12]")
 ```
 
 > "Confirm the sales order with ID 42"
@@ -265,10 +320,11 @@ export_records(model="res.partner", domain="[('active', '=', True)]", fields="id
 import_records(model="res.partner", fields="id,name,phone", rows='[{"id": "base.res_partner_1", "name": "Existing Partner", "phone": "12345"}, {"name": "New Partner", "phone": "67890"}]')
 ```
 
-## Security & Development
+## Security and Development
 
-- Credentials securely written to `~/.config/odoo-mcp/profiles.json` without raw logging.
-- Development mode requires `pip install -e ".[dev]"`. Code standard is heavily enforced by `ruff`.
+- Credentials are written to `~/.config/odoo-mcp/profiles.json` with `600` Unix permissions (owner-read-only). Passwords and API keys use Pydantic `SecretStr` to prevent accidental logging.
+- Development mode: `pip install -e ".[dev]"`. Code quality is enforced by `ruff` (line length 119, mccabe complexity ≤ 15).
+- Tests: `pytest` with `--cov` (200+ tests, 78%+ coverage).
 
 ---
 
