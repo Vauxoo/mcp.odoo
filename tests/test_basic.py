@@ -13,4 +13,4 @@ def test_version():
     """Verify that the package has a version."""
     from odoo_mcp_multi import __version__
 
-    assert __version__ == "0.7.0"
+    assert __version__ == "0.8.0"
