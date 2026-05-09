@@ -11,8 +11,8 @@
 [![coverage](https://git.vauxoo.com/nhomar/mcp.odoo/badges/main/coverage.svg)](https://git.vauxoo.com/nhomar/mcp.odoo/-/commits/main)
 
 MCP server and CLI that connects AI clients (Antigravity, Claude Desktop, Cursor,
-VS Code) to one or more Odoo instances. It exposes 11 tools for searching,
-creating, updating, deleting, exporting, and importing records through
+VS Code) to one or more Odoo instances. It exposes 12 tools for searching,
+counting, creating, updating, deleting, exporting, and importing records through
 the [Model Context Protocol](https://modelcontextprotocol.io/). No Odoo module
 installation required. Works with Odoo 8.0 through 19.0+.
 
@@ -39,7 +39,7 @@ through `jq`, and automate workflows without writing Python.
 - **Multi-profile management** — store credentials for `prod`, `staging`, `dev` (or any name) and switch with `-p`
 - **Auto protocol detection** — XML-RPC (8.0+), JSON-RPC, JSON/2 REST (19.0+) selected automatically per profile
 - **Secure credential storage** — `~/.config/odoo-mcp/profiles.json` with Unix `600` permissions (owner-read-only)
-- **11 MCP tools** — `search_read`, `write`, `unlink`, `create`, `export_records`, `import_records`, `execute_kw`, `list_models`, `list_fields`, `list_available_profiles`, `get_version`
+- **12 MCP tools** — `search_read`, `search_count`, `write`, `unlink`, `create`, `export_records`, `import_records`, `execute_kw`, `list_models`, `list_fields`, `list_available_profiles`, `get_version`
 - **Full CLI parity** — every MCP tool works as a terminal command with JSON output, composable with `jq` and shell scripts
 - **Agentic skills** — ships two installable skill files for AI agents (`odoo-mcp skills install <agent>`)
 - **No Odoo module required** — connects through standard XML-RPC or the native `/json/2` REST API
@@ -52,7 +52,7 @@ through `jq`, and automate workflows without writing Python.
 | Credential storage | Persistent file, `600` perms | Environment variables | Environment variables / `.env` |
 | Protocol detection | Automatic (XML-RPC / JSON-RPC / JSON/2) | Manual `ODOO_TRANSPORT` flag | XML-RPC only (YOLO mode) |
 | Odoo-side module required | No | No | Optional (recommended for prod) |
-| CLI with identical logic | Full parity (all 11 operations) | No CLI | No CLI |
+| CLI with identical logic | Full parity (all 12 operations) | No CLI | No CLI |
 | Native `export_data` / `load` | `export_records` / `import_records` | No | No |
 | Agentic skills shipped | 2 installable skills | No | No |
 | Odoo 19+ JSON/2 REST support | Automatic with API key | Manual config | No |
@@ -218,7 +218,8 @@ All data commands support `--profile / -p` and output JSON for composability.
 
 | Command | Description |
 |---------|-------------|
-| `odoo-mcp search-read -m MODEL` | Search and read records (`--domain`, `--fields`, `--limit`, `--offset`, `--order`) |
+| `odoo-mcp search-read -m MODEL` | Search and read records (`--domain`, `--fields`, `--limit`, `--offset`, `--order`, `--format`) |
+| `odoo-mcp search-count -m MODEL` | Count records matching a domain without fetching data |
 | `odoo-mcp write -m MODEL -i IDS -v VALUES` | Update existing records |
 | `odoo-mcp unlink -m MODEL -i IDS` | Delete records |
 | `odoo-mcp create -m MODEL -v VALUES` | Create a new record |
@@ -265,7 +266,8 @@ Odoo environment dynamically.
 | Tool | Description |
 |------|-------------|
 | `list_available_profiles` | Discover configured environments |
-| `search_read` | Query records from any model based on domains |
+| `search_read` | Query records with 5 output formats (json, compact, table, html, csv) |
+| `search_count` | Count records without fetching data (~100 bytes response) |
 | `write` | Update values on existing records |
 | `unlink` | Delete records by ID |
 | `create` | Create new records in a model |
@@ -324,7 +326,7 @@ import_records(model="res.partner", fields="id,name,phone", rows='[{"id": "base.
 
 - Credentials are written to `~/.config/odoo-mcp/profiles.json` with `600` Unix permissions (owner-read-only). Passwords and API keys use Pydantic `SecretStr` to prevent accidental logging.
 - Development mode: `pip install -e ".[dev]"`. Code quality is enforced by `ruff` (line length 119, mccabe complexity ≤ 15).
-- Tests: `pytest` with `--cov` (200+ tests, 78%+ coverage).
+- Tests: `pytest` with `--cov` (290+ tests, 86%+ coverage).
 
 ---
 

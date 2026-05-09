@@ -1,6 +1,6 @@
 # MCP Tools Reference
 
-Complete reference for the 10 MCP tools provided by `odoo-mcp-multi`.
+Complete reference for the 12 MCP tools provided by `odoo-mcp-multi`.
 
 !!! tip "When to use this"
     Use the MCP tools when interacting with Odoo via an AI client
@@ -48,6 +48,7 @@ list_available_profiles()
 | `limit` | int | `100` | Max records to return |
 | `offset` | int | `0` | Records to skip (pagination) |
 | `order` | string | `""` | Sort order |
+| `format` | string | `json` | Output format: `json`, `compact`, `table`, `html`, `csv` |
 | `profile` | string | *(default)* | Target profile name |
 
 ```python
@@ -56,8 +57,26 @@ search_read(
     domain="[('is_company', '=', True)]",
     fields="name,email",
     limit=10,
+    format="table",
     profile="prod"
 )
+```
+
+---
+
+## `search_count`
+
+Count records matching a domain without fetching data. Returns ~100 bytes
+instead of potentially hundreds of KB.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `model` | string | *(required)* | Model name |
+| `domain` | string | `[]` | Search domain |
+| `profile` | string | *(default)* | Target profile |
+
+```python
+search_count(model="account.move", domain="[('state', '=', 'posted')]")
 ```
 
 ---
@@ -162,8 +181,18 @@ list_models(search="partner", profile="prod")
 
 ## `list_fields`
 
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `model` | string | *(required)* | Model name |
+| `attributes` | string | `""` | Comma-separated attributes: `string,type` for compact (~5KB), default returns `string,type,required,help` (~41KB) |
+| `profile` | string | *(default)* | Target profile |
+
 ```python
+# Full metadata (default)
 list_fields(model="account.move", profile="prod")
+
+# Compact — only field names and types (~8x smaller)
+list_fields(model="account.move", attributes="string,type", profile="prod")
 ```
 
 ---

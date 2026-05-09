@@ -9,14 +9,14 @@
 The **most tested, documented, and production-ready** MCP server for Odoo.
 Connects any MCP client (Antigravity, Claude Desktop, Cursor, VS Code) to
 **multiple Odoo instances simultaneously** — automatic protocol detection,
-secure credential storage, 70%+ test coverage, and full CLI parity.
+secure credential storage, 86%+ test coverage, and full CLI parity.
 
 ## Features
 
 - **Multi-profile management**: Store credentials for multiple environments (`prod`, `staging`, `dev`).
 - **Secure by default**: Credentials stored in `~/.config/odoo-mcp/` with `600` permissions.
 - **Multi-protocol**: JSON-RPC (8.0+), JSON2 (19.0+), XML-RPC (legacy) — auto-detected.
-- **10 MCP tools**: `search_read`, `write`, `create`, `export_records`, `import_records`,
+- **12 MCP tools**: `search_read`, `search_count`, `write`, `create`, `export_records`, `import_records`,
   `execute_kw`, `list_models`, `list_fields`, `list_available_profiles`, `get_version`.
 - **Full CLI parity**: Every MCP tool is also a CLI command — same shared logic (DRY).
 - **Pagination envelope**: `search_read` and `export_records` return `total`, `has_more`,

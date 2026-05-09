@@ -1,0 +1,88 @@
+:root {
+  /* Vauxoo Brand — DESIGN.md digital tokens */
+  --vx-primary: #AC0340;
+  --vx-secondary: #455A64;
+  --vx-tertiary: #E4A900;
+  --vx-neutral: #282C2F;
+  --vx-card-dark: #393B49;
+  --vx-chip: #DCEFFE;
+
+  /* Override Material theme tokens */
+  --md-primary-fg-color: var(--vx-primary);
+  --md-primary-bg-color: #ffffff;
+  --md-accent-fg-color: var(--vx-tertiary);
+}
+
+/* Dark mode (default for docs — matches brand dark background) */
+[data-md-color-scheme="slate"] {
+  --md-default-bg-color: var(--vx-neutral);
+  --md-default-fg-color: #D6DAE0;
+  --md-primary-fg-color: var(--vx-primary);
+  --md-accent-fg-color: var(--vx-tertiary);
+  --md-code-bg-color: var(--vx-card-dark);
+  --md-footer-bg-color: #1a1c1f;
+  --md-footer-fg-color: #D6DAE0;
+  --md-typeset-a-color: var(--vx-tertiary);
+}
+
+/* Navigation sidebar — dark branded */
+[data-md-color-scheme="slate"] .md-nav--primary .md-nav__title {
+  background-color: var(--vx-primary);
+}
+
+/* Header bar */
+.md-header {
+  background-color: var(--vx-neutral);
+}
+
+/* Tabs strip */
+.md-tabs {
+  background-color: #1a1c1f;
+}
+
+/* Code blocks — card-dark surface */
+[data-md-color-scheme="slate"] .highlight code,
+[data-md-color-scheme="slate"] .md-typeset pre > code {
+  background-color: var(--vx-card-dark);
+}
+
+/* Admonition tip/important — brand accent */
+.md-typeset .admonition.tip,
+.md-typeset details.tip {
+  border-color: var(--vx-tertiary);
+}
+
+.md-typeset .admonition.important,
+.md-typeset details.important {
+  border-color: var(--vx-primary);
+}
+
+/* Table headers — secondary blue-gray */
+.md-typeset table:not([class]) th {
+  background-color: var(--vx-secondary);
+  color: #ffffff;
+}
+
+[data-md-color-scheme="slate"] .md-typeset table:not([class]) th {
+  background-color: var(--vx-secondary);
+  color: #ffffff;
+}
+
+/* Links — gold accent on dark */
+[data-md-color-scheme="slate"] .md-typeset a {
+  color: var(--vx-tertiary);
+}
+
+[data-md-color-scheme="slate"] .md-typeset a:hover {
+  color: #f0c940;
+}
+
+/* Search bar */
+[data-md-color-scheme="slate"] .md-search__input {
+  background-color: var(--vx-card-dark);
+}
+
+/* Footer */
+.md-footer-meta {
+  background-color: #1a1c1f;
+}

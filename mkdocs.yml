@@ -7,20 +7,21 @@ repo_url: https://git.vauxoo.com/nhomar/mcp.odoo
 theme:
   name: material
   palette:
-    - media: "(prefers-color-scheme: light)"
-      scheme: default
-      primary: indigo
-      accent: indigo
-      toggle:
-        icon: material/brightness-7
-        name: Switch to dark mode
+    # Dark mode first — matches Vauxoo brand dark background (#282C2F)
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
-      primary: indigo
-      accent: indigo
+      primary: custom
+      accent: custom
       toggle:
         icon: material/brightness-4
         name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
   features:
     - navigation.tabs
     - navigation.sections
@@ -28,6 +29,12 @@ theme:
     - search.suggest
     - search.highlight
     - content.code.copy
+  font:
+    text: Sora
+    code: JetBrains Mono
+
+extra_css:
+  - stylesheets/vauxoo.css
 
 markdown_extensions:
   - admonition

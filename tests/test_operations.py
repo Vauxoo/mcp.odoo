@@ -636,9 +636,7 @@ def test_op_list_fields_custom_attributes(mock_get_client):
     result = op_list_fields(model="res.partner", attributes="string,type", profile="test")
     assert result["success"] is True
     assert result["fields"]["name"]["type"] == "char"
-    mock_client.execute_kw.assert_called_once_with(
-        "res.partner", "fields_get", [], {"attributes": ["string", "type"]}
-    )
+    mock_client.execute_kw.assert_called_once_with("res.partner", "fields_get", [], {"attributes": ["string", "type"]})
 
 
 # ---------------------------------------------------------------------------
