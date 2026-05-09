@@ -1,6 +1,7 @@
 ---
 name: "odoo-mcp-cli"
-description: "Use this skill to manage Odoo profiles and run data operations directly from the terminal using the odoo-mcp CLI. Triggers on: 'add profile', 'list profiles', 'test connection', 'search records cli', 'export records', 'import records cli', 'run mcp server', 'odoo-mcp command'."
+description: "Use this skill to manage Odoo profiles and run data operations directly from the terminal using the odoo-mcp CLI. Triggers on: 'add profile', 'list profiles', 'test connection', 'search records cli', 'export records', 'import records cli', 'run mcp server', 'odoo-mcp command', 'delete records cli', 'unlink records'."
+last_validated: 2026-05-09
 ---
 
 # Odoo MCP CLI Commands Reference
@@ -45,8 +46,11 @@ Interactive wizard to add Odoo connection credentials.
 # Interactive mode
 odoo-mcp add-profile
 
-# Non-interactive mode
+# Non-interactive — legacy auth (Odoo < 19)
 odoo-mcp add-profile --name prod --url https://odoo.example.com --database mydb --user admin --password secret
+
+# Non-interactive — Odoo 19+ (JSON-2 Bearer token)
+odoo-mcp add-profile --name prod19 --url https://odoo19.example.com --database mydb --api-key YOUR_API_KEY --protocol json2s
 ```
 
 | Flag | Description |
@@ -54,9 +58,12 @@ odoo-mcp add-profile --name prod --url https://odoo.example.com --database mydb 
 | `--name` | Profile name |
 | `--url` | Odoo instance URL |
 | `--database` | Database name |
-| `--user` | Login username |
-| `--password` | Login password |
-| `--test` | Test connection before saving |
+| `--user` | Login username (legacy auth, Odoo < 19) |
+| `--password` | Login password (legacy auth, Odoo < 19) |
+| `--api-key` | API key for Odoo 19+ Bearer auth (`/json/2`) |
+| `--protocol` | RPC protocol: `auto`, `json2s`, `jsonrpcs`, `xmlrpcs` (default: `auto`) |
+| `--default` | Set as the default profile |
+| `--test/--no-test` | Test connection before saving (default: `--test`) |
 
 ---
 
@@ -73,7 +80,14 @@ Output: JSON array with name, URL, database, and default status for each profile
 ### `edit-profile` — Modify an Existing Profile
 
 ```bash
-odoo-mcp edit-profile --name prod --url https://new-url.example.com
+# NAME is a positional argument
+odoo-mcp edit-profile prod --url https://new-url.example.com
+
+# Rename a profile
+odoo-mcp edit-profile old-name --new-name better-name
+
+# Update API key (prompts interactively)
+odoo-mcp edit-profile prod19 --api-key
 ```
 
 Only the specified fields are updated; others remain unchanged.
@@ -83,7 +97,11 @@ Only the specified fields are updated; others remain unchanged.
 ### `remove-profile` — Delete a Profile
 
 ```bash
-odoo-mcp remove-profile --name staging
+# NAME is a positional argument
+odoo-mcp remove-profile staging
+
+# Skip confirmation
+odoo-mcp remove-profile staging --force
 ```
 
 ---
@@ -158,6 +176,21 @@ odoo-mcp write -m res.partner \
 | `--model` | `-m` | Model name |
 | `--ids` | `-i` | Record IDs (comma-separated or JSON array) |
 | `--values` | `-v` | JSON object with field values |
+
+---
+
+### `unlink` — Delete Records
+
+```bash
+odoo-mcp unlink -m res.partner \
+  --ids "10,11,12" \
+  -p prod
+```
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--model` | `-m` | Model name |
+| `--ids` | `-i` | Record IDs (comma-separated or JSON array) |
 
 ---
 
@@ -287,7 +320,7 @@ odoo-mcp list-fields -m account.move -p prod
 **Action:**
 
 ```bash
-odoo-mcp search-read -m res.partner -d "[('is_company','=',True)]" -f "name" | jq '.[].name'
+odoo-mcp search-read -m res.partner -d "[('is_company','=',True)]" -f "name" | jq '.records[].name'
 ```
 
 ### Example 2: Export → Transform → Import across environments
@@ -312,6 +345,17 @@ odoo-mcp import-records -m product.template -f "id,name,list_price" -r "$(cat pr
 
 ```bash
 #!/bin/bash
-ORDERS=$(odoo-mcp search-read -m sale.order -d "[('state','=','draft')]" -f "id" -p prod | jq '[.[].id]')
+ORDERS=$(odoo-mcp search-read -m sale.order -d "[('state','=','draft')]" -f "id" -p prod | jq '[.records[].id]')
 odoo-mcp execute-kw -m sale.order --method action_confirm --args "[$ORDERS]" -p prod
+```
+
+### Example 4: Delete records
+
+**User:** "Delete all archived partners"
+
+**Action:**
+
+```bash
+IDS=$(odoo-mcp search-read -m res.partner -d "[('active','=',False)]" -f "id" -p prod | jq '[.records[].id]')
+odoo-mcp unlink -m res.partner -i "$IDS" -p prod
 ```

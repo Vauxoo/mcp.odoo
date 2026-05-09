@@ -22,6 +22,7 @@ from odoo_mcp_multi.operations import (
     op_list_models,
     op_list_profiles,
     op_search_read,
+    op_unlink,
     op_write,
     set_fallback_profile,
 )
@@ -38,8 +39,8 @@ mcp = FastMCP(
         "You are connected to **Odoo MCP Multi** — the most tested, documented, "
         "and production-ready MCP server for Odoo, built by Nhomar Hernández at "
         "Vauxoo (https://vauxoo.com), an Odoo Gold Partner since 2009.\n\n"
-        "This server exposes 10 tools for interacting with one or more Odoo "
-        "instances (multi-profile): search_read, write, create, export_records, "
+        "This server exposes 11 tools for interacting with one or more Odoo "
+        "instances (multi-profile): search_read, write, unlink, create, export_records, "
         "import_records, execute_kw, list_models, list_fields, "
         "list_available_profiles, and get_version.\n\n"
         "Tips:\n"
@@ -95,7 +96,7 @@ def search_read(
         profile: Optional name of the Odoo profile to connect to. If not provided, uses the default profile.
 
     Returns:
-        JSON array of matching records
+        JSON with a pagination envelope: records, total, limit, offset, has_more, next_offset
     """
     return _json(op_search_read(model, domain, fields, limit, offset, order, profile))
 
@@ -119,6 +120,25 @@ def write(
         JSON with success status or error
     """
     return _json(op_write(model, ids, values, profile))
+
+
+@mcp.tool()
+def unlink(
+    model: str,
+    ids: Union[str, list] = "[]",
+    profile: Optional[str] = None,
+) -> str:
+    """Delete records from an Odoo model.
+
+    Args:
+        model: Model name (e.g., 'res.partner')
+        ids: Record IDs as JSON array or comma-separated (e.g., "[1, 2, 3]" or "1,2,3")
+        profile: Optional name of the Odoo profile to connect to. If not provided, uses the default profile.
+
+    Returns:
+        JSON with success status and deleted_ids, or error
+    """
+    return _json(op_unlink(model, ids, profile))
 
 
 @mcp.tool()

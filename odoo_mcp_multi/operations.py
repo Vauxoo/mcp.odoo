@@ -209,6 +209,39 @@ def op_write(
     return {"success": result, "updated_ids": parsed_ids}
 
 
+def op_unlink(
+    model: str,
+    ids: str,
+    profile: Optional[str] = None,
+) -> dict:
+    """Delete records from an Odoo model.
+
+    Args:
+        model: Model name
+        ids: Record IDs as JSON array or comma-separated
+        profile: Profile name to use
+
+    Returns:
+        Dict with success status and deleted_ids,
+        or an error dict with success=False for agent consumption.
+    """
+    parsed_ids = parse_ids(ids)
+    if not parsed_ids:
+        return {"success": False, "error": "No record IDs provided. Pass a JSON array or comma-separated list."}
+
+    try:
+        client = _get_client(profile)
+        result = client.unlink(model, parsed_ids)
+    except Exception as exc:
+        return {
+            "success": False,
+            "error": f"unlink on '{model}' failed: {exc}",
+            "ids": parsed_ids,
+        }
+
+    return {"success": result, "deleted_ids": parsed_ids}
+
+
 def op_create(
     model: str,
     values: str,

@@ -1,11 +1,12 @@
 ---
 name: "odoo-mcp-tools"
-description: "Use this skill to query, create, update, export, or import records in any Odoo instance via MCP tools. Triggers on: 'search records', 'create record', 'update partner', 'export data', 'import records', 'execute method', 'list models', 'list fields', 'odoo mcp tools'."
+description: "Use this skill to query, create, update, delete, export, or import records in any Odoo instance via MCP tools. Triggers on: 'search records', 'create record', 'update partner', 'delete record', 'unlink record', 'export data', 'import records', 'execute method', 'list models', 'list fields', 'get version', 'list profiles', 'odoo mcp tools'."
+last_validated: 2026-05-09
 ---
 
 # Odoo MCP Tools Reference
 
-Complete reference for the 10 MCP tools provided by `odoo-mcp-multi`.
+Complete reference for the 11 MCP tools provided by `odoo-mcp-multi`.
 Use this skill when interacting with any Odoo instance via an MCP client
 (Antigravity, Claude Desktop, Cursor, VS Code).
 
@@ -46,6 +47,8 @@ Config file paths by client and OS:
 | **VS Code** | `.vscode/mcp.json` *(project root)* | same | same |
 
 > **Note:** Cursor and VS Code configs are workspace-scoped — place the file at the root of your project.
+>
+> **Tip:** After installing `odoo-mcp-multi`, run `odoo-mcp skills install <agent>` (e.g., `antigravity`, `claude`, `gemini`) to symlink these skills into your IDE's global skills directory.
 
 ---
 
@@ -92,6 +95,20 @@ Returns a **pagination envelope**:
 search_read(model="res.partner", domain="[('is_company', '=', True)]", fields="name,email", limit=10, profile="prod")
 ```
 
+#### Pagination pattern
+
+Always check `has_more` — if `true`, call again with `next_offset`:
+
+```python
+# Page 1
+result = search_read(model="res.partner", fields="name", limit=100, offset=0)
+# result["has_more"] == true, result["next_offset"] == 100
+
+# Page 2
+result = search_read(model="res.partner", fields="name", limit=100, offset=100)
+# Continue until has_more == false
+```
+
 ---
 
 ### `write` — Update Records
@@ -105,6 +122,20 @@ search_read(model="res.partner", domain="[('is_company', '=', True)]", fields="n
 
 ```python
 write(model="res.partner", ids="[1, 2]", values='{"phone": "+52 555 1234"}', profile="prod")
+```
+
+---
+
+### `unlink` — Delete Records
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `model` | string | *(required)* | Model name |
+| `ids` | string | *(required)* | Record IDs as JSON array or comma-separated |
+| `profile` | string | *(default)* | Target profile name |
+
+```python
+unlink(model="res.partner", ids="[10, 11, 12]", profile="prod")
 ```
 
 ---

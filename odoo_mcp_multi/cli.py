@@ -40,6 +40,7 @@ from odoo_mcp_multi.operations import (
     op_list_models,
     op_search_read,
     op_test_connection,
+    op_unlink,
     op_write,
 )
 
@@ -477,6 +478,15 @@ def cmd_search_read(model, domain, fields, limit, offset, order, profile) -> Non
 def cmd_write(model, ids, values, profile) -> None:
     """Update existing records in Odoo."""
     _output(op_write(model, ids, values, profile))
+
+
+@main.command("unlink")
+@click.option("--model", "-m", required=True, help="Model name (e.g., 'res.partner')")
+@click.option("--ids", "-i", required=True, help="Record IDs as JSON array or comma-separated (e.g., '1,2,3')")
+@click.option("--profile", "-p", default=None, help="Profile name to use")
+def cmd_unlink(model, ids, profile) -> None:
+    """Delete records from an Odoo model."""
+    _output(op_unlink(model, ids, profile))
 
 
 @main.command("create")
