@@ -9,6 +9,7 @@ agent consumption.
 
 from __future__ import annotations
 
+from time import time
 from typing import Any, Optional
 
 from odoo_mcp_multi.client import create_client
@@ -28,6 +29,38 @@ def set_fallback_profile(profile: Any) -> None:
     """
     global _fallback_profile
     _fallback_profile = profile
+
+
+# ---------------------------------------------------------------------------
+# In-memory metadata cache — avoids redundant RPC calls for list_fields
+# and list_models within a single MCP session.  Keyed by
+# (operation, profile, model, extra) with a 5-minute TTL.  Resets on
+# server restart (intentional — no stale data across sessions).
+# ---------------------------------------------------------------------------
+
+_metadata_cache: dict[str, dict] = {}
+METADATA_CACHE_TTL = 300  # seconds
+
+
+def _cache_key(operation: str, model: str, profile: Optional[str], extra: str = "") -> str:
+    """Build a deterministic cache key from the call's coordinates."""
+    return f"{operation}:{profile or '_default'}:{model}:{extra}"
+
+
+def _cache_get(key: str) -> Any | None:
+    """Return cached data if key exists and has not expired, else None."""
+    entry = _metadata_cache.get(key)
+    if entry is None:
+        return None
+    if (time() - entry["ts"]) >= METADATA_CACHE_TTL:
+        del _metadata_cache[key]
+        return None
+    return entry["data"]
+
+
+def _cache_set(key: str, data: Any) -> None:
+    """Store data in cache with current timestamp."""
+    _metadata_cache[key] = {"data": data, "ts": time()}
 
 
 def _get_client(profile_name: Optional[str] = None):
@@ -477,6 +510,11 @@ def op_list_models(
         if search:
             domain = ["|", ("name", "ilike", search), ("model", "ilike", search)]
 
+        cache_key = _cache_key("models", "ir.model", profile, search)
+        cached = _cache_get(cache_key)
+        if cached is not None:
+            return cached
+
         models = client.search_read(
             model="ir.model",
             domain=domain,
@@ -487,7 +525,9 @@ def op_list_models(
     except Exception as exc:
         return {"success": False, "error": f"list_models failed: {exc}"}
 
-    return {"success": True, "models": models}
+    result = {"success": True, "models": models}
+    _cache_set(cache_key, result)
+    return result
 
 
 def op_list_fields(
@@ -506,8 +546,16 @@ def op_list_fields(
     """
     try:
         client = _get_client(profile)
+
+        cache_key = _cache_key("fields", model, profile)
+        cached = _cache_get(cache_key)
+        if cached is not None:
+            return cached
+
         fields = client.execute_kw(model, "fields_get", [], {"attributes": ["string", "type", "required", "help"]})
     except Exception as exc:
         return {"success": False, "error": f"list_fields on '{model}' failed: {exc}"}
 
-    return {"success": True, "fields": fields}
+    result = {"success": True, "fields": fields}
+    _cache_set(cache_key, result)
+    return result

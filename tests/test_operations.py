@@ -386,3 +386,120 @@ def test_op_list_fields(mock_get_client):
     assert result["success"] is True
     assert "name" in result["fields"]
     assert result["fields"]["name"]["type"] == "char"
+
+
+# ---------------------------------------------------------------------------
+# Metadata cache
+# ---------------------------------------------------------------------------
+
+
+@patch("odoo_mcp_multi.operations._get_client")
+def test_list_fields_cache_hit(mock_get_client):
+    """Second call to list_fields with same args returns cached result without RPC."""
+    import odoo_mcp_multi.operations as ops
+
+    ops._metadata_cache.clear()
+
+    mock_client = MagicMock()
+    mock_get_client.return_value = mock_client
+    mock_client.execute_kw.return_value = {"name": {"type": "char"}}
+
+    result1 = op_list_fields(model="res.partner", profile="cache_test")
+    result2 = op_list_fields(model="res.partner", profile="cache_test")
+
+    assert result1 == result2
+    # RPC should be called only once — second call is served from cache
+    mock_client.execute_kw.assert_called_once()
+
+
+@patch("odoo_mcp_multi.operations._get_client")
+def test_list_fields_cache_different_profile(mock_get_client):
+    """Different profiles must not share cache entries."""
+    import odoo_mcp_multi.operations as ops
+
+    ops._metadata_cache.clear()
+
+    mock_client = MagicMock()
+    mock_get_client.return_value = mock_client
+    mock_client.execute_kw.return_value = {"name": {"type": "char"}}
+
+    op_list_fields(model="res.partner", profile="alpha")
+    op_list_fields(model="res.partner", profile="beta")
+
+    # Two distinct RPC calls — one per profile
+    assert mock_client.execute_kw.call_count == 2
+
+
+@patch("odoo_mcp_multi.operations._get_client")
+def test_list_fields_cache_ttl_expired(mock_get_client):
+    """Expired entries are evicted and a fresh RPC call is made."""
+    import odoo_mcp_multi.operations as ops
+
+    ops._metadata_cache.clear()
+
+    mock_client = MagicMock()
+    mock_get_client.return_value = mock_client
+    mock_client.execute_kw.return_value = {"name": {"type": "char"}}
+
+    op_list_fields(model="res.partner", profile="ttl_test")
+
+    # Manually expire the entry
+    for entry in ops._metadata_cache.values():
+        entry["ts"] -= ops.METADATA_CACHE_TTL + 1
+
+    op_list_fields(model="res.partner", profile="ttl_test")
+
+    # Two RPC calls — first call + cache miss after expiry
+    assert mock_client.execute_kw.call_count == 2
+
+
+@patch("odoo_mcp_multi.operations._get_client")
+def test_list_models_cache_hit(mock_get_client):
+    """list_models results are cached per profile+search combination."""
+    import odoo_mcp_multi.operations as ops
+
+    ops._metadata_cache.clear()
+
+    mock_client = MagicMock()
+    mock_get_client.return_value = mock_client
+    mock_client.search_read.return_value = [{"model": "res.partner"}]
+
+    result1 = op_list_models(search="partner", profile="cache_test")
+    result2 = op_list_models(search="partner", profile="cache_test")
+
+    assert result1 == result2
+    mock_client.search_read.assert_called_once()
+
+
+@patch("odoo_mcp_multi.operations._get_client")
+def test_list_models_different_search_no_cache_hit(mock_get_client):
+    """Different search terms produce different cache keys."""
+    import odoo_mcp_multi.operations as ops
+
+    ops._metadata_cache.clear()
+
+    mock_client = MagicMock()
+    mock_get_client.return_value = mock_client
+    mock_client.search_read.return_value = []
+
+    op_list_models(search="partner", profile="cache_test")
+    op_list_models(search="sale", profile="cache_test")
+
+    assert mock_client.search_read.call_count == 2
+
+
+def test_cache_helpers_unit():
+    """Direct test of _cache_key, _cache_get, _cache_set functions."""
+    from odoo_mcp_multi.operations import _cache_get, _cache_key, _cache_set, _metadata_cache
+
+    _metadata_cache.clear()
+
+    key = _cache_key("fields", "res.partner", "prod")
+    assert _cache_get(key) is None
+
+    _cache_set(key, {"fields": {"x": 1}})
+    assert _cache_get(key) == {"fields": {"x": 1}}
+
+    # Different model = different key
+    key2 = _cache_key("fields", "sale.order", "prod")
+    assert _cache_get(key2) is None
