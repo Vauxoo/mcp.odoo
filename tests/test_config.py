@@ -471,3 +471,175 @@ def test_resolve_profile_nothing_configured(tmp_path):
     """Raises ValueError when no profile can be resolved."""
     with pytest.raises(ValueError, match="No Odoo profile specified"):
         resolve_profile()
+
+
+# ---------------------------------------------------------------------------
+# ProfilePermissions
+# ---------------------------------------------------------------------------
+
+
+def test_permissions_default_is_full():
+    """ProfilePermissions defaults to full mode with no allowed_operations."""
+    from odoo_mcp_multi.config import ProfilePermissions
+
+    perm = ProfilePermissions()
+    assert perm.mode == "full"
+    assert perm.allowed_operations == []
+
+
+def test_permissions_granular_with_valid_operations():
+    from odoo_mcp_multi.config import ProfilePermissions
+
+    perm = ProfilePermissions(mode="granular", allowed_operations=["search_read", "list_fields"])
+    assert perm.mode == "granular"
+    assert perm.allowed_operations == ["search_read", "list_fields"]
+
+
+def test_permissions_rejects_invalid_operations():
+    from odoo_mcp_multi.config import ProfilePermissions
+
+    with pytest.raises(ValidationError, match="Invalid operations"):
+        ProfilePermissions(mode="granular", allowed_operations=["search_read", "hack_the_planet"])
+
+
+# ---------------------------------------------------------------------------
+# OdooProfile.is_operation_allowed
+# ---------------------------------------------------------------------------
+
+
+def test_profile_no_permissions_allows_all():
+    """Profiles without explicit permissions default to full access."""
+    p = _make_profile("test")
+    assert p.permissions is None
+    assert p.is_operation_allowed("search_read") is True
+    assert p.is_operation_allowed("unlink") is True
+    assert p.is_operation_allowed("execute_kw") is True
+
+
+def test_profile_full_mode_allows_all():
+    """Explicit full mode allows all operations."""
+    p = OdooProfile(
+        name="full",
+        url="https://example.com",
+        database="db",
+        password=SecretStr("secret"),
+        permissions={"mode": "full"},
+    )
+    assert p.is_operation_allowed("unlink") is True
+    assert p.is_operation_allowed("execute_kw") is True
+
+
+def test_profile_granular_allows_listed_only():
+    """Granular mode only permits explicitly listed operations."""
+    p = OdooProfile(
+        name="audit",
+        url="https://example.com",
+        database="db",
+        password=SecretStr("secret"),
+        permissions={
+            "mode": "granular",
+            "allowed_operations": ["search_read", "list_fields", "list_models", "export_records"],
+        },
+    )
+    assert p.is_operation_allowed("search_read") is True
+    assert p.is_operation_allowed("list_fields") is True
+    assert p.is_operation_allowed("write") is False
+    assert p.is_operation_allowed("unlink") is False
+    assert p.is_operation_allowed("execute_kw") is False
+    assert p.is_operation_allowed("create") is False
+
+
+def test_profile_always_allowed_tools():
+    """Metadata tools are always allowed even in granular mode."""
+    p = OdooProfile(
+        name="locked",
+        url="https://example.com",
+        database="db",
+        password=SecretStr("secret"),
+        permissions={"mode": "granular", "allowed_operations": []},
+    )
+    # Nothing in allowed_operations, but metadata is always allowed
+    assert p.is_operation_allowed("list_available_profiles") is True
+    assert p.is_operation_allowed("get_version") is True
+    # Non-metadata is denied
+    assert p.is_operation_allowed("search_read") is False
+
+
+# ---------------------------------------------------------------------------
+# Permissions serialization roundtrip
+# ---------------------------------------------------------------------------
+
+
+def test_profile_permissions_to_dict_roundtrip():
+    """Permissions survive to_dict → from_dict without data loss."""
+    p = OdooProfile(
+        name="granular",
+        url="https://example.com",
+        database="db",
+        password=SecretStr("secret"),
+        permissions={
+            "mode": "granular",
+            "allowed_operations": ["search_read", "export_records"],
+        },
+    )
+    d = p.to_dict()
+    assert "permissions" in d
+    assert d["permissions"]["mode"] == "granular"
+    assert d["permissions"]["allowed_operations"] == ["search_read", "export_records"]
+
+    # Round-trip
+    restored = OdooProfile.from_dict(d)
+    assert restored.permissions.mode == "granular"
+    assert restored.permissions.allowed_operations == ["search_read", "export_records"]
+
+
+def test_profile_no_permissions_to_dict():
+    """Profiles without permissions do not include a permissions key."""
+    p = _make_profile("plain")
+    d = p.to_dict()
+    assert "permissions" not in d
+
+
+def test_profile_permissions_save_load_roundtrip(tmp_path):
+    """Permissions survive save → load through the config file."""
+    p = OdooProfile(
+        name="restricted",
+        url="https://example.com",
+        database="db",
+        password=SecretStr("secret"),
+        permissions={
+            "mode": "granular",
+            "allowed_operations": ["search_read"],
+        },
+    )
+    add_profile(p)
+    loaded = get_profile("restricted")
+    assert loaded.permissions is not None
+    assert loaded.permissions.mode == "granular"
+    assert loaded.permissions.allowed_operations == ["search_read"]
+    assert loaded.is_operation_allowed("search_read") is True
+    assert loaded.is_operation_allowed("write") is False
+
+
+# ---------------------------------------------------------------------------
+# Operation enum
+# ---------------------------------------------------------------------------
+
+
+def test_operation_enum_completeness():
+    """All gatable operations are present in the enum."""
+    from odoo_mcp_multi.config import Operation
+
+    expected = {
+        "search_read",
+        "write",
+        "unlink",
+        "create",
+        "export_records",
+        "import_records",
+        "execute_kw",
+        "list_models",
+        "list_fields",
+    }
+    actual = {op.value for op in Operation}
+    assert actual == expected

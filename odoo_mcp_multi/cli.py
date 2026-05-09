@@ -426,7 +426,7 @@ def cmd_run(profile: str) -> None:
     If a profile is provided (or a default exists), it will be used as the fallback
     when tool calls don't specify a target profile.
     """
-    from odoo_mcp_multi.server import run_server, set_profile
+    from odoo_mcp_multi.server import _set_fallback_ref, run_server, set_profile
 
     # Attempt to load the profile (this will return None if no profile exists or name is wrong)
     odoo_profile = get_profile(profile)
@@ -439,6 +439,7 @@ def cmd_run(profile: str) -> None:
     if odoo_profile:
         # Set the fallback profile for the server
         set_profile(odoo_profile)
+        _set_fallback_ref(odoo_profile)
         click.echo(f"Starting MCP server with fallback profile '{odoo_profile.name}'...", err=True)
         click.echo(f"  URL: {odoo_profile.url}", err=True)
         click.echo(f"  Database: {odoo_profile.database}", err=True)

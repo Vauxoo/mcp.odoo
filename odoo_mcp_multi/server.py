@@ -12,6 +12,7 @@ from typing import Any, Optional, Union
 
 from mcp.server.fastmcp import FastMCP
 
+from odoo_mcp_multi.config import ALWAYS_ALLOWED_TOOLS, resolve_profile
 from odoo_mcp_multi.operations import (
     op_create,
     op_execute_kw,
@@ -30,6 +31,16 @@ from odoo_mcp_multi.operations import (
 # Re-export set_fallback_profile so cli.py can call server.set_fallback_profile()
 # without importing operations directly for this one function.
 set_profile = set_fallback_profile
+
+# Local reference used by _check_permission to avoid re-importing from operations
+_fallback_profile = None
+
+
+def _set_fallback_ref(profile):
+    """Store a local reference to the fallback profile for permission checks."""
+    global _fallback_profile
+    _fallback_profile = profile
+
 
 # Create the MCP server — branded name and instructions are sent to the
 # AI client at connection time via the MCP protocol.
@@ -59,6 +70,28 @@ mcp = FastMCP(
 def _json(data: Any) -> str:
     """Serialize any result to JSON for MCP transport."""
     return json.dumps(data, indent=2, default=str, ensure_ascii=False)
+
+
+def _check_permission(tool_name: str, profile: str | None) -> str | None:
+    """Check if the resolved profile allows this operation.
+
+    Returns None if allowed, or a JSON error string if denied.
+    Metadata tools (list_available_profiles, get_version) are always allowed.
+    """
+    if tool_name in ALWAYS_ALLOWED_TOOLS:
+        return None
+    try:
+        resolved = resolve_profile(profile, fallback=_fallback_profile)
+    except ValueError:
+        return None  # let the operation itself handle missing profiles
+    if not resolved.is_operation_allowed(tool_name):
+        return _json(
+            {
+                "success": False,
+                "error": f"Operation '{tool_name}' is not allowed for profile '{resolved.name}'.",
+            }
+        )
+    return None
 
 
 @mcp.tool()
@@ -98,6 +131,9 @@ def search_read(
     Returns:
         JSON with a pagination envelope: records, total, limit, offset, has_more, next_offset
     """
+    denied = _check_permission("search_read", profile)
+    if denied:
+        return denied
     return _json(op_search_read(model, domain, fields, limit, offset, order, profile))
 
 
@@ -119,6 +155,9 @@ def write(
     Returns:
         JSON with success status or error
     """
+    denied = _check_permission("write", profile)
+    if denied:
+        return denied
     return _json(op_write(model, ids, values, profile))
 
 
@@ -138,6 +177,9 @@ def unlink(
     Returns:
         JSON with success status and deleted_ids, or error
     """
+    denied = _check_permission("unlink", profile)
+    if denied:
+        return denied
     return _json(op_unlink(model, ids, profile))
 
 
@@ -157,6 +199,9 @@ def create(
     Returns:
         JSON with the created record ID or error
     """
+    denied = _check_permission("create", profile)
+    if denied:
+        return denied
     return _json(op_create(model, values, profile))
 
 
@@ -190,6 +235,9 @@ def export_records(
     Returns:
         JSON with records array, total count, limit, offset, has_more, next_offset.
     """
+    denied = _check_permission("export_records", profile)
+    if denied:
+        return denied
     return _json(op_export_records(model, domain, fields, limit, offset, profile))
 
 
@@ -217,6 +265,9 @@ def import_records(
     Returns:
         JSON with success status, created/updated IDs, and any detailed parsed error messages.
     """
+    denied = _check_permission("import_records", profile)
+    if denied:
+        return denied
     return _json(op_import_records(model, fields, rows, profile))
 
 
@@ -248,6 +299,9 @@ def execute_kw(
         - Send an email: model='mail.mail', method='send', args='[[123]]'
         - Get default values: model='res.partner', method='default_get', args='[["name", "email"]]'
     """
+    denied = _check_permission("execute_kw", profile)
+    if denied:
+        return denied
     return _json(op_execute_kw(model, method, args, kwargs, profile))
 
 
@@ -275,6 +329,9 @@ def list_models(search: str = "", profile: Optional[str] = None) -> str:
     Returns:
         JSON array of model information (name, model, info)
     """
+    denied = _check_permission("list_models", profile)
+    if denied:
+        return denied
     return _json(op_list_models(search, profile))
 
 
@@ -289,6 +346,9 @@ def list_fields(model: str, profile: Optional[str] = None) -> str:
     Returns:
         JSON object with field definitions
     """
+    denied = _check_permission("list_fields", profile)
+    if denied:
+        return denied
     return _json(op_list_fields(model, profile))
 
 

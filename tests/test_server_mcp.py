@@ -31,19 +31,21 @@ def _json_data(call_result: tuple):
 # Tool registration
 # ---------------------------------------------------------------------------
 
-EXPECTED_TOOLS = sorted([
-    "list_available_profiles",
-    "search_read",
-    "write",
-    "unlink",
-    "create",
-    "export_records",
-    "import_records",
-    "execute_kw",
-    "list_models",
-    "list_fields",
-    "get_version",
-])
+EXPECTED_TOOLS = sorted(
+    [
+        "list_available_profiles",
+        "search_read",
+        "write",
+        "unlink",
+        "create",
+        "export_records",
+        "import_records",
+        "execute_kw",
+        "list_models",
+        "list_fields",
+        "get_version",
+    ]
+)
 
 
 @pytest.mark.asyncio
@@ -99,11 +101,14 @@ async def test_search_read_with_profile(mock_op):
 @patch("odoo_mcp_multi.server.op_write")
 async def test_write_pass_through(mock_op):
     mock_op.return_value = {"success": True, "updated_ids": [1, 2]}
-    result = await mcp.call_tool("write", {
-        "model": "res.partner",
-        "ids": "[1, 2]",
-        "values": '{"name": "Updated"}',
-    })
+    result = await mcp.call_tool(
+        "write",
+        {
+            "model": "res.partner",
+            "ids": "[1, 2]",
+            "values": '{"name": "Updated"}',
+        },
+    )
     data = _json_data(result)
     assert data["success"] is True
     assert data["updated_ids"] == [1, 2]
@@ -113,10 +118,13 @@ async def test_write_pass_through(mock_op):
 @patch("odoo_mcp_multi.server.op_unlink")
 async def test_unlink_pass_through(mock_op):
     mock_op.return_value = {"success": True, "deleted_ids": [10, 11]}
-    result = await mcp.call_tool("unlink", {
-        "model": "res.partner",
-        "ids": "[10, 11]",
-    })
+    result = await mcp.call_tool(
+        "unlink",
+        {
+            "model": "res.partner",
+            "ids": "[10, 11]",
+        },
+    )
     data = _json_data(result)
     assert data["success"] is True
     assert data["deleted_ids"] == [10, 11]
@@ -126,10 +134,13 @@ async def test_unlink_pass_through(mock_op):
 @patch("odoo_mcp_multi.server.op_create")
 async def test_create_pass_through(mock_op):
     mock_op.return_value = {"success": True, "id": 42}
-    result = await mcp.call_tool("create", {
-        "model": "res.partner",
-        "values": '{"name": "Alice"}',
-    })
+    result = await mcp.call_tool(
+        "create",
+        {
+            "model": "res.partner",
+            "values": '{"name": "Alice"}',
+        },
+    )
     data = _json_data(result)
     assert data["id"] == 42
 
@@ -142,10 +153,13 @@ async def test_export_records_pass_through(mock_op):
         "total": 1,
         "has_more": False,
     }
-    result = await mcp.call_tool("export_records", {
-        "model": "res.partner",
-        "fields": "id,name",
-    })
+    result = await mcp.call_tool(
+        "export_records",
+        {
+            "model": "res.partner",
+            "fields": "id,name",
+        },
+    )
     data = _json_data(result)
     assert len(data["records"]) == 1
     assert data["records"][0]["id"] == "ext_1"
@@ -155,11 +169,14 @@ async def test_export_records_pass_through(mock_op):
 @patch("odoo_mcp_multi.server.op_import_records")
 async def test_import_records_pass_through(mock_op):
     mock_op.return_value = {"ids": [44], "messages": []}
-    result = await mcp.call_tool("import_records", {
-        "model": "res.partner",
-        "fields": "id,name",
-        "rows": '[{"id": "ext_1", "name": "Test"}]',
-    })
+    result = await mcp.call_tool(
+        "import_records",
+        {
+            "model": "res.partner",
+            "fields": "id,name",
+            "rows": '[{"id": "ext_1", "name": "Test"}]',
+        },
+    )
     data = _json_data(result)
     assert data["ids"] == [44]
 
@@ -168,11 +185,14 @@ async def test_import_records_pass_through(mock_op):
 @patch("odoo_mcp_multi.server.op_execute_kw")
 async def test_execute_kw_pass_through(mock_op):
     mock_op.return_value = {"success": True, "result": True}
-    result = await mcp.call_tool("execute_kw", {
-        "model": "sale.order",
-        "method": "action_confirm",
-        "args": "[[42]]",
-    })
+    result = await mcp.call_tool(
+        "execute_kw",
+        {
+            "model": "sale.order",
+            "method": "action_confirm",
+            "args": "[[42]]",
+        },
+    )
     data = _json_data(result)
     assert data["result"] is True
 
@@ -230,6 +250,7 @@ async def test_error_propagation(mock_op):
 async def test_json_serializes_datetime(mock_op):
     """The _json helper uses default=str so datetime objects don't crash."""
     from datetime import datetime
+
     mock_op.return_value = {
         "records": [{"id": 1, "write_date": datetime(2026, 1, 15, 10, 30)}],
         "total": 1,
@@ -273,3 +294,104 @@ def test_instructions_mention_all_tools():
 
 def test_server_name():
     assert "Odoo MCP Multi" in mcp.name
+
+
+# ---------------------------------------------------------------------------
+# Permission enforcement at server level
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+@patch("odoo_mcp_multi.server.op_write")
+async def test_permission_denied_returns_error(mock_op):
+    """A granular profile without 'write' must block the tool call."""
+    from pydantic import SecretStr
+
+    from odoo_mcp_multi.config import OdooProfile
+    from odoo_mcp_multi.server import _set_fallback_ref
+
+    restricted = OdooProfile(
+        name="audit",
+        url="https://example.com",
+        database="db",
+        password=SecretStr("secret"),
+        permissions={
+            "mode": "granular",
+            "allowed_operations": ["search_read", "list_fields"],
+        },
+    )
+    _set_fallback_ref(restricted)
+
+    result = await mcp.call_tool(
+        "write",
+        {
+            "model": "res.partner",
+            "ids": "[1]",
+            "values": '{"name": "X"}',
+        },
+    )
+    data = _json_data(result)
+    assert data["success"] is False
+    assert "not allowed" in data["error"]
+    assert "write" in data["error"]
+    # The underlying operation must NOT have been called
+    mock_op.assert_not_called()
+
+    # Cleanup
+    _set_fallback_ref(None)
+
+
+@pytest.mark.asyncio
+@patch("odoo_mcp_multi.server.op_search_read")
+async def test_permission_allowed_passes_through(mock_op):
+    """A granular profile with 'search_read' must allow the tool call."""
+    from pydantic import SecretStr
+
+    from odoo_mcp_multi.config import OdooProfile
+    from odoo_mcp_multi.server import _set_fallback_ref
+
+    restricted = OdooProfile(
+        name="reader",
+        url="https://example.com",
+        database="db",
+        password=SecretStr("secret"),
+        permissions={
+            "mode": "granular",
+            "allowed_operations": ["search_read"],
+        },
+    )
+    _set_fallback_ref(restricted)
+    mock_op.return_value = {"records": [], "total": 0, "has_more": False}
+
+    result = await mcp.call_tool("search_read", {"model": "res.partner"})
+    data = _json_data(result)
+    assert data["records"] == []
+    mock_op.assert_called_once()
+
+    _set_fallback_ref(None)
+
+
+@pytest.mark.asyncio
+@patch("odoo_mcp_multi.server.op_list_profiles")
+async def test_metadata_always_allowed(mock_op):
+    """list_available_profiles must work even on a fully locked profile."""
+    from pydantic import SecretStr
+
+    from odoo_mcp_multi.config import OdooProfile
+    from odoo_mcp_multi.server import _set_fallback_ref
+
+    locked = OdooProfile(
+        name="locked",
+        url="https://example.com",
+        database="db",
+        password=SecretStr("secret"),
+        permissions={"mode": "granular", "allowed_operations": []},
+    )
+    _set_fallback_ref(locked)
+    mock_op.return_value = [{"name": "locked"}]
+
+    result = await mcp.call_tool("list_available_profiles", {})
+    data = _json_data(result)
+    assert data[0]["name"] == "locked"
+
+    _set_fallback_ref(None)

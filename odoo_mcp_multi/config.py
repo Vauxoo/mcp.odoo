@@ -8,10 +8,54 @@ from __future__ import annotations
 
 import json
 import os
+from enum import Enum
 from pathlib import Path
 from typing import Optional
 
 from pydantic import BaseModel, Field, SecretStr, model_validator
+
+
+# Operations that can be gated by granular permissions.
+# Metadata operations (list_available_profiles, get_version) are intentionally
+# excluded — they are non-destructive and always allowed.
+class Operation(str, Enum):
+    SEARCH_READ = "search_read"
+    WRITE = "write"
+    UNLINK = "unlink"
+    CREATE = "create"
+    EXPORT_RECORDS = "export_records"
+    IMPORT_RECORDS = "import_records"
+    EXECUTE_KW = "execute_kw"
+    LIST_MODELS = "list_models"
+    LIST_FIELDS = "list_fields"
+
+
+# Operations that are always allowed regardless of permission mode.
+ALWAYS_ALLOWED_TOOLS = frozenset({"list_available_profiles", "get_version"})
+
+
+class ProfilePermissions(BaseModel):
+    """Permission configuration for a profile.
+
+    Two modes:
+    - 'full' (default): all operations allowed, backward compatible.
+    - 'granular': only operations in allowed_operations are permitted.
+    """
+
+    mode: str = Field(default="full", description="Permission mode: 'full' or 'granular'")
+    allowed_operations: list[str] = Field(
+        default_factory=list,
+        description="Operations allowed when mode is 'granular' (e.g., ['search_read', 'list_fields'])",
+    )
+
+    @model_validator(mode="after")
+    def validate_operations(self) -> "ProfilePermissions":
+        """Validate that all allowed_operations are valid Operation enum values."""
+        valid_ops = {op.value for op in Operation}
+        invalid = [op for op in self.allowed_operations if op not in valid_ops]
+        if invalid:
+            raise ValueError(f"Invalid operations: {invalid}. Valid operations: {sorted(valid_ops)}")
+        return self
 
 
 class OdooProfile(BaseModel):
@@ -31,6 +75,10 @@ class OdooProfile(BaseModel):
     password: Optional[SecretStr] = Field(default=None, description="Password (legacy auth, stored securely)")
     api_key: Optional[SecretStr] = Field(default=None, description="API key for Odoo 19+ bearer auth")
     protocol: str = Field(default="auto", description="RPC protocol: auto, jsonrpcs, json2s, xmlrpcs")
+    permissions: Optional[ProfilePermissions] = Field(
+        default=None,
+        description="Optional granular permissions. None = full access (backward compat).",
+    )
 
     @model_validator(mode="after")
     def require_auth(self) -> "OdooProfile":
@@ -38,6 +86,18 @@ class OdooProfile(BaseModel):
         if not self.password and not self.api_key:
             raise ValueError("Either 'password' (legacy auth) or 'api_key' (Odoo 19+ JSON-2) is required.")
         return self
+
+    def is_operation_allowed(self, operation: str) -> bool:
+        """Check if an operation is allowed under this profile's permissions.
+
+        Always-allowed operations (metadata) bypass permission checks.
+        Profiles without explicit permissions default to full access.
+        """
+        if operation in ALWAYS_ALLOWED_TOOLS:
+            return True
+        if self.permissions is None or self.permissions.mode == "full":
+            return True
+        return operation in self.permissions.allowed_operations
 
     def to_dict(self) -> dict:
         """Convert profile to dictionary for JSON serialization."""
@@ -52,6 +112,8 @@ class OdooProfile(BaseModel):
             d["password"] = self.password.get_secret_value()
         if self.api_key is not None:
             d["api_key"] = self.api_key.get_secret_value()
+        if self.permissions is not None:
+            d["permissions"] = self.permissions.model_dump()
         return d
 
     @classmethod
@@ -65,6 +127,7 @@ class OdooProfile(BaseModel):
             password=SecretStr(data["password"]) if data.get("password") else None,
             api_key=SecretStr(data["api_key"]) if data.get("api_key") else None,
             protocol=data.get("protocol", "auto"),
+            permissions=data.get("permissions"),
         )
 
 
