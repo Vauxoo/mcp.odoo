@@ -386,6 +386,26 @@ def test_op_list_fields(mock_get_client):
     assert result["success"] is True
     assert "name" in result["fields"]
     assert result["fields"]["name"]["type"] == "char"
+    mock_client.execute_kw.assert_called_once_with(
+        "res.partner", "fields_get", [], {"attributes": ["string", "type", "required", "help"]}
+    )
+
+
+@patch("odoo_mcp_multi.operations._get_client")
+def test_op_list_fields_custom_attributes(mock_get_client):
+    """Custom attributes list is forwarded to fields_get."""
+    mock_client = MagicMock()
+    mock_get_client.return_value = mock_client
+    mock_client.execute_kw.return_value = {
+        "name": {"string": "Name", "type": "char"},
+    }
+
+    result = op_list_fields(model="res.partner", attributes="string,type", profile="test")
+    assert result["success"] is True
+    assert result["fields"]["name"]["type"] == "char"
+    mock_client.execute_kw.assert_called_once_with(
+        "res.partner", "fields_get", [], {"attributes": ["string", "type"]}
+    )
 
 
 # ---------------------------------------------------------------------------

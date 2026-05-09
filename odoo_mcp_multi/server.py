@@ -336,7 +336,7 @@ def list_models(search: str = "", profile: Optional[str] = None) -> str:
 
 
 @mcp.tool()
-def list_fields(model: str, profile: Optional[str] = None) -> str:
+def list_fields(model: str, attributes: str = "", profile: Optional[str] = None) -> str:
     """List all fields of an Odoo model.
 
     Args:
@@ -349,7 +349,7 @@ def list_fields(model: str, profile: Optional[str] = None) -> str:
     denied = _check_permission("list_fields", profile)
     if denied:
         return denied
-    return _json(op_list_fields(model, profile))
+    return _json(op_list_fields(model, attributes, profile))
 
 
 def run_server() -> None:

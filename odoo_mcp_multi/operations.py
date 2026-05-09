@@ -532,27 +532,32 @@ def op_list_models(
 
 def op_list_fields(
     model: str,
+    attributes: str = "",
     profile: Optional[str] = None,
 ) -> dict:
     """List all fields of an Odoo model.
 
     Args:
         model: Model name
+        attributes: Comma-separated field attributes to return (e.g. 'string,type').
+                    Defaults to 'string,type,required,help' when empty.
         profile: Profile name to use
 
     Returns:
         Dict with fields definitions,
         or an error dict with success=False for agent consumption.
     """
+    default_attrs = ["string", "type", "required", "help"]
+    attrs = parse_fields(attributes) if attributes else default_attrs
     try:
         client = _get_client(profile)
 
-        cache_key = _cache_key("fields", model, profile)
+        cache_key = _cache_key("fields", model, profile, ",".join(sorted(attrs)))
         cached = _cache_get(cache_key)
         if cached is not None:
             return cached
 
-        fields = client.execute_kw(model, "fields_get", [], {"attributes": ["string", "type", "required", "help"]})
+        fields = client.execute_kw(model, "fields_get", [], {"attributes": attrs})
     except Exception as exc:
         return {"success": False, "error": f"list_fields on '{model}' failed: {exc}"}
 
