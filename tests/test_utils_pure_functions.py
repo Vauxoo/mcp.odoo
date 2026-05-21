@@ -249,13 +249,13 @@ class TestJson2ClientBuildBody:
     def test_known_method_maps_args_by_name(self):
         """search_read([domain]) → {domain: domain}."""
         client = self._make_client()
-        body = client._build_body("search_read", [[("active", "=", True)]], {})
+        body = client._build_body("res.partner", "search_read", [[("active", "=", True)]], {})
         assert body == {"domain": [("active", "=", True)]}
 
     def test_known_method_with_kwargs(self):
         """kwargs are merged into body alongside mapped args."""
         client = self._make_client()
-        body = client._build_body("search_read", [[]], {"limit": 10, "fields": ["name"]})
+        body = client._build_body("res.partner", "search_read", [[]], {"limit": 10, "fields": ["name"]})
         assert body["domain"] == []
         assert body["limit"] == 10
         assert body["fields"] == ["name"]
@@ -263,13 +263,13 @@ class TestJson2ClientBuildBody:
     def test_known_method_fewer_args_than_signature(self):
         """If fewer args than the signature expects, only map what's provided."""
         client = self._make_client()
-        body = client._build_body("read", [], {})
+        body = client._build_body("res.partner", "read", [], {})
         assert "ids" not in body
 
     def test_unknown_method_uses_generic_arg_names(self):
         """Unknown methods get _arg0, _arg1, etc."""
         client = self._make_client()
-        body = client._build_body("custom_method", ["a", "b"], {"key": "val"})
+        body = client._build_body("res.partner", "custom_method", ["a", "b"], {"key": "val"})
         assert body["_arg0"] == "a"
         assert body["_arg1"] == "b"
         assert body["key"] == "val"
@@ -277,13 +277,13 @@ class TestJson2ClientBuildBody:
     def test_unknown_method_no_args(self):
         """Unknown method with no args returns just kwargs."""
         client = self._make_client()
-        body = client._build_body("ping", [], {"check": True})
+        body = client._build_body("res.partner", "ping", [], {"check": True})
         assert body == {"check": True}
 
     def test_write_maps_ids_and_vals(self):
         """write([ids, vals]) → {ids: [...], vals: {...}}."""
         client = self._make_client()
-        body = client._build_body("write", [[1, 2], {"name": "X"}], {})
+        body = client._build_body("res.partner", "write", [[1, 2], {"name": "X"}], {})
         assert body["ids"] == [1, 2]
         assert body["vals"] == {"name": "X"}
 

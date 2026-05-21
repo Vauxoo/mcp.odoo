@@ -343,3 +343,156 @@ def test_json2_client_load_sends_fields_and_data(httpx_mock, client):
     assert "_arg0" not in body
     assert "_arg1" not in body
     assert result == {"ids": [1, 2], "messages": []}
+
+
+# ---------------------------------------------------------------------------
+# T17 — Dynamic Introspection via /doc-bearer and fallback Heuristics
+# ---------------------------------------------------------------------------
+
+
+def test_json2_client_introspection_success(httpx_mock, client):
+    """T17a: Dynamic introspection successfully queries /doc-bearer and maps arguments."""
+    # Mock /doc-bearer response
+    httpx_mock.add_response(
+        method="GET",
+        url=f"{BASE_URL}/doc-bearer/helpdesk.ticket.json",
+        json={
+            "model": "helpdesk.ticket",
+            "methods": {
+                "custom_post": {
+                    "parameters": {
+                        "body": {"kind": "POSITIONAL_OR_KEYWORD"},
+                        "subject": {"kind": "POSITIONAL_OR_KEYWORD"},
+                    },
+                    "api": ["readonly"],
+                }
+            },
+        },
+    )
+    # Mock POST execute response
+    httpx_mock.add_response(
+        method="POST",
+        url=f"{BASE_URL}/json/2/helpdesk.ticket/custom_post",
+        json={"id": 32845},
+    )
+
+    result = client.execute_kw(
+        "helpdesk.ticket",
+        "custom_post",
+        args=[[32845], "My message", "My subject"],
+    )
+    assert result == {"id": 32845}
+
+    requests = httpx_mock.get_requests()
+    assert len(requests) == 2
+
+    # Verify GET doc request
+    get_req = requests[0]
+    assert get_req.method == "GET"
+    assert get_req.url == f"{BASE_URL}/doc-bearer/helpdesk.ticket.json"
+
+    # Verify POST execute request has perfectly mapped parameters
+    post_req = requests[1]
+    assert post_req.method == "POST"
+    assert post_req.url == f"{BASE_URL}/json/2/helpdesk.ticket/custom_post"
+    body = json.loads(post_req.content)
+    assert body["ids"] == [32845]
+    assert body["body"] == "My message"
+    assert body["subject"] == "My subject"
+
+
+def test_json2_client_introspection_caching(httpx_mock, client):
+    """T17b: Dynamic introspection caches signatures to avoid redundant HTTP requests."""
+    # Mock /doc-bearer response (should only be hit once)
+    httpx_mock.add_response(
+        method="GET",
+        url=f"{BASE_URL}/doc-bearer/helpdesk.ticket.json",
+        json={
+            "model": "helpdesk.ticket",
+            "methods": {
+                "custom_post": {
+                    "parameters": {
+                        "body": {"kind": "POSITIONAL_OR_KEYWORD"},
+                    },
+                    "api": [],
+                }
+            },
+        },
+    )
+    # Mock POST execute responses
+    httpx_mock.add_response(
+        method="POST",
+        url=f"{BASE_URL}/json/2/helpdesk.ticket/custom_post",
+        json={"id": 1},
+    )
+    httpx_mock.add_response(
+        method="POST",
+        url=f"{BASE_URL}/json/2/helpdesk.ticket/custom_post",
+        json={"id": 2},
+    )
+
+    client.execute_kw("helpdesk.ticket", "custom_post", args=[[32845], "Msg 1"])
+    client.execute_kw("helpdesk.ticket", "custom_post", args=[[32845], "Msg 2"])
+
+    requests = httpx_mock.get_requests()
+    # 1 GET request + 2 POST requests = 3 total requests
+    assert len(requests) == 3
+    assert requests[0].method == "GET"
+    assert requests[1].method == "POST"
+    assert requests[2].method == "POST"
+
+
+def test_json2_client_introspection_fallback_404(httpx_mock, client):
+    """T17c: If /doc-bearer returns 404/error, dynamic client falls back to smart local heuristic."""
+    # Mock /doc-bearer failure
+    httpx_mock.add_response(
+        method="GET",
+        url=f"{BASE_URL}/doc-bearer/helpdesk.ticket.json",
+        status_code=404,
+    )
+    # Mock POST execute response
+    httpx_mock.add_response(
+        method="POST",
+        url=f"{BASE_URL}/json/2/helpdesk.ticket/custom_post",
+        json={"id": 32845},
+    )
+
+    # Call with args where args[0] is list of ints -> smart heuristic detects instance method
+    result = client.execute_kw("helpdesk.ticket", "custom_post", args=[[32845], "fallback_message"])
+    assert result == {"id": 32845}
+
+    requests = httpx_mock.get_requests()
+    assert len(requests) == 2
+
+    # Verify smart heuristic mapping: args[0] -> ids, args[1] -> _arg0
+    post_req = requests[1]
+    body = json.loads(post_req.content)
+    assert body["ids"] == [32845]
+    assert body["_arg0"] == "fallback_message"
+
+
+def test_json2_client_heuristic_non_instance(httpx_mock, client):
+    """T17d: Local heuristic maps args directly to _argX when first argument is not an ID or ID list."""
+    # Mock /doc-bearer failure
+    httpx_mock.add_response(
+        method="GET",
+        url=f"{BASE_URL}/doc-bearer/helpdesk.ticket.json",
+        status_code=404,
+    )
+    # Mock POST execute response
+    httpx_mock.add_response(
+        method="POST",
+        url=f"{BASE_URL}/json/2/helpdesk.ticket/custom_post",
+        json=True,
+    )
+
+    # Use list instead of tuple for domain to match JSON serialization/deserialization format
+    domain = [["name", "=", "test"]]
+    client.execute_kw("helpdesk.ticket", "custom_post", args=[domain, "second_val"])
+
+    requests = httpx_mock.get_requests()
+    post_req = requests[1]
+    body = json.loads(post_req.content)
+    assert "ids" not in body
+    assert body["_arg0"] == domain
+    assert body["_arg1"] == "second_val"

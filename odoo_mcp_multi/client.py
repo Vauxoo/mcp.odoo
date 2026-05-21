@@ -333,6 +333,8 @@ _JSON2_METHOD_SIGNATURES: dict[str, tuple[list[str], bool]] = {
     "check_access_rights": (["operation"], False),
     "check_access_rule": (["ids", "operation"], True),
     "load": (["fields", "data"], False),
+    "message_post": (["ids", "body", "subject"], True),
+    "activity_schedule": (["ids", "activity_type_xmlid"], True),
 }
 
 
@@ -374,6 +376,9 @@ class Json2Client(BaseOdooClient):
             self._api_key: str = api_key.get_secret_value()
         else:
             self._api_key = api_key
+        # We cache Odoo endpoint method signatures (mapped by model -> method) to avoid redundant network
+        # round-trips because the Odoo environment metadata remains static during the client lifecycle.
+        self._signatures_cache: dict[str, dict[str, tuple[list[str], bool] | None]] = {}
 
     def _headers(self) -> dict[str, str]:
         """Build the required HTTP headers for every JSON-2 request."""
@@ -386,8 +391,33 @@ class Json2Client(BaseOdooClient):
             h["X-Odoo-Database"] = self.database
         return h
 
+    def _fetch_method_signature(self, model: str, method: str) -> tuple[list[str], bool] | None:
+        """Fetch the signature for a given method using Odoo 19+ /doc-bearer endpoint."""
+        url = f"{self.url}/doc-bearer/{model}.json"
+        try:
+            response = httpx.get(
+                url,
+                headers=self._headers(),
+                timeout=self.timeout,
+            )
+            if response.status_code != 200:
+                return None
+            data = response.json()
+            method_info = data.get("methods", {}).get(method)
+            if not method_info:
+                return None
+
+            is_instance = "model" not in method_info.get("api", [])
+            arg_names = list(method_info.get("parameters", {}).keys())
+            if is_instance:
+                arg_names = ["ids"] + arg_names
+            return arg_names, is_instance
+        except Exception:
+            return None
+
     def _build_body(
         self,
+        model: str,
         method: str,
         args: list,
         kwargs: dict,
@@ -395,23 +425,49 @@ class Json2Client(BaseOdooClient):
         """Translate positional args + kwargs into a named-parameter JSON body.
 
         JSON-2 does not support positional arguments — every parameter must be
-        named.  We use ``_JSON2_METHOD_SIGNATURES`` for the 10 common ORM
-        methods and fall back to a best-effort merge for unknown methods.
+        named. We use ``_JSON2_METHOD_SIGNATURES`` for the 10 common ORM
+        methods and fall back to dynamic introspection or smart local heuristics
+        for unknown methods.
         """
         args = list(args or [])
         body: dict = dict(kwargs or {})
 
         sig = _JSON2_METHOD_SIGNATURES.get(method)
         if sig is None:
-            for i, val in enumerate(args):
-                body.setdefault(f"_arg{i}", val)
+            if model not in self._signatures_cache:
+                self._signatures_cache[model] = {}
+            cached_sig = self._signatures_cache[model].get(method, False)
+            if cached_sig is False:
+                sig = self._fetch_method_signature(model, method)
+                self._signatures_cache[model][method] = sig
+            else:
+                sig = cached_sig
+
+        if sig is not None:
+            arg_names, _ = sig
+            for i, name in enumerate(arg_names):
+                if i < len(args):
+                    body[name] = args[i]
             return body
 
-        arg_names, _is_instance = sig
-        for i, name in enumerate(arg_names):
-            if i < len(args):
-                body[name] = args[i]
+        # If /doc-bearer API is unavailable (e.g. Odoo < 19 or missing api_doc), we use a deterministic
+        # local heuristic: if the first argument represents database record ID(s), we treat it as an
+        # instance method mapping to "ids".
+        first_arg = args[0] if args else None
+        is_instance = False
+        if isinstance(first_arg, int):
+            is_instance = True
+        elif isinstance(first_arg, list) and all(isinstance(x, int) for x in first_arg):
+            is_instance = True
 
+        if is_instance:
+            body["ids"] = args[0]
+            for i, val in enumerate(args[1:]):
+                body[f"_arg{i}"] = val
+            return body
+
+        for i, val in enumerate(args):
+            body[f"_arg{i}"] = val
         return body
 
     def authenticate(self) -> None:  # type: ignore[override]
@@ -427,7 +483,7 @@ class Json2Client(BaseOdooClient):
     ) -> object:
         """Execute an Odoo ORM method via the /json/2 REST endpoint."""
         url = f"{self.url}/json/2/{model}/{method}"
-        body = self._build_body(method, args or [], kwargs or {})
+        body = self._build_body(model, method, args or [], kwargs or {})
 
         try:
             response = httpx.post(
