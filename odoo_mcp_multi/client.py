@@ -45,6 +45,7 @@ class BaseOdooClient(ABC):
         user: str,
         password: str | SecretStr,
         timeout: int = 120,
+        verify: bool = True,
     ) -> None:
         """Initialize the Odoo client.
 
@@ -54,12 +55,14 @@ class BaseOdooClient(ABC):
             user: Username for authentication
             password: Password for authentication (string or SecretStr)
             timeout: Request timeout in seconds (default: 120)
+            verify: Verify SSL certificates (default: True)
         """
         self.url = normalize_url(url)
         self.database = database
         self.user = user
         self._password = password.get_secret_value() if isinstance(password, SecretStr) else password
         self.timeout = timeout
+        self.verify = verify
         self._uid: Optional[int] = None
 
     @abstractmethod
@@ -212,6 +215,7 @@ class JsonRpcClient(BaseOdooClient):
         password: str | SecretStr,
         timeout: int = 120,
         use_json2: bool = False,
+        verify: bool = True,
     ) -> None:
         """Initialize the JSON-RPC client.
 
@@ -222,8 +226,9 @@ class JsonRpcClient(BaseOdooClient):
             password: Password for authentication
             timeout: Request timeout in seconds (default: 120)
             use_json2: Use JSON2 protocol for Odoo 19.0+ (default: False)
+            verify: Verify SSL certificates (default: True)
         """
-        super().__init__(url, database, user, password, timeout)
+        super().__init__(url, database, user, password, timeout, verify=verify)
         self.use_json2 = use_json2
         self._endpoint = "/jsonrpc" if not use_json2 else "/jsonrpc/2"
 
@@ -254,6 +259,7 @@ class JsonRpcClient(BaseOdooClient):
                 f"{self.url}{self._endpoint}",
                 json=payload,
                 timeout=self.timeout,
+                verify=self.verify,
                 headers={"User-Agent": "odoo-mcp-multi"},
             )
         except httpx.TimeoutException as e:
@@ -363,6 +369,7 @@ class Json2Client(BaseOdooClient):
         # user/password accepted but ignored for backward compat with factory
         user: str = "",
         password: str | SecretStr = "",
+        verify: bool = True,
     ) -> None:
         # BaseOdooClient requires user/password — pass empty strings
         super().__init__(
@@ -371,6 +378,7 @@ class Json2Client(BaseOdooClient):
             user=user,
             password=password or SecretStr(""),
             timeout=timeout,
+            verify=verify,
         )
         if isinstance(api_key, SecretStr):
             self._api_key: str = api_key.get_secret_value()
@@ -392,28 +400,88 @@ class Json2Client(BaseOdooClient):
         return h
 
     def _fetch_method_signature(self, model: str, method: str) -> tuple[list[str], bool] | None:
-        """Fetch the signature for a given method using Odoo 19+ /doc-bearer endpoint."""
+        """Fetch the signature for a given method dynamically using Odoo's reflection API.
+
+        This method queries the Bearer-authenticated ``/doc-bearer/<model>.json`` endpoint on the Odoo
+        server. It parses the JSON schema representation of the model's methods to extract parameter
+        names and determine if the method is an instance method or a class/model method.
+
+        To increase resilience in unstable network environments, it implements up to 3 attempts with
+        exponential backoff (1s, 2s) for transient HTTP errors and network timeouts.
+
+        Parameters:
+            model: The name of the Odoo model (e.g., "res.partner").
+            method: The name of the method to inspect (e.g., "message_post").
+
+        Returns:
+            A tuple of ``(arg_names, is_instance_method)`` if successfully retrieved and parsed.
+            Specifically:
+            - ``arg_names`` is a list of positional argument names (e.g., ``["ids", "body", "subject"]``).
+            - ``is_instance_method`` is a boolean indicating if the method acts on specific record IDs.
+            Returns ``None`` if:
+            - The reflection API endpoint is unavailable (e.g., Odoo < 19.0).
+            - The model or method does not exist or has no defined schema.
+            - All retry attempts fail due to network errors, timeouts, or transient 5xx server errors.
+            - The response payload is not valid JSON.
+
+        Exceptions Handled:
+            - ``httpx.TimeoutException``: Caught during network timeouts; triggers retry/fallback.
+            - ``httpx.NetworkError``: Caught during connection issues; triggers retry/fallback.
+            - ``json.JSONDecodeError``: Caught if the server response is not valid JSON; returns None.
+            - ``KeyError``, ``AttributeError``: Caught if the JSON structure does not match the
+              expected Odoo schema format; returns None.
+
+        Examples:
+            >>> client = Json2Client("https://odoo.example.com", "my_db", "my_api_key")
+            >>> client._fetch_method_signature("res.partner", "message_post")
+            (["ids", "body", "subject"], True)
+
+            >>> client._fetch_method_signature("res.partner", "create")
+            (["vals_list"], False)
+        """
+        import time
+
         url = f"{self.url}/doc-bearer/{model}.json"
-        try:
-            response = httpx.get(
-                url,
-                headers=self._headers(),
-                timeout=self.timeout,
-            )
-            if response.status_code != 200:
-                return None
-            data = response.json()
-            method_info = data.get("methods", {}).get(method)
-            if not method_info:
+        attempts = 3
+        delay = 1.0
+
+        for attempt in range(attempts):
+            try:
+                response = httpx.get(
+                    url,
+                    headers=self._headers(),
+                    timeout=self.timeout,
+                    verify=self.verify,
+                )
+                if response.status_code == 200:
+                    try:
+                        data = response.json()
+                        method_info = data.get("methods", {}).get(method)
+                        if not method_info:
+                            return None
+
+                        is_instance = "model" not in method_info.get("api", [])
+                        arg_names = list(method_info.get("parameters", {}).keys())
+                        if is_instance:
+                            arg_names = ["ids"] + arg_names
+                        return arg_names, is_instance
+                    except (json.JSONDecodeError, KeyError, AttributeError):
+                        return None
+
+                # For client errors other than 429 (rate-limit), retry won't help
+                if response.status_code < 500 and response.status_code != 429:
+                    return None
+            except (httpx.TimeoutException, httpx.NetworkError):
+                if attempt == attempts - 1:
+                    return None
+            except Exception:
                 return None
 
-            is_instance = "model" not in method_info.get("api", [])
-            arg_names = list(method_info.get("parameters", {}).keys())
-            if is_instance:
-                arg_names = ["ids"] + arg_names
-            return arg_names, is_instance
-        except Exception:
-            return None
+            if attempt < attempts - 1:
+                time.sleep(delay)
+                delay *= 2.0
+
+        return None
 
     def _build_body(
         self,
@@ -491,6 +559,7 @@ class Json2Client(BaseOdooClient):
                 headers=self._headers(),
                 json=body,
                 timeout=self.timeout,
+                verify=self.verify,
             )
         except httpx.TimeoutException as e:
             raise OdooExecutionError(f"Request timed out: {e}") from e
@@ -527,8 +596,14 @@ class XmlRpcClient(BaseOdooClient):
         return f"{self.url}/xmlrpc/2/object"
 
     def _get_transport(self) -> xmlrpc.client.Transport:
-        """Create a transport with configured timeout."""
-        transport = xmlrpc.client.SafeTransport() if self.url.startswith("https") else xmlrpc.client.Transport()
+        """Create a transport with configured timeout and SSL verification settings."""
+        if self.url.startswith("https"):
+            import ssl
+
+            context = None if self.verify else ssl._create_unverified_context()
+            transport = xmlrpc.client.SafeTransport(context=context)
+        else:
+            transport = xmlrpc.client.Transport()
         original_make_connection = transport.make_connection
 
         def make_connection_with_timeout(host: str) -> Any:
@@ -595,6 +670,7 @@ def create_client(
     api_key: str | SecretStr = "",
     protocol: Protocol | str = Protocol.AUTO,
     timeout: int = 120,
+    verify: bool = True,
 ) -> BaseOdooClient:
     """Create an appropriate Odoo client based on protocol.
 
@@ -611,6 +687,7 @@ def create_client(
         api_key: Bearer API key (JSON-2 auth — Odoo ≥ 19)
         protocol: Protocol to use (auto, json2s, jsonrpcs, xmlrpcs, etc.)
         timeout: Request timeout in seconds
+        verify: Verify SSL certificates (default: True)
 
     Returns:
         Configured Odoo client instance
@@ -619,7 +696,7 @@ def create_client(
         protocol = Protocol(protocol.lower())
 
     if protocol == Protocol.AUTO:
-        protocol = detect_protocol(url, timeout=min(timeout, 30))
+        protocol = detect_protocol(url, timeout=min(timeout, 30), verify=verify)
 
     # JSON-2 requires an API key — fail fast before constructing the client
     if protocol in (Protocol.JSON2, Protocol.JSON2S) and not api_key:
@@ -629,12 +706,33 @@ def create_client(
         )
 
     if protocol in (Protocol.JSON2, Protocol.JSON2S):
-        return Json2Client(url=url, database=database, api_key=api_key, timeout=timeout)
+        return Json2Client(
+            url=url,
+            database=database,
+            api_key=api_key,
+            timeout=timeout,
+            verify=verify,
+        )
 
     if protocol in (Protocol.JSONRPC, Protocol.JSONRPCS):
-        return JsonRpcClient(url, database, user, password, timeout, use_json2=False)
+        return JsonRpcClient(
+            url=url,
+            database=database,
+            user=user,
+            password=password,
+            timeout=timeout,
+            verify=verify,
+            use_json2=False,
+        )
 
-    return XmlRpcClient(url, database, user, password, timeout)
+    return XmlRpcClient(
+        url=url,
+        database=database,
+        user=user,
+        password=password,
+        timeout=timeout,
+        verify=verify,
+    )
 
 
 # Alias for backward compatibility

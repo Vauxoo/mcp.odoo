@@ -30,7 +30,7 @@ class Protocol(str, Enum):
     AUTO = "auto"  # Auto-detect based on version
 
 
-def get_server_version(url: str, timeout: int = 30) -> Optional[dict]:
+def get_server_version(url: str, timeout: int = 30, verify: bool = True) -> Optional[dict]:
     """Get server version info without authentication.
 
     Priority order:
@@ -47,6 +47,7 @@ def get_server_version(url: str, timeout: int = 30) -> Optional[dict]:
         response = httpx.get(
             f"{url}/web/version",
             timeout=timeout,
+            verify=verify,
             headers={"User-Agent": "odoo-mcp-multi"},
         )
         if response.status_code == 200:
@@ -74,6 +75,7 @@ def get_server_version(url: str, timeout: int = 30) -> Optional[dict]:
             f"{url}/jsonrpc",
             json=payload,
             timeout=timeout,
+            verify=verify,
             headers={"User-Agent": "odoo-mcp-multi"},
         )
         result = response.json()
@@ -92,7 +94,7 @@ def get_server_version(url: str, timeout: int = 30) -> Optional[dict]:
     return None
 
 
-def detect_protocol(url: str, timeout: int = 30) -> Protocol:
+def detect_protocol(url: str, timeout: int = 30, verify: bool = True) -> Protocol:
     """Auto-detect the best protocol for an Odoo instance.
 
     Protocol selection logic:
@@ -100,7 +102,7 @@ def detect_protocol(url: str, timeout: int = 30) -> Protocol:
     - Odoo 8.0 - 18.x: JSONRPCS preferred
     - Odoo < 8.0 or unknown: XMLRPCS fallback
     """
-    version_info = get_server_version(url, timeout)
+    version_info = get_server_version(url, timeout, verify)
 
     if version_info is None:
         return Protocol.XMLRPCS  # Can't detect, use legacy

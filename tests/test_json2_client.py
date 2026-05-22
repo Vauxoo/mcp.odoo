@@ -496,3 +496,175 @@ def test_json2_client_heuristic_non_instance(httpx_mock, client):
     assert "ids" not in body
     assert body["_arg0"] == domain
     assert body["_arg1"] == "second_val"
+
+
+# ---------------------------------------------------------------------------
+# T18 — Exponential Backoff Retries on Transient Failures
+# ---------------------------------------------------------------------------
+
+
+def test_json2_client_introspection_retries(httpx_mock, client):
+    """T18: Introspection retries on transient errors and succeeds on third attempt."""
+    from unittest.mock import patch
+
+    with patch("time.sleep") as mock_sleep:
+        # Mock 2 transient failures (503), followed by a success
+        httpx_mock.add_response(
+            method="GET",
+            url=f"{BASE_URL}/doc-bearer/helpdesk.ticket.json",
+            status_code=503,
+        )
+        httpx_mock.add_response(
+            method="GET",
+            url=f"{BASE_URL}/doc-bearer/helpdesk.ticket.json",
+            status_code=503,
+        )
+        httpx_mock.add_response(
+            method="GET",
+            url=f"{BASE_URL}/doc-bearer/helpdesk.ticket.json",
+            status_code=200,
+            json={
+                "model": "helpdesk.ticket",
+                "methods": {
+                    "custom_post": {
+                        "parameters": {
+                            "body": {"kind": "POSITIONAL_OR_KEYWORD"},
+                        },
+                        "api": [],
+                    }
+                },
+            },
+        )
+
+        sig = client._fetch_method_signature("helpdesk.ticket", "custom_post")
+        assert sig == (["ids", "body"], True)
+
+        requests = httpx_mock.get_requests()
+        assert len(requests) == 3
+        # Ensure we slept with exponential delays (1.0s, 2.0s)
+        assert mock_sleep.call_count == 2
+        mock_sleep.assert_any_call(1.0)
+        mock_sleep.assert_any_call(2.0)
+
+
+# ---------------------------------------------------------------------------
+# T19 — Retry Exhaustion Fallback
+# ---------------------------------------------------------------------------
+
+
+def test_json2_client_introspection_retry_exhaustion(httpx_mock, client):
+    """T19: Introspection fails after 3 exhausted attempts and falls back to heuristic."""
+    from unittest.mock import patch
+
+    with patch("time.sleep") as mock_sleep:
+        # Mock 3 transient errors
+        for _ in range(3):
+            httpx_mock.add_response(
+                method="GET",
+                url=f"{BASE_URL}/doc-bearer/helpdesk.ticket.json",
+                status_code=503,
+            )
+        # Mock POST execute response
+        httpx_mock.add_response(
+            method="POST",
+            url=f"{BASE_URL}/json/2/helpdesk.ticket/custom_post",
+            json={"id": 32845},
+        )
+
+        result = client.execute_kw("helpdesk.ticket", "custom_post", args=[[32845], "msg"])
+        assert result == {"id": 32845}
+
+        requests = httpx_mock.get_requests()
+        # 3 GETs to doc-bearer, 1 POST to custom_post = 4 total requests
+        assert len(requests) == 4
+        assert requests[0].method == "GET"
+        assert requests[1].method == "GET"
+        assert requests[2].method == "GET"
+        assert requests[3].method == "POST"
+
+        assert mock_sleep.call_count == 2
+
+
+# ---------------------------------------------------------------------------
+# T20 — SSL Verification Propagation (httpx)
+# ---------------------------------------------------------------------------
+
+
+def test_client_ssl_verification_propagation():
+    """T20: verify parameter is correctly set and propagated to httpx client calls."""
+    from unittest.mock import MagicMock, patch
+
+    # 1. Json2Client
+    c2 = Json2Client(url=BASE_URL, database=DATABASE, api_key=API_KEY, verify=False)
+    assert c2.verify is False
+
+    with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+        # Mock responses
+        mock_get.return_value = MagicMock(status_code=404)
+        mock_post.return_value = MagicMock(status_code=200, json=lambda: [])
+
+        c2.execute_kw("res.partner", "custom_method", args=[[]])
+
+        # Verify httpx.get and httpx.post were called with verify=False
+        assert mock_get.call_count == 1
+        assert mock_get.call_args[1]["verify"] is False
+
+        assert mock_post.call_count == 1
+        assert mock_post.call_args[1]["verify"] is False
+
+    # 2. JsonRpcClient
+    crpc = create_client(
+        url=BASE_URL,
+        database=DATABASE,
+        user="admin",
+        password="pwd",
+        protocol=Protocol.JSONRPCS,
+        verify=False,
+    )
+    assert crpc.verify is False
+
+    with patch("httpx.post") as mock_post:
+        mock_post.side_effect = [
+            MagicMock(status_code=200, json=lambda: {"result": 42}),
+            MagicMock(status_code=200, json=lambda: {"result": []}),
+        ]
+        crpc.execute_kw("res.partner", "search_read", args=[[]])
+
+        assert mock_post.call_count == 2  # 1 for auth, 1 for execute
+        for call in mock_post.call_args_list:
+            assert call[1]["verify"] is False
+
+    # 3. detect_protocol and get_server_version propagation
+    with patch("httpx.get") as mock_get, patch("httpx.post") as mock_post:
+        mock_get.return_value = MagicMock(status_code=500)
+        mock_post.return_value = MagicMock(status_code=500)
+
+        detect_protocol(BASE_URL, verify=False)
+
+        assert mock_get.call_count == 1
+        assert mock_get.call_args[1]["verify"] is False
+
+        assert mock_post.call_count == 1
+        assert mock_post.call_args[1]["verify"] is False
+
+
+# ---------------------------------------------------------------------------
+# T21 — SSL Verification Propagation (xmlrpc SafeTransport)
+# ---------------------------------------------------------------------------
+
+
+def test_xmlrpc_client_ssl_verification_propagation():
+    """T21: XmlRpcClient uses unverified SSL context when verify=False."""
+    import xmlrpc.client
+
+    cxml = create_client(
+        url="https://localhost:8069",
+        database=DATABASE,
+        user="admin",
+        password="pwd",
+        protocol=Protocol.XMLRPCS,
+        verify=False,
+    )
+    assert cxml.verify is False
+    transport = cxml._get_transport()
+    assert isinstance(transport, xmlrpc.client.SafeTransport)
