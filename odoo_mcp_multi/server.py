@@ -220,6 +220,7 @@ def export_records(
     fields: str = "id,name",
     limit: int = 500,
     offset: int = 0,
+    format: str = "json",
     profile: Optional[str] = None,
 ) -> str:
     """Export records from an Odoo model using native export_data.
@@ -238,6 +239,7 @@ def export_records(
         fields: Comma-separated field names (e.g., "id,name,country_id/id")
         limit: Maximum number of records to export (default: 500)
         offset: Number of records to skip for pagination (default: 0)
+        format: Response format — 'json' (default), 'compact', 'table', 'html', or 'csv'.
         profile: Optional name of the Odoo profile to connect to.
 
     Returns:
@@ -246,7 +248,7 @@ def export_records(
     denied = _check_permission("export_records", profile)
     if denied:
         return denied
-    return _json(op_export_records(model, domain, fields, limit, offset, profile))
+    return _json(op_export_records(model, domain, fields, limit, offset, format, profile))
 
 
 @mcp.tool()
@@ -327,11 +329,16 @@ def get_version(profile: Optional[str] = None) -> str:
 
 
 @mcp.tool()
-def list_models(search: str = "", profile: Optional[str] = None) -> str:
+def list_models(
+    search: str = "",
+    format: str = "json",
+    profile: Optional[str] = None,
+) -> str:
     """List available models in the Odoo instance.
 
     Args:
         search: Optional search term to filter model names
+        format: Response format — 'json' (default), 'compact', 'table', 'html', or 'csv'.
         profile: Optional name of the Odoo profile to connect to. If not provided, uses the default profile.
 
     Returns:
@@ -340,15 +347,21 @@ def list_models(search: str = "", profile: Optional[str] = None) -> str:
     denied = _check_permission("list_models", profile)
     if denied:
         return denied
-    return _json(op_list_models(search, profile))
+    return _json(op_list_models(search, format, profile))
 
 
 @mcp.tool()
-def list_fields(model: str, attributes: str = "", profile: Optional[str] = None) -> str:
+def list_fields(
+    model: str,
+    attributes: str = "",
+    format: str = "json",
+    profile: Optional[str] = None,
+) -> str:
     """List all fields of an Odoo model.
 
     Args:
         model: Model name (e.g., 'res.partner')
+        format: Response format — 'json' (default), 'compact', 'table', 'html', or 'csv'.
         profile: Optional name of the Odoo profile to connect to. If not provided, uses the default profile.
 
     Returns:
@@ -357,7 +370,7 @@ def list_fields(model: str, attributes: str = "", profile: Optional[str] = None)
     denied = _check_permission("list_fields", profile)
     if denied:
         return denied
-    return _json(op_list_fields(model, attributes, profile))
+    return _json(op_list_fields(model, attributes, format, profile))
 
 
 def run_server() -> None:

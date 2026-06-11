@@ -60,7 +60,7 @@ python module_deps.py -p vauxoo --extra-native my_custom_base --extra-native ano
 
 ## How it works
 
-1. **Fetches data** via `odoo-mcp` operations (no subprocess, direct Python import):
+1. **Fetches data** by calling the `odoo-mcp` CLI via `subprocess.run()`:
    - All installed modules from `ir.module.module` (name, author)
    - All dependency records from `ir.module.module.dependency`
 

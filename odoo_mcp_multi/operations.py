@@ -430,6 +430,7 @@ def op_export_records(
     fields: str = "id,name",
     limit: int = 500,
     offset: int = 0,
+    format: str = "json",
     profile: Optional[str] = None,
 ) -> dict:
     """Export records from an Odoo model using native export_data.
@@ -440,12 +441,19 @@ def op_export_records(
         fields: Comma-separated field names
         limit: Maximum number of records to export (default: 500)
         offset: Number of records to skip (default: 0)
+        format: Response format — 'json', 'compact', 'table', 'html', or 'csv'.
         profile: Profile name to use
 
     Returns:
         Dict with records, total, limit, offset, has_more, next_offset,
         or an error dict with success=False for agent consumption.
     """
+    if format not in VALID_FORMATS:
+        return {
+            "success": False,
+            "error": f"Invalid format '{format}'. Valid formats: {sorted(VALID_FORMATS)}",
+        }
+
     try:
         client = _get_client(profile)
         parsed_domain = parse_domain(domain)
@@ -467,10 +475,13 @@ def op_export_records(
         "offset": offset,
         "has_more": (offset + limit) < total,
         "next_offset": offset + limit,
+        "format": format,
     }
 
     if not search_result:
-        return {"records": [], **envelope}
+        if format == "json":
+            return {"records": [], **envelope}
+        return {"data": "", **envelope}
 
     try:
         export_result = client.execute_kw(model, "export_data", [search_result, parsed_fields])
@@ -487,6 +498,14 @@ def op_export_records(
         {field_name: row[i] if i < len(row) else None for i, field_name in enumerate(parsed_fields)} for row in datas
     ]
 
+    if format == "compact":
+        return {**_format_compact(records), **envelope}
+    if format == "table":
+        return {"data": _format_table(records), **envelope}
+    if format == "html":
+        return {"data": _format_html(records), **envelope}
+    if format == "csv":
+        return {"data": _format_csv(records), **envelope}
     return {"records": records, **envelope}
 
 
@@ -612,18 +631,26 @@ def op_get_version(profile: Optional[str] = None) -> dict:
 
 def op_list_models(
     search: str = "",
+    format: str = "json",
     profile: Optional[str] = None,
 ) -> dict:
     """List available models in the Odoo instance.
 
     Args:
         search: Optional search term to filter model names
+        format: Response format — 'json', 'compact', 'table', 'html', or 'csv'.
         profile: Profile name to use
 
     Returns:
         Dict with models list,
         or an error dict with success=False for agent consumption.
     """
+    if format not in VALID_FORMATS:
+        return {
+            "success": False,
+            "error": f"Invalid format '{format}'. Valid formats: {sorted(VALID_FORMATS)}",
+        }
+
     try:
         client = _get_client(profile)
         domain: list = []
@@ -633,26 +660,39 @@ def op_list_models(
         cache_key = _cache_key("models", "ir.model", profile, search)
         cached = _cache_get(cache_key)
         if cached is not None:
-            return cached
-
-        models = client.search_read(
-            model="ir.model",
-            domain=domain,
-            fields=["name", "model", "info"],
-            limit=50,
-            order="model",
-        )
+            models = cached
+        else:
+            models = client.search_read(
+                model="ir.model",
+                domain=domain,
+                fields=["name", "model", "info"],
+                limit=50,
+                order="model",
+            )
+            _cache_set(cache_key, models)
     except Exception as exc:
         return {"success": False, "error": f"list_models failed: {exc}"}
 
-    result = {"success": True, "models": models}
-    _cache_set(cache_key, result)
-    return result
+    if format == "json":
+        return {"success": True, "models": models}
+
+    envelope = {"format": format, "model_count": len(models)}
+
+    if format == "compact":
+        return {**_format_compact(models), **envelope}
+    if format == "table":
+        return {"data": _format_table(models), **envelope}
+    if format == "html":
+        return {"data": _format_html(models), **envelope}
+    if format == "csv":
+        return {"data": _format_csv(models), **envelope}
+    return {"success": True, "models": models}
 
 
 def op_list_fields(
     model: str,
     attributes: str = "",
+    format: str = "json",
     profile: Optional[str] = None,
 ) -> dict:
     """List all fields of an Odoo model.
@@ -661,12 +701,19 @@ def op_list_fields(
         model: Model name
         attributes: Comma-separated field attributes to return (e.g. 'string,type').
                     Defaults to 'string,type,required,help' when empty.
+        format: Response format — 'json', 'compact', 'table', 'html', or 'csv'.
         profile: Profile name to use
 
     Returns:
         Dict with fields definitions,
         or an error dict with success=False for agent consumption.
     """
+    if format not in VALID_FORMATS:
+        return {
+            "success": False,
+            "error": f"Invalid format '{format}'. Valid formats: {sorted(VALID_FORMATS)}",
+        }
+
     default_attrs = ["string", "type", "required", "help"]
     attrs = parse_fields(attributes) if attributes else default_attrs
     try:
@@ -675,12 +722,26 @@ def op_list_fields(
         cache_key = _cache_key("fields", model, profile, ",".join(sorted(attrs)))
         cached = _cache_get(cache_key)
         if cached is not None:
-            return cached
-
-        fields = client.execute_kw(model, "fields_get", [], {"attributes": attrs})
+            fields = cached
+        else:
+            fields = client.execute_kw(model, "fields_get", [], {"attributes": attrs})
+            _cache_set(cache_key, fields)
     except Exception as exc:
         return {"success": False, "error": f"list_fields on '{model}' failed: {exc}"}
 
-    result = {"success": True, "fields": fields}
-    _cache_set(cache_key, result)
-    return result
+    if format == "json":
+        return {"success": True, "fields": fields}
+
+    # Flatten dict-of-dicts → list-of-dicts for tabular formatters
+    records = [{"field": name, **attrs_dict} for name, attrs_dict in sorted(fields.items())]
+    envelope = {"format": format, "field_count": len(records)}
+
+    if format == "compact":
+        return {**_format_compact(records), **envelope}
+    if format == "table":
+        return {"data": _format_table(records), **envelope}
+    if format == "html":
+        return {"data": _format_html(records), **envelope}
+    if format == "csv":
+        return {"data": _format_csv(records), **envelope}
+    return {"success": True, "fields": fields}

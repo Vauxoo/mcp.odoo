@@ -157,6 +157,7 @@ odoo-mcp search-read -m res.partner \
 | `--limit` | `-l` | `100` | Max records |
 | `--offset` | | `0` | Records to skip (pagination) |
 | `--order` | | `""` | Sort order |
+| `--format` | `-F` | `json` | Output format: `json`, `compact`, `table`, `html`, `csv` |
 
 Output is a **pagination envelope** with `records`, `total`, `has_more`, and `next_offset`.
 
@@ -308,6 +309,37 @@ odoo-mcp list-fields -m account.move -p prod
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--model` | `-m` | Model name to inspect |
+
+---
+
+## Agent-Optimized Usage
+
+The `--format` / `-F` flag changes how output is written to stdout:
+
+- **JSON format** (default) retains the full pagination envelope (`records`,
+  `total`, `has_more`, `next_offset`) as a single JSON object — ideal for
+  piping into `jq`.
+- **Non-JSON formats** (`table`, `csv`, `html`) print the formatted data
+  directly to stdout without JSON wrapping, making them suitable for
+  human-readable display or redirection to a file.
+- **Pagination metadata** for non-JSON formats appears as a `#` comment
+  header line at the top of the output (e.g.,
+  `# total=1500 limit=100 offset=0 has_more=true next_offset=100`).
+
+The `--format` flag is available on these commands:
+
+- `search-read`
+- `list-fields`
+- `list-models`
+- `export-records`
+
+```bash
+# Human-readable table, limited to 10 rows
+odoo-mcp search-read -m res.partner -f name,email --format table -l 10
+
+# CSV export piped to a file
+odoo-mcp search-read -m res.partner -f name,email,phone --format csv > partners.csv
+```
 
 ---
 

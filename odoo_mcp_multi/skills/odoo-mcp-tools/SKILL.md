@@ -207,6 +207,7 @@ dicts — ideal for retrieving External IDs.
 | `fields` | string | `id,name` | Comma-separated field names |
 | `limit` | int | `500` | Max records to export |
 | `offset` | int | `0` | Records to skip (pagination) |
+| `format` | string | `json` | Response format: `json`, `compact`, `table`, `html`, `csv` |
 | `profile` | string | *(default)* | Target profile name |
 
 ```python
@@ -253,6 +254,12 @@ execute_kw(model="sale.order", method="action_confirm", args="[[42]]")
 
 ### `list_models` — Discover Models
 
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `search` | string | `""` | Filter models by name or technical name |
+| `format` | string | `json` | Response format: `json`, `compact`, `table`, `html`, `csv` |
+| `profile` | string | *(default)* | Target profile name |
+
 ```python
 list_models(search="partner", profile="prod")
 ```
@@ -260,6 +267,12 @@ list_models(search="partner", profile="prod")
 ---
 
 ### `list_fields` — Inspect Model Schema
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `model` | string | *(required)* | Model name to inspect |
+| `format` | string | `json` | Response format: `json`, `compact`, `table`, `html`, `csv` |
+| `profile` | string | *(default)* | Target profile name |
 
 ```python
 list_fields(model="account.move", profile="prod")

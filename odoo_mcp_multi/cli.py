@@ -45,8 +45,62 @@ from odoo_mcp_multi.operations import (
 )
 
 
-def _output(data, as_json: bool = True) -> None:
-    """Output data as formatted JSON to stdout."""
+def _echo_pagination_header(data: dict) -> None:
+    """Print pagination metadata as a comment line when available.
+
+    Emits a single # line with record counts and continuation offsets —
+    everything an agent needs to decide whether to paginate without
+    parsing JSON.
+    """
+    parts = []
+    total = data.get("total")
+    if total is not None:
+        shown = data.get("limit", "?")
+        parts.append(f"{shown} of {total}")
+    if data.get("has_more"):
+        parts.append(f"has_more=true next_offset={data.get('next_offset', '?')}")
+    if not parts:
+        return
+    click.echo(f"# {' | '.join(parts)}")
+
+
+def _output(data) -> None:
+    """Emit operation results in the format that was requested.
+
+    Non-JSON formats (table, csv, html) are printed directly — no JSON
+    wrapping. JSON format retains the full envelope. Errors go to stderr
+    with exit code 1.
+    """
+    # Non-dict payloads (e.g. list from list_profiles) → straight JSON
+    if not isinstance(data, dict):
+        click.echo(json.dumps(data, indent=2, default=str, ensure_ascii=False))
+        return
+
+    if data.get("success") is False:
+        click.echo(f"ERROR: {data.get('error', 'Unknown error')}", err=True)
+        raise SystemExit(1)
+
+    fmt = data.get("format")
+
+    # String-based formats — print the payload as-is
+    if fmt in ("table", "csv", "html") and "data" in data:
+        _echo_pagination_header(data)
+        click.echo(data["data"])
+        return
+
+    # Compact — headers + rows without envelope overhead
+    if fmt == "compact" and "headers" in data:
+        _echo_pagination_header(data)
+        click.echo(
+            json.dumps(
+                {"headers": data["headers"], "rows": data["rows"]},
+                default=str,
+                ensure_ascii=False,
+            )
+        )
+        return
+
+    # Everything else: json-format envelopes, write/create results, etc.
     click.echo(json.dumps(data, indent=2, default=str, ensure_ascii=False))
 
 
@@ -513,10 +567,18 @@ def cmd_create(model, values, profile) -> None:
 @click.option("--fields", "-f", default="id,name", help="Comma-separated field names (e.g., 'id,name,country_id/id')")
 @click.option("--limit", "-l", default=500, type=int, help="Maximum number of records to export (default: 500)")
 @click.option("--offset", default=0, type=int, help="Number of records to skip for pagination (default: 0)")
+@click.option(
+    "--format",
+    "-F",
+    "fmt",
+    default="json",
+    type=click.Choice(["json", "compact", "table", "html", "csv"], case_sensitive=False),
+    help="Output format: json (default), compact, table, html, or csv",
+)
 @click.option("--profile", "-p", default=None, help="Profile name to use")
-def cmd_export_records(model, domain, fields, limit, offset, profile) -> None:
+def cmd_export_records(model, domain, fields, limit, offset, fmt, profile) -> None:
     """Export records using native export_data."""
-    _output(op_export_records(model, domain, fields, limit, offset, profile))
+    _output(op_export_records(model, domain, fields, limit, offset, fmt, profile))
 
 
 @main.command("import-records")
@@ -549,18 +611,34 @@ def cmd_get_version(profile) -> None:
 
 @main.command("list-models")
 @click.option("--search", "-s", default="", help="Search term to filter model names")
+@click.option(
+    "--format",
+    "-F",
+    "fmt",
+    default="json",
+    type=click.Choice(["json", "compact", "table", "html", "csv"], case_sensitive=False),
+    help="Output format: json (default), compact, table, html, or csv",
+)
 @click.option("--profile", "-p", default=None, help="Profile name to use")
-def cmd_list_models(search, profile) -> None:
+def cmd_list_models(search, fmt, profile) -> None:
     """List available models in the Odoo instance."""
-    _output(op_list_models(search, profile))
+    _output(op_list_models(search, fmt, profile))
 
 
 @main.command("list-fields")
 @click.option("--model", "-m", required=True, help="Model name (e.g., 'res.partner')")
+@click.option(
+    "--format",
+    "-F",
+    "fmt",
+    default="json",
+    type=click.Choice(["json", "compact", "table", "html", "csv"], case_sensitive=False),
+    help="Output format: json (default), compact, table, html, or csv",
+)
 @click.option("--profile", "-p", default=None, help="Profile name to use")
-def cmd_list_fields(model, profile) -> None:
+def cmd_list_fields(model, fmt, profile) -> None:
     """List all fields of an Odoo model."""
-    _output(op_list_fields(model, profile))
+    _output(op_list_fields(model, format=fmt, profile=profile))
 
 
 # ---------------------------------------------------------------------------
