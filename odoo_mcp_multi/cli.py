@@ -8,6 +8,7 @@ the MCP tool interface. Both interfaces share logic via operations.py.
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -736,6 +737,90 @@ def cmd_skills_install(agent: str, force: bool) -> None:
     else:
         msg = f"\n{TICK} Skills successfully installed for {agent}! ({linked} linked, {skipped} skipped)"
         click.secho(msg, fg="green")
+
+
+# ---------------------------------------------------------------------------
+# Self-update command
+# ---------------------------------------------------------------------------
+
+PACKAGE_NAME = "odoo-mcp-multi"
+
+
+def _detect_install_context() -> str:
+    """Determine how odoo-mcp-multi was installed.
+
+    Returns one of 'editable', 'pipx', or 'pip' so the upgrade command
+    can invoke the right tool without cross-contaminating environments.
+    """
+    result = subprocess.run(
+        [sys.executable, "-m", "pip", "show", PACKAGE_NAME],
+        capture_output=True,
+        text=True,
+    )
+    if "Editable project location" in result.stdout:
+        return "editable"
+    if "pipx" in sys.executable:
+        return "pipx"
+    return "pip"
+
+
+def _run_upgrade_command(cmd: list[str]) -> tuple[int, str]:
+    """Execute an upgrade subprocess and return (exit_code, output)."""
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    return result.returncode, (result.stdout + result.stderr).strip()
+
+
+@main.command("upgrade")
+@click.option(
+    "--force",
+    is_flag=True,
+    default=False,
+    help="Force upgrade even on editable installs.",
+)
+def cmd_upgrade(force) -> None:
+    """Self-update odoo-mcp-multi to the latest version.
+
+    Detects the installation method (pip, pipx, or editable) and runs
+    the appropriate upgrade command. Editable installs are skipped
+    unless --force is passed.
+    """
+    current_version = __version__
+    context = _detect_install_context()
+
+    click.echo(f"Current version: {current_version}")
+    click.echo(f"Install context: {context}")
+
+    if context == "editable" and not force:
+        click.secho(
+            "Editable install detected. Use 'git pull' + 'pip install -e .' "
+            "to update, or pass --force to upgrade from PyPI anyway.",
+            fg="yellow",
+        )
+        return
+
+    pip_cmd = [sys.executable, "-m", "pip", "install", "--upgrade", PACKAGE_NAME]
+    upgrade_commands = {
+        "editable": pip_cmd,
+        "pip": pip_cmd,
+        "pipx": ["pipx", "upgrade", PACKAGE_NAME],
+    }
+    cmd = upgrade_commands[context]
+
+    click.echo(f"Running: {' '.join(cmd)}")
+    exit_code, output = _run_upgrade_command(cmd)
+
+    if exit_code != 0:
+        click.secho(f"Upgrade failed (exit {exit_code}):\n{output}", fg="red", err=True)
+        sys.exit(1)
+
+    if "already satisfied" in output.lower() or "already up" in output.lower():
+        click.secho(
+            f"{TICK} Already at the latest version ({current_version}).",
+            fg="green",
+        )
+        return
+
+    click.secho(f"{TICK} Upgrade successful!\n{output}", fg="green")
 
 
 if __name__ == "__main__":

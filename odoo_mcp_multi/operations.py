@@ -658,10 +658,8 @@ def op_list_models(
             domain = ["|", ("name", "ilike", search), ("model", "ilike", search)]
 
         cache_key = _cache_key("models", "ir.model", profile, search)
-        cached = _cache_get(cache_key)
-        if cached is not None:
-            models = cached
-        else:
+        models = _cache_get(cache_key)
+        if models is None:
             models = client.search_read(
                 model="ir.model",
                 domain=domain,
@@ -720,10 +718,8 @@ def op_list_fields(
         client = _get_client(profile)
 
         cache_key = _cache_key("fields", model, profile, ",".join(sorted(attrs)))
-        cached = _cache_get(cache_key)
-        if cached is not None:
-            fields = cached
-        else:
+        fields = _cache_get(cache_key)
+        if fields is None:
             fields = client.execute_kw(model, "fields_get", [], {"attributes": attrs})
             _cache_set(cache_key, fields)
     except Exception as exc:
