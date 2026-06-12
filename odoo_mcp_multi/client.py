@@ -443,8 +443,7 @@ class Json2Client(BaseOdooClient):
             - The response payload is not valid JSON.
 
         Exceptions Handled:
-            - ``httpx.TimeoutException``: Caught during network timeouts; triggers retry/fallback.
-            - ``httpx.NetworkError``: Caught during connection issues; triggers retry/fallback.
+            - ``httpx.RequestError``: Caught during network timeouts or connection issues; triggers retry/fallback.
             - ``json.JSONDecodeError``: Caught if the server response is not valid JSON; returns None.
             - ``KeyError``, ``AttributeError``: Caught if the JSON structure does not match the
               expected Odoo schema format; returns None.
@@ -491,7 +490,7 @@ class Json2Client(BaseOdooClient):
                 # do not implement the /doc-bearer reflection API.
                 if response.status_code < 500 and response.status_code != 429:
                     return None
-            except (httpx.TimeoutException, httpx.NetworkError):
+            except httpx.RequestError:
                 if attempt == attempts - 1:
                     return None
             except Exception:
