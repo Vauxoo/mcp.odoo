@@ -28,6 +28,7 @@ class Operation(str, Enum):
     EXECUTE_KW = "execute_kw"
     LIST_MODELS = "list_models"
     LIST_FIELDS = "list_fields"
+    GET_FINANCIAL_REPORT = "get_financial_report"
 
 
 # Operations that are always allowed regardless of permission mode.

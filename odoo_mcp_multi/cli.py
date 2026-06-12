@@ -35,6 +35,7 @@ from odoo_mcp_multi.operations import (
     op_create,
     op_execute_kw,
     op_export_records,
+    op_get_financial_report,
     op_get_version,
     op_import_records,
     op_list_fields,
@@ -787,6 +788,34 @@ def _run_upgrade_command(cmd: list[str]) -> tuple[int, str]:
     """Execute an upgrade subprocess and return (exit_code, output)."""
     result = subprocess.run(cmd, capture_output=True, text=True)
     return result.returncode, (result.stdout + result.stderr).strip()
+
+
+@main.command("get-financial-report")
+@click.option("--report", "-r", required=True, help="Report ID, XML ID, or exact report name")
+@click.option("--date-from", "--df", default=None, help="Start date (YYYY-MM-DD) for range-based calculations")
+@click.option("--date-to", "--dt", default=None, help="End date (YYYY-MM-DD) for calculations")
+@click.option("--date-filter", "--dfilt", default=None, help="Preset date filter (e.g., 'today', 'this_month')")
+@click.option(
+    "--format",
+    "-f",
+    "fmt",
+    default="json",
+    type=click.Choice(["json", "table", "html", "csv"], case_sensitive=False),
+    help="Output format: json (default), table (markdown), html, or csv",
+)
+@click.option("--profile", "-p", default=None, help="Profile name to use")
+def cmd_get_financial_report(report, date_from, date_to, date_filter, fmt, profile) -> None:
+    """Calculate and format an Odoo financial report."""
+    _output(
+        op_get_financial_report(
+            report_id_or_name=report,
+            date_from=date_from,
+            date_to=date_to,
+            date_filter=date_filter,
+            format=fmt,
+            profile=profile,
+        )
+    )
 
 
 @main.command("upgrade")

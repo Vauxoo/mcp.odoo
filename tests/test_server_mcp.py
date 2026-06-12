@@ -44,15 +44,16 @@ EXPECTED_TOOLS = sorted(
         "list_models",
         "list_fields",
         "get_version",
+        "get_financial_report",
     ]
 )
 
 
 @pytest.mark.asyncio
 async def test_tool_count():
-    """The server must expose exactly 11 tools."""
+    """The server must expose exactly 12 tools."""
     tools = await mcp.list_tools()
-    assert len(tools) == 11
+    assert len(tools) == 12
 
 
 @pytest.mark.asyncio
@@ -295,7 +296,7 @@ async def test_json_preserves_unicode(mock_op):
 
 def test_instructions_mention_tool_count():
     """The instructions string must reference the correct number of tools."""
-    assert "11 tools" in mcp.instructions
+    assert "12 tools" in mcp.instructions
 
 
 def test_instructions_mention_all_tools():

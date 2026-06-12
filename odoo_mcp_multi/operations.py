@@ -760,3 +760,376 @@ def op_list_fields(
             res = {"success": True, "fields": fields}
 
     return _with_warning(res, client)
+
+
+def _format_report_table(lines: list, cols: list) -> str:
+    # Prepend spacing/indentations to Concept names to represent hierarchy in plain text.
+    headers = ["Concept"] + [col.get("name", "") for col in cols]
+    tbl_lines = ["| " + " | ".join(headers) + " |"]
+    tbl_lines.append("| " + " | ".join("---" if i == 0 else "---:" for i in range(len(headers))) + " |")
+
+    for line in lines:
+        level = line.get("level")
+        name = line.get("name", "")
+        # Two spaces per nesting level mirrors the visual hierarchy.
+        indent = "  " * (level if level is not None else 0)
+        concept = (indent + name).replace("|", "\\|")
+
+        row_vals = [concept]
+        for col_val in line.get("columns", []):
+            row_vals.append(col_val.get("name", ""))
+        tbl_lines.append("| " + " | ".join(row_vals) + " |")
+
+    return "\n".join(tbl_lines)
+
+
+def _format_report_csv(lines: list, cols: list) -> str:
+    headers = ["Concept"] + [col.get("name", "") for col in cols]
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(headers)
+
+    for line in lines:
+        level = line.get("level")
+        name = line.get("name", "")
+        indent = "  " * (level if level is not None else 0)
+        concept = indent + name
+
+        row_vals = [concept]
+        for col_val in line.get("columns", []):
+            row_vals.append(col_val.get("name", ""))
+        writer.writerow(row_vals)
+
+    return buf.getvalue().rstrip("\r\n").replace("\r\n", "\n")
+
+
+def _get_report_html_css() -> str:
+    return """
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f8f9fa;
+            color: #212529;
+            margin: 0;
+            padding: 20px;
+        }
+        .report-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: #ffffff;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            padding: 24px;
+        }
+        .report-container th, .report-container td {
+            text-align: right;
+        }
+        .report-header {
+            margin-bottom: 20px;
+            border-bottom: 2px solid #dee2e6;
+            padding-bottom: 12px;
+        }
+        .report-title {
+            font-size: 24px;
+            font-weight: bold;
+            margin: 0 0 4px 0;
+            color: #343a40;
+        }
+        .report-company {
+            font-size: 14px;
+            color: #6c757d;
+            margin: 0;
+        }
+        table.account_report_table {
+            border-collapse: separate;
+            border-spacing: 0;
+            width: 100%;
+            margin-top: 15px;
+            font-size: 13px;
+        }
+        table.account_report_table th {
+            padding: 8px 12px;
+            border-bottom: 2px solid #dee2e6;
+            font-weight: bold;
+            color: #495057;
+            text-align: right;
+            background-color: #f8f9fa;
+        }
+        table.account_report_table th.concept-header {
+            text-align: left;
+        }
+        table.account_report_table td {
+            padding: 8px 12px;
+            border-bottom: 1px solid #e9ecef;
+            vertical-align: middle;
+            color: #495057;
+        }
+        table.account_report_table tr.empty td {
+            height: 16px;
+            border-bottom: none;
+            background-color: transparent !important;
+            border-top: none !important;
+        }
+        table.account_report_table tr.line_level_0 {
+            font-weight: bold;
+            color: #212529;
+        }
+        table.account_report_table tr.line_level_0 td {
+            background-color: #dee2e6;
+            border-bottom: none !important;
+        }
+        table.account_report_table tr.total {
+            font-weight: bold;
+            color: #212529;
+        }
+        table.account_report_table tr.total td {
+            border-bottom: 2px double #212529;
+            border-top: 1px solid #dee2e6;
+        }
+        table.account_report_table td.numeric {
+            text-align: right;
+            white-space: nowrap;
+        }
+        table.account_report_table td.concept-cell {
+            text-align: left;
+        }
+        .wrapper {
+            display: flex;
+            align-items: center;
+        }
+        .content {
+            display: flex;
+            align-items: center;
+        }
+    """
+
+
+def _render_html_headers(options: dict, cols: list) -> list:
+    header_lines = []
+    column_headers = options.get("column_headers", [])
+    for row_idx, row in enumerate(column_headers):
+        header_lines.append("<tr>")
+        header_lines.append("<th></th>")
+        for col_idx, header in enumerate(row):
+            name = header.get("name", "")
+            colspan = header.get("colspan")
+            render_data = options.get("column_headers_render_data", {})
+            level_colspan = render_data.get("level_colspan", [])
+            if not colspan and len(level_colspan) > row_idx:
+                colspan = level_colspan[row_idx]
+            colspan = colspan or 1
+            header_lines.append(f"<th colspan='{colspan}'>{name}</th>")
+        header_lines.append("</tr>")
+
+    header_lines.append("<tr>")
+    header_lines.append("<th class='concept-header'>Concept</th>")
+    for col in cols:
+        name = col.get("name", "")
+        header_lines.append(f"<th>{name}</th>")
+    header_lines.append("</tr>")
+    return header_lines
+
+
+def _render_html_row(line: dict) -> list:
+    row_lines = []
+    level = line.get("level")
+    name = line.get("name", "")
+    line_id = line.get("id", "")
+    is_total = "|total~~" in line_id
+
+    if level == 0:
+        row_lines.append("<tr class='empty'>")
+        row_lines.append("<td></td>")
+        for _ in line.get("columns", []):
+            row_lines.append("<td></td>")
+        row_lines.append("</tr>")
+
+    classes = []
+    if level is not None:
+        classes.append(f"line_level_{level}")
+    else:
+        classes.append("line_level_default")
+
+    if is_total:
+        classes.append("total")
+
+    row_style = ""
+    if level == 0:
+        row_style = "font-weight: bold; background-color: #dee2e6;"
+    elif is_total:
+        row_style = "font-weight: bold;"
+
+    class_attr = f"class='{' '.join(classes)}'" if classes else ""
+    style_attr = f"style='{row_style}'" if row_style else ""
+
+    row_lines.append(f"<tr {class_attr} {style_attr}>")
+
+    indent_style = ""
+    if level is not None and level >= 2:
+        indentation_px = (level + 1) * 8 - 20
+        if indentation_px > 0:
+            indent_style = f"padding-left: {indentation_px}px;"
+
+    cell_style = f"style='{indent_style}'" if indent_style else ""
+    row_lines.append(
+        f"<td class='concept-cell' {cell_style}><div class='wrapper'><div class='content'>{name}</div></div></td>"
+    )
+
+    for col_val in line.get("columns", []):
+        val_name = col_val.get("name", "")
+        td_style = ""
+        if is_total:
+            td_style = "border-bottom: 2px double #212529; border-top: 1px solid #dee2e6;"
+        elif level == 0:
+            td_style = "border-bottom: none !important;"
+
+        td_style_attr = f"style='{td_style}'" if td_style else ""
+        row_lines.append(f"<td class='numeric' {td_style_attr}>{val_name}</td>")
+
+    row_lines.append("</tr>")
+    return row_lines
+
+
+def _format_report_html(options: dict, lines: list, cols: list, report_meta: dict) -> str:
+    report_name = report_meta.get("name", "Financial Report")
+    company_name = report_meta.get("company_name", "")
+
+    html_lines = []
+    html_lines.append("<!DOCTYPE html>")
+    html_lines.append("<html>")
+    html_lines.append("<head>")
+    html_lines.append("<meta charset='utf-8'>")
+    html_lines.append(f"<title>{report_name}</title>")
+    html_lines.append("<style>")
+    html_lines.append(_get_report_html_css())
+    html_lines.append("</style>")
+    html_lines.append("</head>")
+    html_lines.append("<body>")
+    html_lines.append("<div class='report-container'>")
+    html_lines.append("<div class='report-header'>")
+    html_lines.append(f"<h1 class='report-title'>{report_name}</h1>")
+    if company_name:
+        html_lines.append(f"<p class='report-company'>{company_name}</p>")
+    html_lines.append("</div>")
+
+    html_lines.append("<table class='account_report_table'>")
+    html_lines.append("<thead>")
+    html_lines.extend(_render_html_headers(options, cols))
+    html_lines.append("</thead>")
+    html_lines.append("<tbody>")
+
+    for line in lines:
+        html_lines.extend(_render_html_row(line))
+
+    html_lines.append("</tbody>")
+    html_lines.append("</table>")
+    html_lines.append("</div>")
+    html_lines.append("</body>")
+    html_lines.append("</html>")
+
+    return "\n".join(html_lines)
+
+
+def _format_financial_report(options: dict, report_info: dict, format_name: str) -> Any:
+    # Replicates Odoo's native OWL report presentation logic for hierarchy, spacing,
+    # and styling when rendering HTML/Markdown.
+    if format_name == "json":
+        return {"success": True, "report_info": report_info, "options": options}
+
+    lines = report_info.get("lines", [])
+    cols = options.get("columns", [])
+
+    if format_name == "table":
+        return _format_report_table(lines, cols)
+    if format_name == "csv":
+        return _format_report_csv(lines, cols)
+    if format_name == "html":
+        return _format_report_html(options, lines, cols, report_info.get("report", {}))
+    return ""
+
+
+def _resolve_report_id(client: Any, report_id_or_name: str | int) -> Optional[int]:
+    try:
+        return int(report_id_or_name)
+    except ValueError:
+        pass
+
+    if isinstance(report_id_or_name, str) and "." in report_id_or_name:
+        module, name = report_id_or_name.split(".", 1)
+        res = client.search_read(
+            "ir.model.data",
+            [("model", "=", "account.report"), ("module", "=", module), ("name", "=", name)],
+            ["res_id"],
+        )
+        if res:
+            return res[0]["res_id"]
+    else:
+        res = client.search_read("account.report", [("name", "=", report_id_or_name)], ["id"])
+        if res:
+            return res[0]["id"]
+        res = client.search_read("account.report", [("name", "=ilike", report_id_or_name)], ["id"])
+        if res:
+            return res[0]["id"]
+    return None
+
+
+def op_get_financial_report(
+    report_id_or_name: str | int,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    date_filter: Optional[str] = None,
+    format: str = "json",
+    profile: Optional[str] = None,
+) -> dict:
+    """Calculate and format an Odoo financial report.
+
+    Executes a 2-step call chain (get_options -> get_report_information) to resolve
+    and retrieve financial data.
+    """
+    if format not in VALID_FORMATS:
+        return {
+            "success": False,
+            "error": f"Invalid format '{format}'. Valid formats: {sorted(VALID_FORMATS)}",
+        }
+
+    try:
+        client = _get_client(profile)
+        report_id = _resolve_report_id(client, report_id_or_name)
+
+        if report_id is None:
+            return {
+                "success": False,
+                "error": f"Could not resolve financial report with ID, XML ID, or name '{report_id_or_name}'",
+            }
+
+        # Format date options matching Odoo's filter schemas.
+        previous_options = {}
+        if date_from or date_to or date_filter:
+            date_opt = {}
+            if date_filter:
+                date_opt["filter"] = date_filter
+            elif date_from or date_to:
+                date_opt["filter"] = "custom"
+
+            if date_from:
+                date_opt["date_from"] = date_from
+            if date_to:
+                date_opt["date_to"] = date_to
+
+            previous_options["date"] = date_opt
+
+        # get_options resolves country redirects and sets up the active variant ID.
+        options = client.execute_kw("account.report", "get_options", [[report_id], previous_options])
+        actual_report_id = options.get("report_id", report_id)
+
+        # get_report_information returns the calculated rows.
+        report_info = client.execute_kw("account.report", "get_report_information", [[actual_report_id], options])
+
+        formatted_data = _format_financial_report(options, report_info, format)
+
+        if format == "json":
+            return _with_warning(formatted_data, client)
+        return _with_warning({"success": True, "data": formatted_data, "format": format}, client)
+
+    except Exception as exc:
+        return {"success": False, "error": f"Failed to get financial report: {exc}"}

@@ -640,6 +640,7 @@ def test_operation_enum_completeness():
         "execute_kw",
         "list_models",
         "list_fields",
+        "get_financial_report",
     }
     actual = {op.value for op in Operation}
     assert actual == expected

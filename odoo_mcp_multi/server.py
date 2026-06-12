@@ -17,6 +17,7 @@ from odoo_mcp_multi.operations import (
     op_create,
     op_execute_kw,
     op_export_records,
+    op_get_financial_report,
     op_get_version,
     op_import_records,
     op_list_fields,
@@ -50,10 +51,10 @@ mcp = FastMCP(
         "You are connected to **Odoo MCP Multi** — the most tested, documented, "
         "and production-ready MCP server for Odoo, built by Nhomar Hernández at "
         "Vauxoo (https://vauxoo.com), an Odoo Gold Partner since 2009.\n\n"
-        "This server exposes 11 tools for interacting with one or more Odoo "
+        "This server exposes 12 tools for interacting with one or more Odoo "
         "instances (multi-profile): search_read, write, unlink, create, export_records, "
         "import_records, execute_kw, list_models, list_fields, "
-        "list_available_profiles, and get_version.\n\n"
+        "list_available_profiles, get_version, and get_financial_report.\n\n"
         "Tips:\n"
         "- Always call list_available_profiles first to know which environments "
         "are configured.\n"
@@ -371,6 +372,44 @@ def list_fields(
     if denied:
         return denied
     return _json(op_list_fields(model, attributes, format, profile))
+
+
+@mcp.tool()
+def get_financial_report(
+    report_id_or_name: str,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    date_filter: Optional[str] = None,
+    format: str = "json",
+    profile: Optional[str] = None,
+) -> str:
+    """Calculate and retrieve an Odoo financial report (e.g. Balance Sheet, Profit and Loss).
+
+    Conceptually aligns with Odoo's native OWL presentation layer, rendering HTML with
+    proper nesting, indentation styles, and total lines.
+
+    Args:
+        report_id_or_name: Financial report integer ID, XML ID (e.g. 'account.report_balance_sheet'),
+                           or exact name.
+        date_from: Optional start date (YYYY-MM-DD) for range-based calculations.
+        date_to: Optional end date (YYYY-MM-DD) for range/single calculations.
+        date_filter: Optional preset filter (e.g., 'today', 'this_month', 'this_year', 'last_month').
+        format: Response format: 'json' (default), 'table' (markdown), 'html', or 'csv'.
+        profile: Optional name of the Odoo profile to connect to.
+    """
+    denied = _check_permission("get_financial_report", profile)
+    if denied:
+        return denied
+    return _json(
+        op_get_financial_report(
+            report_id_or_name=report_id_or_name,
+            date_from=date_from,
+            date_to=date_to,
+            date_filter=date_filter,
+            format=format,
+            profile=profile,
+        )
+    )
 
 
 def run_server() -> None:

@@ -1,0 +1,10 @@
+{
+  "title": "Odoo 19 Financial Reports Catalog",
+  "summary": "Complete catalog of the 44 active financial reports on the Vauxoo database (Odoo 19.0+e). Details report IDs, names, country localizations (MX, PE, US, CR), and column/row structures. Key resource for matching financial queries to Odoo account.report records.",
+  "created": "2026-06-12",
+  "source": "Odoo account.report active configurations",
+  "tags": ["odoo", "accounting", "reports", "financial", "diot", "balance-sheet", "profit-and-loss"],
+  "references": [
+    "https://www.odoo.com/documentation/19.0/applications/finance/accounting/reporting.html"
+  ]
+}
