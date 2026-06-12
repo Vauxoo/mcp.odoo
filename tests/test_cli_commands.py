@@ -41,7 +41,7 @@ def test_cli_search_read(mock_op):
 
 @patch("odoo_mcp_multi.cli.op_search_read")
 def test_cli_search_read_with_options(mock_op):
-    mock_op.return_value = []
+    mock_op.return_value = {"records": [], "total": 0, "has_more": False, "format": "json"}
 
     result = runner.invoke(
         main,
@@ -85,10 +85,9 @@ def test_cli_search_read_format_flag(mock_op):
 @patch("odoo_mcp_multi.cli.op_search_read", return_value={"success": False, "error": "No Odoo profile configured."})
 def test_cli_search_read_error(mock_op):
     result = runner.invoke(main, ["search-read", "--model", "res.partner"])
-    assert result.exit_code == 0
-    output = json.loads(result.output)
-    assert output["success"] is False
-    assert "No Odoo profile" in output["error"]
+    assert result.exit_code == 1
+    assert "ERROR:" in result.output
+    assert "No Odoo profile" in result.output
 
 
 # ---------------------------------------------------------------------------
@@ -200,10 +199,9 @@ def test_cli_get_version(mock_op):
 @patch("odoo_mcp_multi.cli.op_get_version", return_value={"success": False, "error": "No Odoo profile configured."})
 def test_cli_get_version_error(mock_op):
     result = runner.invoke(main, ["get-version"])
-    assert result.exit_code == 0
-    output = json.loads(result.output)
-    assert output["success"] is False
-    assert "No Odoo profile" in output["error"]
+    assert result.exit_code == 1
+    assert "ERROR:" in result.output
+    assert "No Odoo profile" in result.output
 
 
 # ---------------------------------------------------------------------------
@@ -213,13 +211,13 @@ def test_cli_get_version_error(mock_op):
 
 @patch("odoo_mcp_multi.cli.op_list_models")
 def test_cli_list_models(mock_op):
-    mock_op.return_value = [{"name": "Contact", "model": "res.partner", "info": ""}]
+    mock_op.return_value = {"success": True, "models": [{"name": "Contact", "model": "res.partner", "info": ""}]}
 
     result = runner.invoke(main, ["list-models", "--search", "partner"])
 
     assert result.exit_code == 0
     output = json.loads(result.output)
-    assert output[0]["model"] == "res.partner"
+    assert output["models"][0]["model"] == "res.partner"
 
 
 # ---------------------------------------------------------------------------
