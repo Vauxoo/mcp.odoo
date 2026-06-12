@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='utf-8'>
+    <title>{{ report_name }}</title>
+    <style>
+{{ css_content }}
+    </style>
+</head>
+<body>
+<div class='report-container'>
+    <div class='report-header'>
+        <h1 class='report-title'>{{ report_name }}</h1>
+        {% if company_name %}
+        <p class='report-company'>{{ company_name }}</p>
+        {% endif %}
+    </div>
+
+    <table class='account_report_table'>
+        <thead>
+            {% for row in header_rows %}
+            <tr>
+                {% for cell in row %}
+                <th colspan='{{ cell.colspan }}'{% if cell.class_attr %} class='{{ cell.class_attr }}'{% endif %}>{{ cell.name }}</th>
+                {% endfor %}
+            </tr>
+            {% endfor %}
+        </thead>
+        <tbody>
+            {% for line in data_lines %}
+            {% if line.is_empty %}
+            <tr class='empty'>
+                <td></td>
+                {% for _ in range(line.columns_count) %}
+                <td></td>
+                {% endfor %}
+            </tr>
+            {% else %}
+            <tr{% if line.class_attr %} class='{{ line.class_attr }}'{% endif %}{% if line.style_attr %} style='{{ line.style_attr }}'{% endif %}>
+                <td class='concept-cell'{% if line.indent_style %} style='{{ line.indent_style }}'{% endif %}>
+                    <div class='wrapper'>
+                        <div class='content'>{{ line.name }}</div>
+                    </div>
+                </td>
+                {% for col in line.columns %}
+                <td class='numeric'{% if col.style_attr %} style='{{ col.style_attr }}'{% endif %}>{{ col.name }}</td>
+                {% endfor %}
+            </tr>
+            {% endif %}
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+</body>
+</html>

@@ -127,8 +127,8 @@ def test_op_get_financial_report_html(mock_get_client):
 
     # Verify column headers row
     assert "<th colspan='1'>As of 12/06/2026</th>" in html
-    assert "<th class='concept-header'>Concept</th>" in html
-    assert "<th>Balance</th>" in html
+    assert "<th colspan='1' class='concept-header'>Concept</th>" in html
+    assert "<th colspan='1'>Balance</th>" in html
 
     # Verify Odoo-like spacing row before level 0 rows is present in code
     assert "<tr class='empty'>" in html

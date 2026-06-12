@@ -1,0 +1,96 @@
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background-color: #f8f9fa;
+    color: #212529;
+    margin: 0;
+    padding: 20px;
+}
+.report-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    background: #ffffff;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    padding: 24px;
+}
+.report-container th, .report-container td {
+    text-align: right;
+}
+.report-header {
+    margin-bottom: 20px;
+    border-bottom: 2px solid #dee2e6;
+    padding-bottom: 12px;
+}
+.report-title {
+    font-size: 24px;
+    font-weight: bold;
+    margin: 0 0 4px 0;
+    color: #343a40;
+}
+.report-company {
+    font-size: 14px;
+    color: #6c757d;
+    margin: 0;
+}
+table.account_report_table {
+    border-collapse: separate;
+    border-spacing: 0;
+    width: 100%;
+    margin-top: 15px;
+    font-size: 13px;
+}
+table.account_report_table th {
+    padding: 8px 12px;
+    border-bottom: 2px solid #dee2e6;
+    font-weight: bold;
+    color: #495057;
+    text-align: right;
+    background-color: #f8f9fa;
+}
+table.account_report_table th.concept-header {
+    text-align: left;
+}
+table.account_report_table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid #e9ecef;
+    vertical-align: middle;
+    color: #495057;
+}
+table.account_report_table tr.empty td {
+    height: 16px;
+    border-bottom: none;
+    background-color: transparent !important;
+    border-top: none !important;
+}
+table.account_report_table tr.line_level_0 {
+    font-weight: bold;
+    color: #212529;
+}
+table.account_report_table tr.line_level_0 td {
+    background-color: #dee2e6;
+    border-bottom: none !important;
+}
+table.account_report_table tr.total {
+    font-weight: bold;
+    color: #212529;
+}
+table.account_report_table tr.total td {
+    border-bottom: 2px double #212529;
+    border-top: 1px solid #dee2e6;
+}
+table.account_report_table td.numeric {
+    text-align: right;
+    white-space: nowrap;
+}
+table.account_report_table td.concept-cell {
+    text-align: left;
+}
+.wrapper {
+    display: flex;
+    align-items: center;
+}
+.content {
+    display: flex;
+    align-items: center;
+}

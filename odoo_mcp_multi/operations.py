@@ -11,8 +11,11 @@ from __future__ import annotations
 
 import csv
 import io
+import os
 from time import time
 from typing import Any, Optional
+
+import jinja2
 
 from odoo_mcp_multi.client import create_client
 from odoo_mcp_multi.config import list_profiles, resolve_profile
@@ -803,113 +806,25 @@ def _format_report_csv(lines: list, cols: list) -> str:
     return buf.getvalue().rstrip("\r\n").replace("\r\n", "\n")
 
 
-def _get_report_html_css() -> str:
-    return """
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: #f8f9fa;
-            color: #212529;
-            margin: 0;
-            padding: 20px;
-        }
-        .report-container {
-            max-width: 1200px;
-            margin: 0 auto;
-            background: #ffffff;
-            border: 1px solid #dee2e6;
-            border-radius: 6px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-            padding: 24px;
-        }
-        .report-container th, .report-container td {
-            text-align: right;
-        }
-        .report-header {
-            margin-bottom: 20px;
-            border-bottom: 2px solid #dee2e6;
-            padding-bottom: 12px;
-        }
-        .report-title {
-            font-size: 24px;
-            font-weight: bold;
-            margin: 0 0 4px 0;
-            color: #343a40;
-        }
-        .report-company {
-            font-size: 14px;
-            color: #6c757d;
-            margin: 0;
-        }
-        table.account_report_table {
-            border-collapse: separate;
-            border-spacing: 0;
-            width: 100%;
-            margin-top: 15px;
-            font-size: 13px;
-        }
-        table.account_report_table th {
-            padding: 8px 12px;
-            border-bottom: 2px solid #dee2e6;
-            font-weight: bold;
-            color: #495057;
-            text-align: right;
-            background-color: #f8f9fa;
-        }
-        table.account_report_table th.concept-header {
-            text-align: left;
-        }
-        table.account_report_table td {
-            padding: 8px 12px;
-            border-bottom: 1px solid #e9ecef;
-            vertical-align: middle;
-            color: #495057;
-        }
-        table.account_report_table tr.empty td {
-            height: 16px;
-            border-bottom: none;
-            background-color: transparent !important;
-            border-top: none !important;
-        }
-        table.account_report_table tr.line_level_0 {
-            font-weight: bold;
-            color: #212529;
-        }
-        table.account_report_table tr.line_level_0 td {
-            background-color: #dee2e6;
-            border-bottom: none !important;
-        }
-        table.account_report_table tr.total {
-            font-weight: bold;
-            color: #212529;
-        }
-        table.account_report_table tr.total td {
-            border-bottom: 2px double #212529;
-            border-top: 1px solid #dee2e6;
-        }
-        table.account_report_table td.numeric {
-            text-align: right;
-            white-space: nowrap;
-        }
-        table.account_report_table td.concept-cell {
-            text-align: left;
-        }
-        .wrapper {
-            display: flex;
-            align-items: center;
-        }
-        .content {
-            display: flex;
-            align-items: center;
-        }
-    """
+def _load_skill_resource(filename: str) -> str:
+    skill_dir = os.path.join(os.path.dirname(__file__), "skills", "odoo-financial-reports")
+    path = os.path.join(skill_dir, filename)
+    with open(path, "r", encoding="utf-8") as f:
+        return f.read()
 
 
-def _render_html_headers(options: dict, cols: list) -> list:
-    header_lines = []
+def _format_report_html(options: dict, lines: list, cols: list, report_meta: dict) -> str:
+    report_name = report_meta.get("name", "Financial Report")
+    company_name = report_meta.get("company_name", "")
+
+    css_content = _load_skill_resource("financial_report.css")
+    html_tpl_string = _load_skill_resource("financial_report.html")
+
+    header_rows = []
     column_headers = options.get("column_headers", [])
     for row_idx, row in enumerate(column_headers):
-        header_lines.append("<tr>")
-        header_lines.append("<th></th>")
+        header_row = []
+        header_row.append({"name": "", "colspan": 1, "class_attr": ""})
         for col_idx, header in enumerate(row):
             name = header.get("name", "")
             colspan = header.get("colspan")
@@ -918,115 +833,80 @@ def _render_html_headers(options: dict, cols: list) -> list:
             if not colspan and len(level_colspan) > row_idx:
                 colspan = level_colspan[row_idx]
             colspan = colspan or 1
-            header_lines.append(f"<th colspan='{colspan}'>{name}</th>")
-        header_lines.append("</tr>")
+            header_row.append({"name": name, "colspan": colspan, "class_attr": ""})
+        header_rows.append(header_row)
 
-    header_lines.append("<tr>")
-    header_lines.append("<th class='concept-header'>Concept</th>")
+    last_header_row = []
+    last_header_row.append({"name": "Concept", "colspan": 1, "class_attr": "concept-header"})
     for col in cols:
         name = col.get("name", "")
-        header_lines.append(f"<th>{name}</th>")
-    header_lines.append("</tr>")
-    return header_lines
+        last_header_row.append({"name": name, "colspan": 1, "class_attr": ""})
+    header_rows.append(last_header_row)
 
-
-def _render_html_row(line: dict) -> list:
-    row_lines = []
-    level = line.get("level")
-    name = line.get("name", "")
-    line_id = line.get("id", "")
-    is_total = "|total~~" in line_id
-
-    if level == 0:
-        row_lines.append("<tr class='empty'>")
-        row_lines.append("<td></td>")
-        for _ in line.get("columns", []):
-            row_lines.append("<td></td>")
-        row_lines.append("</tr>")
-
-    classes = []
-    if level is not None:
-        classes.append(f"line_level_{level}")
-    else:
-        classes.append("line_level_default")
-
-    if is_total:
-        classes.append("total")
-
-    row_style = ""
-    if level == 0:
-        row_style = "font-weight: bold; background-color: #dee2e6;"
-    elif is_total:
-        row_style = "font-weight: bold;"
-
-    class_attr = f"class='{' '.join(classes)}'" if classes else ""
-    style_attr = f"style='{row_style}'" if row_style else ""
-
-    row_lines.append(f"<tr {class_attr} {style_attr}>")
-
-    indent_style = ""
-    if level is not None and level >= 2:
-        indentation_px = (level + 1) * 8 - 20
-        indent_style = f"padding-left: {indentation_px}px;"
-
-    cell_style = f"style='{indent_style}'" if indent_style else ""
-    row_lines.append(
-        f"<td class='concept-cell' {cell_style}><div class='wrapper'><div class='content'>{name}</div></div></td>"
-    )
-
-    for col_val in line.get("columns", []):
-        val_name = col_val.get("name", "")
-        td_style = ""
-        if is_total:
-            td_style = "border-bottom: 2px double #212529; border-top: 1px solid #dee2e6;"
-        elif level == 0:
-            td_style = "border-bottom: none !important;"
-
-        td_style_attr = f"style='{td_style}'" if td_style else ""
-        row_lines.append(f"<td class='numeric' {td_style_attr}>{val_name}</td>")
-
-    row_lines.append("</tr>")
-    return row_lines
-
-
-def _format_report_html(options: dict, lines: list, cols: list, report_meta: dict) -> str:
-    report_name = report_meta.get("name", "Financial Report")
-    company_name = report_meta.get("company_name", "")
-
-    html_lines = []
-    html_lines.append("<!DOCTYPE html>")
-    html_lines.append("<html>")
-    html_lines.append("<head>")
-    html_lines.append("<meta charset='utf-8'>")
-    html_lines.append(f"<title>{report_name}</title>")
-    html_lines.append("<style>")
-    html_lines.append(_get_report_html_css())
-    html_lines.append("</style>")
-    html_lines.append("</head>")
-    html_lines.append("<body>")
-    html_lines.append("<div class='report-container'>")
-    html_lines.append("<div class='report-header'>")
-    html_lines.append(f"<h1 class='report-title'>{report_name}</h1>")
-    if company_name:
-        html_lines.append(f"<p class='report-company'>{company_name}</p>")
-    html_lines.append("</div>")
-
-    html_lines.append("<table class='account_report_table'>")
-    html_lines.append("<thead>")
-    html_lines.extend(_render_html_headers(options, cols))
-    html_lines.append("</thead>")
-    html_lines.append("<tbody>")
-
+    data_lines = []
     for line in lines:
-        html_lines.extend(_render_html_row(line))
+        level = line.get("level")
+        name = line.get("name", "")
+        line_id = line.get("id", "")
+        is_total = "|total~~" in line_id
 
-    html_lines.append("</tbody>")
-    html_lines.append("</table>")
-    html_lines.append("</div>")
-    html_lines.append("</body>")
-    html_lines.append("</html>")
+        if level == 0:
+            data_lines.append(
+                {
+                    "is_empty": True,
+                    "columns_count": len(line.get("columns", [])),
+                }
+            )
 
-    return "\n".join(html_lines)
+        classes = []
+        if level is not None:
+            classes.append(f"line_level_{level}")
+        else:
+            classes.append("line_level_default")
+
+        if is_total:
+            classes.append("total")
+
+        row_style = ""
+        if level == 0:
+            row_style = "font-weight: bold; background-color: #dee2e6;"
+        elif is_total:
+            row_style = "font-weight: bold;"
+
+        indent_style = ""
+        if level is not None and level >= 2:
+            indentation_px = (level + 1) * 8 - 20
+            indent_style = f"padding-left: {indentation_px}px;"
+
+        columns_data = []
+        for col_val in line.get("columns", []):
+            val_name = col_val.get("name", "")
+            td_style = ""
+            if is_total:
+                td_style = "border-bottom: 2px double #212529; border-top: 1px solid #dee2e6;"
+            elif level == 0:
+                td_style = "border-bottom: none !important;"
+            columns_data.append({"name": val_name, "style_attr": td_style})
+
+        data_lines.append(
+            {
+                "is_empty": False,
+                "class_attr": " ".join(classes) if classes else "",
+                "style_attr": row_style,
+                "name": name,
+                "indent_style": indent_style,
+                "columns": columns_data,
+            }
+        )
+
+    template = jinja2.Template(html_tpl_string)
+    return template.render(
+        report_name=report_name,
+        company_name=company_name,
+        css_content=css_content,
+        header_rows=header_rows,
+        data_lines=data_lines,
+    )
 
 
 def _format_financial_report(options: dict, report_info: dict, format_name: str) -> Any:
