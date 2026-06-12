@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-06-11
+
+### Added
+
+- SSL verification option (`verify`) across all clients and configuration profiles to support self-signed certificates.
+- Automated self-healing SSL fallback in XML-RPC, JSON-RPC, and JSON-2 clients when verification fails, with warning metadata returned to CLI and MCP callers.
+- Tabular formatters (`compact`, `table`, `html`, `csv`) for CLI output on search-read, list-models, and list-fields.
+
+### Changed
+
+- Refactored `Json2Client` to dynamically inspect method signatures from `/doc-bearer` API (Odoo 19.0+) and cache them using a `_CACHE_MISS` sentinel.
+- Reinforced validation of `model` and `method` parameters on `Json2Client.execute_kw` and `_build_body`.
+- Broadened exception catching from `TimeoutException`/`NetworkError` to generic `RequestError` for introspection resilience.
+
 ## [0.6.0] - 2026-05-07
 
 ### Added
