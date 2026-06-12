@@ -575,6 +575,11 @@ class Json2Client(BaseOdooClient):
         kwargs: dict | None = None,
     ) -> object:
         """Execute an Odoo ORM method via the /json/2 REST endpoint."""
+        if not model or not isinstance(model, str):
+            raise ValueError("The 'model' parameter must be a non-empty string.")
+        if not method or not isinstance(method, str):
+            raise ValueError("The 'method' parameter must be a non-empty string.")
+
         url = f"{self.url}/json/2/{model}/{method}"
         body = self._build_body(model, method, args or [], kwargs or {})
 

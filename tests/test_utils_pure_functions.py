@@ -310,3 +310,18 @@ class TestJson2ClientBuildBody:
             client._build_body("", "search_read", [], {})
         with pytest.raises(ValueError, match="The 'model' parameter must be a non-empty string."):
             client._build_body(None, "search_read", [], {})  # type: ignore[arg-type]
+
+
+class TestJson2ClientExecuteKw:
+    """Tests for Json2Client.execute_kw validation logic."""
+
+    def test_execute_kw_invalid_model_or_method(self):
+        client = Json2Client(url="https://x.com", database="db", api_key="key")
+        with pytest.raises(ValueError, match="The 'model' parameter must be a non-empty string."):
+            client.execute_kw("", "search")
+        with pytest.raises(ValueError, match="The 'model' parameter must be a non-empty string."):
+            client.execute_kw(None, "search")  # type: ignore[arg-type]
+        with pytest.raises(ValueError, match="The 'method' parameter must be a non-empty string."):
+            client.execute_kw("res.partner", "")
+        with pytest.raises(ValueError, match="The 'method' parameter must be a non-empty string."):
+            client.execute_kw("res.partner", None)  # type: ignore[arg-type]
