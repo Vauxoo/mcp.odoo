@@ -967,8 +967,7 @@ def _render_html_row(line: dict) -> list:
     indent_style = ""
     if level is not None and level >= 2:
         indentation_px = (level + 1) * 8 - 20
-        if indentation_px > 0:
-            indent_style = f"padding-left: {indentation_px}px;"
+        indent_style = f"padding-left: {indentation_px}px;"
 
     cell_style = f"style='{indent_style}'" if indent_style else ""
     row_lines.append(
@@ -1108,7 +1107,7 @@ def op_get_financial_report(
             date_opt = {}
             if date_filter:
                 date_opt["filter"] = date_filter
-            elif date_from or date_to:
+            else:
                 date_opt["filter"] = "custom"
 
             if date_from:

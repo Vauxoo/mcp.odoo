@@ -159,3 +159,176 @@ def test_op_get_financial_report_resolution(mock_get_client):
     result = op_get_financial_report(report_id_or_name="Balance Sheet", format="json", profile="test")
     assert result["success"] is True
     mock_client.search_read.assert_called_once_with("account.report", [("name", "=", "Balance Sheet")], ["id"])
+
+
+@patch("odoo_mcp_multi.operations._get_client")
+def test_op_get_financial_report_xml_id(mock_get_client):
+    mock_client = MagicMock()
+    mock_get_client.return_value = mock_client
+    mock_client.execute_kw.side_effect = [MOCK_OPTIONS, MOCK_REPORT_INFO, MOCK_OPTIONS, MOCK_REPORT_INFO]
+
+    # Mock XML ID search in ir.model.data
+    # First call: res_id exists, Second call: does not exist
+    mock_client.search_read.side_effect = [
+        [{"res_id": 123}],
+        [],
+    ]
+
+    # Case 1: XML ID exists
+    result = op_get_financial_report(report_id_or_name="account.gallery_balance_sheet", format="json", profile="test")
+    assert result["success"] is True
+
+    # Case 2: XML ID does not exist (falls through to return None and fail)
+    result_missing = op_get_financial_report(
+        report_id_or_name="account.nonexistent_report", format="json", profile="test"
+    )
+    assert result_missing["success"] is False
+
+    assert "Could not resolve financial report" in result_missing["error"]
+
+
+@patch("odoo_mcp_multi.operations._get_client")
+def test_op_get_financial_report_ilike_and_missing(mock_get_client):
+    mock_client = MagicMock()
+    mock_get_client.return_value = mock_client
+    mock_client.execute_kw.side_effect = [MOCK_OPTIONS, MOCK_REPORT_INFO, MOCK_OPTIONS, MOCK_REPORT_INFO]
+
+    # First run: exact match fails, ilike match succeeds
+    mock_client.search_read.side_effect = [
+        [],  # exact name fails
+        [{"id": 456}],  # ilike succeeds
+        [],  # exact name fails (second run)
+        [],  # ilike fails (second run)
+    ]
+
+    # Case 1: resolves by ilike
+    result_ilike = op_get_financial_report(report_id_or_name="balance sheet", format="json", profile="test")
+    assert result_ilike["success"] is True
+
+    # Case 2: fails to resolve
+    result_missing = op_get_financial_report(report_id_or_name="Nonexistent Report", format="json", profile="test")
+    assert result_missing["success"] is False
+    assert "Could not resolve financial report" in result_missing["error"]
+
+
+def test_op_get_financial_report_invalid_format():
+    result = op_get_financial_report(report_id_or_name=4, format="pdf", profile="test")
+    assert result["success"] is False
+    assert "Invalid format" in result["error"]
+
+
+@patch("odoo_mcp_multi.operations._get_client")
+def test_op_get_financial_report_dates_and_options(mock_get_client):
+    mock_client = MagicMock()
+    mock_get_client.return_value = mock_client
+    mock_client.execute_kw.side_effect = [
+        MOCK_OPTIONS,
+        MOCK_REPORT_INFO,
+        MOCK_OPTIONS,
+        MOCK_REPORT_INFO,
+        MOCK_OPTIONS,
+        MOCK_REPORT_INFO,
+        MOCK_OPTIONS,
+        MOCK_REPORT_INFO,
+    ]
+
+    # Test 1: filter and custom dates
+    op_get_financial_report(
+        report_id_or_name=4,
+        date_from="2025-01-01",
+        date_to="2025-12-31",
+        date_filter="this_year",
+        format="json",
+        profile="test",
+    )
+    first_call_options = mock_client.execute_kw.call_args_list[0][0][2]
+    assert first_call_options[1]["date"]["filter"] == "this_year"
+    assert first_call_options[1]["date"]["date_from"] == "2025-01-01"
+    assert first_call_options[1]["date"]["date_to"] == "2025-12-31"
+
+    # Test 2: date_from only (triggers custom filter assignment)
+    op_get_financial_report(
+        report_id_or_name=4,
+        date_from="2025-01-01",
+        format="json",
+        profile="test",
+    )
+    second_call_options = mock_client.execute_kw.call_args_list[2][0][2]
+    assert second_call_options[1]["date"]["filter"] == "custom"
+    assert second_call_options[1]["date"]["date_from"] == "2025-01-01"
+
+    # Test 3: date_to only (triggers custom filter assignment)
+    op_get_financial_report(
+        report_id_or_name=4,
+        date_to="2025-12-31",
+        format="json",
+        profile="test",
+    )
+    third_call_options = mock_client.execute_kw.call_args_list[4][0][2]
+    assert third_call_options[1]["date"]["filter"] == "custom"
+    assert third_call_options[1]["date"]["date_to"] == "2025-12-31"
+
+    # Test 4: date_filter only (no custom date)
+    op_get_financial_report(
+        report_id_or_name=4,
+        date_filter="today",
+        format="json",
+        profile="test",
+    )
+    fourth_call_options = mock_client.execute_kw.call_args_list[6][0][2]
+    assert fourth_call_options[1]["date"]["filter"] == "today"
+    assert "date_from" not in fourth_call_options[1]["date"]
+
+
+@patch("odoo_mcp_multi.operations._get_client")
+def test_op_get_financial_report_rpc_exception(mock_get_client):
+    mock_client = MagicMock()
+    mock_get_client.return_value = mock_client
+    mock_client.execute_kw.side_effect = Exception("Odoo RPC Error")
+
+    result = op_get_financial_report(report_id_or_name=4, format="json", profile="test")
+    assert result["success"] is False
+    assert "Failed to get financial report: Odoo RPC Error" in result["error"]
+
+
+def test_format_report_html_branches_directly():
+    from odoo_mcp_multi.operations import _format_financial_report, _format_report_html
+
+    # 1. No level and level 1 (where padding calculations <= 0)
+    lines_with_edge_cases = [
+        {
+            "id": "line_no_level",
+            "name": "No Level Concept",
+            "level": None,
+            "columns": [],
+        },
+        {
+            "id": "line_level_1",
+            "name": "Level 1 Concept",
+            "level": 1,
+            "columns": [],
+        },
+    ]
+
+    # No company name and fallback colspan
+    options_without_colspan = {
+        "columns": [],
+        "column_headers": [[{"name": "Date Header"}]],  # no colspan
+        "column_headers_render_data": {"level_colspan": [2]},
+    }
+
+    html = _format_report_html(
+        options_without_colspan,
+        lines_with_edge_cases,
+        cols=[],
+        report_meta={"name": "Edge Cases Report"},  # no company_name
+    )
+
+    assert "line_level_default" in html
+    assert "line_level_1" in html
+    assert "colspan='2'" in html
+    assert "<p class='report-company'>" not in html
+
+    # 2. Test fallback in _format_financial_report directly
+    unsupported_res = _format_financial_report({}, {"lines": []}, "unsupported_format")
+    assert unsupported_res == ""
