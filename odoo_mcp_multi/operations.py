@@ -91,7 +91,16 @@ def _get_client(profile_name: Optional[str] = None):
         password=active_profile.password or "",
         api_key=active_profile.api_key or "",
         protocol=active_profile.protocol,
+        verify=active_profile.verify,
     )
+
+
+def _with_warning(result: Any, client: Any) -> Any:
+    """Inject client warning if present into the result dictionary."""
+    warning = getattr(client, "last_warning", None)
+    if warning and isinstance(result, dict):
+        result["warning"] = warning
+    return result
 
 
 def op_test_connection(
@@ -101,6 +110,7 @@ def op_test_connection(
     password: str,
     protocol: Optional[str] = None,
     timeout: int = 30,
+    verify: bool = True,
 ) -> dict:
     """Test connection and authentication to an Odoo instance.
 
@@ -114,6 +124,7 @@ def op_test_connection(
         password: Login password
         protocol: Protocol to use (auto-detected if None)
         timeout: Connection timeout in seconds
+        verify: Verify SSL certificates (default: True)
 
     Returns:
         Dict with uid, server_version, and protocol on success,
@@ -127,12 +138,13 @@ def op_test_connection(
             password=password,
             protocol=protocol,
             timeout=timeout,
+            verify=verify,
         )
         uid = client.authenticate()
     except Exception as exc:
         return {"success": False, "error": f"Connection test failed: {exc}"}
 
-    version = get_server_version(normalize_url(url))
+    version = get_server_version(normalize_url(url), timeout=timeout, verify=verify)
     return {
         "uid": uid,
         "server_version": version.get("server_version", "unknown") if version else "unknown",
@@ -313,14 +325,14 @@ def op_search_read(
     }
 
     if format == "compact":
-        return {**_format_compact(records), **envelope}
+        return _with_warning({**_format_compact(records), **envelope}, client)
     if format == "table":
-        return {"data": _format_table(records), **envelope}
+        return _with_warning({"data": _format_table(records), **envelope}, client)
     if format == "html":
-        return {"data": _format_html(records), **envelope}
+        return _with_warning({"data": _format_html(records), **envelope}, client)
     if format == "csv":
-        return {"data": _format_csv(records), **envelope}
-    return {"records": records, **envelope}
+        return _with_warning({"data": _format_csv(records), **envelope}, client)
+    return _with_warning({"records": records, **envelope}, client)
 
 
 def op_write(
@@ -359,7 +371,7 @@ def op_write(
             "ids": parsed_ids,
         }
 
-    return {"success": result, "updated_ids": parsed_ids}
+    return _with_warning({"success": result, "updated_ids": parsed_ids}, client)
 
 
 def op_unlink(
@@ -392,7 +404,7 @@ def op_unlink(
             "ids": parsed_ids,
         }
 
-    return {"success": result, "deleted_ids": parsed_ids}
+    return _with_warning({"success": result, "deleted_ids": parsed_ids}, client)
 
 
 def op_create(
@@ -421,7 +433,7 @@ def op_create(
     except Exception as exc:
         return {"success": False, "error": f"create on '{model}' failed: {exc}"}
 
-    return {"success": True, "id": record_id}
+    return _with_warning({"success": True, "id": record_id}, client)
 
 
 def op_export_records(
@@ -487,7 +499,7 @@ def op_export_records(
         {field_name: row[i] if i < len(row) else None for i, field_name in enumerate(parsed_fields)} for row in datas
     ]
 
-    return {"records": records, **envelope}
+    return _with_warning({"records": records, **envelope}, client)
 
 
 def _format_row(row: Any, field_names: list[str]) -> list:
@@ -554,7 +566,7 @@ def op_import_records(
             "row_count": len(formatted_rows),
         }
 
-    return result
+    return _with_warning(result, client)
 
 
 def op_execute_kw(
@@ -585,7 +597,7 @@ def op_execute_kw(
     except Exception as exc:
         return {"success": False, "error": f"execute_kw '{model}.{method}' failed: {exc}"}
 
-    return {"success": True, "result": result}
+    return _with_warning({"success": True, "result": result}, client)
 
 
 def op_get_version(profile: Optional[str] = None) -> dict:
@@ -600,7 +612,7 @@ def op_get_version(profile: Optional[str] = None) -> dict:
     """
     try:
         active_profile = resolve_profile(profile, fallback=_fallback_profile)
-        version = get_server_version(normalize_url(active_profile.url))
+        version = get_server_version(normalize_url(active_profile.url), verify=active_profile.verify)
     except Exception as exc:
         return {"success": False, "error": f"Version lookup failed: {exc}"}
 
@@ -647,7 +659,7 @@ def op_list_models(
 
     result = {"success": True, "models": models}
     _cache_set(cache_key, result)
-    return result
+    return _with_warning(result, client)
 
 
 def op_list_fields(
@@ -683,4 +695,4 @@ def op_list_fields(
 
     result = {"success": True, "fields": fields}
     _cache_set(cache_key, result)
-    return result
+    return _with_warning(result, client)

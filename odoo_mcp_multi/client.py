@@ -8,7 +8,9 @@ the right client based on server version.
 from __future__ import annotations
 
 import json
+import logging
 import socket
+import ssl
 import xmlrpc.client
 from abc import ABC, abstractmethod
 from typing import Any, Optional
@@ -20,9 +22,46 @@ from odoo_mcp_multi.exceptions import (
     OdooAuthenticationError,
     OdooConnectionError,
     OdooExecutionError,
+    OdooSSLVerificationError,
 )
 from odoo_mcp_multi.parsers import normalize_url
 from odoo_mcp_multi.version import Protocol, detect_protocol
+
+_logger = logging.getLogger(__name__)
+
+
+def is_ssl_verification_error(exc: Exception) -> bool:
+    """Check if an exception is caused by an SSL certificate verification failure."""
+    curr: Optional[BaseException] = exc
+    while curr is not None:
+        if isinstance(curr, ssl.SSLCertVerificationError):
+            return True
+        name = curr.__class__.__name__
+        if "SSLCertVerificationError" in name:
+            return True
+        if isinstance(curr, ssl.SSLError):
+            reason = getattr(curr, "reason", "") or ""
+            if any(r in reason for r in ("CERTIFICATE_VERIFY_FAILED", "CA_BCONS_NOT_CRITICAL", "VERIFY_FAILED")):
+                return True
+        curr = getattr(curr, "__cause__", None) or getattr(curr, "__context__", None)
+
+    exc_str = str(exc).lower()
+    error_keywords = (
+        "certificate verify failed",
+        "certificate verification failed",
+        "verification failed",
+        "verify failed",
+        "certverify",
+        "ca_bcons_not_critical",
+        "basic constraints",
+        "self signed certificate",
+        "untrusted",
+        "ssl: certificate",
+    )
+    if any(keyword in exc_str for keyword in error_keywords):
+        return True
+
+    return False
 
 
 class BaseOdooClient(ABC):
@@ -63,6 +102,7 @@ class BaseOdooClient(ABC):
         self._password = password.get_secret_value() if isinstance(password, SecretStr) else password
         self.timeout = timeout
         self.verify = verify
+        self.last_warning: Optional[str] = None
         self._uid: Optional[int] = None
 
     @abstractmethod
@@ -232,6 +272,23 @@ class JsonRpcClient(BaseOdooClient):
         self.use_json2 = use_json2
         self._endpoint = "/jsonrpc" if not use_json2 else "/jsonrpc/2"
 
+    def _post(self, url: str, json_payload: dict) -> httpx.Response:
+        """Make an HTTP POST request, translating httpx exceptions to Odoo exceptions."""
+        try:
+            return httpx.post(
+                url,
+                json=json_payload,
+                timeout=self.timeout,
+                verify=self.verify,
+                headers={"User-Agent": "odoo-mcp-multi"},
+            )
+        except httpx.TimeoutException as e:
+            raise OdooConnectionError(f"Connection timed out after {self.timeout}s: {e}") from e
+        except httpx.RequestError as e:
+            if is_ssl_verification_error(e):
+                raise OdooSSLVerificationError(f"SSL certificate validation failed: {e}") from e
+            raise OdooConnectionError(f"Connection error: {e}") from e
+
     def _call(self, service: str, method: str, args: list) -> Any:
         """Make a JSON-RPC call to the Odoo server.
 
@@ -254,18 +311,20 @@ class JsonRpcClient(BaseOdooClient):
             "id": 1,
         }
 
-        try:
-            response = httpx.post(
-                f"{self.url}{self._endpoint}",
-                json=payload,
-                timeout=self.timeout,
-                verify=self.verify,
-                headers={"User-Agent": "odoo-mcp-multi"},
-            )
-        except httpx.TimeoutException as e:
-            raise OdooConnectionError(f"Connection timed out after {self.timeout}s: {e}") from e
-        except httpx.RequestError as e:
-            raise OdooConnectionError(f"Connection error: {e}") from e
+        url = f"{self.url}{self._endpoint}"
+        if self.verify:
+            try:
+                response = self._post(url, payload)
+            except OdooSSLVerificationError as e:
+                # SSL validation failure warrants fallback to unverified SSL configuration.
+                # Setting self.verify = False alters the connection configuration globally for
+                # this client, saving the warning status.
+                _logger.warning("SSL verification failed for %s. Falling back to unverified SSL.", self.url)
+                self.verify = False
+                self.last_warning = f"SSL verification warning: {e}"
+                response = self._post(url, payload)
+        else:
+            response = self._post(url, payload)
 
         try:
             result = response.json()
@@ -566,6 +625,23 @@ class Json2Client(BaseOdooClient):
         """No-op: JSON-2 uses Bearer token — no UID needed."""
         return None
 
+    def _post(self, url: str, json_payload: dict) -> httpx.Response:
+        """Make an HTTP POST request, translating httpx exceptions to Odoo exceptions."""
+        try:
+            return httpx.post(
+                url,
+                headers=self._headers(),
+                json=json_payload,
+                timeout=self.timeout,
+                verify=self.verify,
+            )
+        except httpx.TimeoutException as e:
+            raise OdooExecutionError(f"Request timed out: {e}") from e
+        except httpx.RequestError as e:
+            if is_ssl_verification_error(e):
+                raise OdooSSLVerificationError(f"SSL certificate validation failed: {e}") from e
+            raise OdooConnectionError(f"Connection error: {e}") from e
+
     def execute_kw(
         self,
         model: str,
@@ -582,18 +658,19 @@ class Json2Client(BaseOdooClient):
         url = f"{self.url}/json/2/{model}/{method}"
         body = self._build_body(model, method, args or [], kwargs or {})
 
-        try:
-            response = httpx.post(
-                url,
-                headers=self._headers(),
-                json=body,
-                timeout=self.timeout,
-                verify=self.verify,
-            )
-        except httpx.TimeoutException as e:
-            raise OdooExecutionError(f"Request timed out: {e}") from e
-        except httpx.RequestError as e:
-            raise OdooConnectionError(f"Connection error: {e}") from e
+        if self.verify:
+            try:
+                response = self._post(url, body)
+            except OdooSSLVerificationError as e:
+                # SSL validation failure warrants fallback to unverified SSL configuration.
+                # Setting self.verify = False alters the connection configuration globally for
+                # this client, saving the warning status.
+                _logger.warning("SSL verification failed for %s. Falling back to unverified SSL.", self.url)
+                self.verify = False
+                self.last_warning = f"SSL verification warning: {e}"
+                response = self._post(url, body)
+        else:
+            response = self._post(url, body)
 
         if response.status_code == 401:
             try:
@@ -627,8 +704,6 @@ class XmlRpcClient(BaseOdooClient):
     def _get_transport(self) -> xmlrpc.client.Transport:
         """Create a transport with configured timeout and SSL verification settings."""
         if self.url.startswith("https"):
-            import ssl
-
             context = None if self.verify else ssl._create_unverified_context()
             transport = xmlrpc.client.SafeTransport(context=context)
         else:
@@ -649,14 +724,10 @@ class XmlRpcClient(BaseOdooClient):
     def _get_object(self) -> xmlrpc.client.ServerProxy:
         return xmlrpc.client.ServerProxy(self._object_endpoint, transport=self._get_transport(), allow_none=True)
 
-    def authenticate(self) -> int:
-        """Authenticate with the Odoo server via XML-RPC."""
-        if self._uid is not None:
-            return self._uid
-
+    def _authenticate_raw(self) -> int:
         try:
             common = self._get_common()
-            uid = common.authenticate(self.database, self.user, self._password, {})
+            return common.authenticate(self.database, self.user, self._password, {})
         except socket.timeout as e:
             raise OdooConnectionError(f"Connection timed out: {e}") from e
         except ConnectionRefusedError as e:
@@ -664,7 +735,28 @@ class XmlRpcClient(BaseOdooClient):
         except xmlrpc.client.Fault as e:
             raise OdooAuthenticationError(f"Authentication fault: {e.faultString}") from e
         except Exception as e:
+            if is_ssl_verification_error(e):
+                raise OdooSSLVerificationError(f"SSL certificate validation failed: {e}") from e
             raise OdooConnectionError(f"Connection error: {e}") from e
+
+    def authenticate(self) -> int:
+        """Authenticate with the Odoo server via XML-RPC."""
+        if self._uid is not None:
+            return self._uid
+
+        if self.verify:
+            try:
+                uid = self._authenticate_raw()
+            except OdooSSLVerificationError as e:
+                # SSL validation failure warrants fallback to unverified SSL configuration.
+                # Setting self.verify = False alters the connection configuration globally for
+                # this client, saving the warning status.
+                _logger.warning("SSL verification failed for %s. Falling back to unverified SSL.", self.url)
+                self.verify = False
+                self.last_warning = f"SSL verification warning: {e}"
+                uid = self._authenticate_raw()
+        else:
+            uid = self._authenticate_raw()
 
         if not uid:
             raise OdooAuthenticationError(
@@ -674,12 +766,7 @@ class XmlRpcClient(BaseOdooClient):
         self._uid = uid
         return uid
 
-    def execute_kw(self, model: str, method: str, args: Optional[list] = None, kwargs: Optional[dict] = None) -> Any:
-        """Execute a method on an Odoo model via XML-RPC."""
-        uid = self.authenticate()
-        args = args or []
-        kwargs = kwargs or {}
-
+    def _execute_kw_raw(self, uid: int, model: str, method: str, args: list, kwargs: dict) -> Any:
         try:
             obj = self._get_object()
             return obj.execute_kw(self.database, uid, self._password, model, method, args, kwargs)
@@ -688,7 +775,29 @@ class XmlRpcClient(BaseOdooClient):
         except xmlrpc.client.Fault as e:
             raise OdooExecutionError(f"Execution fault: {e.faultString}") from e
         except Exception as e:
+            if is_ssl_verification_error(e):
+                raise OdooSSLVerificationError(f"SSL certificate validation failed: {e}") from e
             raise OdooExecutionError(f"Execution error: {e}") from e
+
+    def execute_kw(self, model: str, method: str, args: Optional[list] = None, kwargs: Optional[dict] = None) -> Any:
+        """Execute a method on an Odoo model via XML-RPC."""
+        uid = self.authenticate()
+        args = args or []
+        kwargs = kwargs or {}
+
+        if self.verify:
+            try:
+                return self._execute_kw_raw(uid, model, method, args, kwargs)
+            except OdooSSLVerificationError as e:
+                # SSL validation failure warrants fallback to unverified SSL configuration.
+                # Setting self.verify = False alters the connection configuration globally for
+                # this client, saving the warning status.
+                _logger.warning("SSL verification failed for %s. Falling back to unverified SSL.", self.url)
+                self.verify = False
+                self.last_warning = f"SSL verification warning: {e}"
+                return self._execute_kw_raw(uid, model, method, args, kwargs)
+        else:
+            return self._execute_kw_raw(uid, model, method, args, kwargs)
 
 
 def create_client(
