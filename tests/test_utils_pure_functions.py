@@ -302,3 +302,11 @@ class TestJson2ClientBuildBody:
         client = Json2Client(url="https://x.com", database="", api_key="key")
         h = client._headers()
         assert "X-Odoo-Database" not in h
+
+    def test_build_body_invalid_model(self):
+        """Passing an empty or non-string model must raise ValueError."""
+        client = self._make_client()
+        with pytest.raises(ValueError, match="The 'model' parameter must be a non-empty string."):
+            client._build_body("", "search_read", [], {})
+        with pytest.raises(ValueError, match="The 'model' parameter must be a non-empty string."):
+            client._build_body(None, "search_read", [], {})  # type: ignore[arg-type]

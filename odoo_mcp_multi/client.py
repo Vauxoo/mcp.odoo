@@ -320,6 +320,9 @@ class JsonRpcClient(BaseOdooClient):
 # Odoo 19+ JSON-2 REST client
 # ---------------------------------------------------------------------------
 
+# Sentinel object to distinguish between a cache miss and a cached None value
+_CACHE_MISS = object()
+
 # Maps (method_name) → (positional_arg_names, instance_method)
 # instance_method=True means ids come from args[0] and are sent in body
 _JSON2_METHOD_SIGNATURES: dict[str, tuple[list[str], bool]] = {
@@ -406,6 +409,21 @@ class Json2Client(BaseOdooClient):
         server. It parses the JSON schema representation of the model's methods to extract parameter
         names and determine if the method is an instance method or a class/model method.
 
+        Version Compatibility:
+            The ``/doc-bearer/<model>.json`` reflection endpoint is only available on **Odoo 19.0 and
+            later**, introduced alongside the JSON-2 REST protocol. On older Odoo versions (≤ 18.x),
+            this endpoint does not exist and will respond with a 404 (or similar 4xx) status code.
+            In that case, this method returns ``None`` and the caller falls back to the local heuristic
+            defined in ``_build_body``.
+
+            +-----------------+------------------------------------+
+            | Odoo version    | /doc-bearer/<model>.json available |
+            +=================+====================================+
+            | 19.0+           | Yes (JSON-2 protocol)              |
+            +-----------------+------------------------------------+
+            | 8.0 – 18.x      | No (404 expected)                  |
+            +-----------------+------------------------------------+
+
         To increase resilience in unstable network environments, it implements up to 3 attempts with
         exponential backoff (1s, 2s) for transient HTTP errors and network timeouts.
 
@@ -468,7 +486,9 @@ class Json2Client(BaseOdooClient):
                     except (json.JSONDecodeError, KeyError, AttributeError):
                         return None
 
-                # For client errors other than 429 (rate-limit), retry won't help
+                # For client errors other than 429 (rate-limit), retry won't help.
+                # A 404 is the expected response from Odoo versions < 19.0 that
+                # do not implement the /doc-bearer reflection API.
                 if response.status_code < 500 and response.status_code != 429:
                     return None
             except (httpx.TimeoutException, httpx.NetworkError):
@@ -497,6 +517,9 @@ class Json2Client(BaseOdooClient):
         methods and fall back to dynamic introspection or smart local heuristics
         for unknown methods.
         """
+        if not model or not isinstance(model, str):
+            raise ValueError("The 'model' parameter must be a non-empty string.")
+
         args = list(args or [])
         body: dict = dict(kwargs or {})
 
@@ -504,8 +527,10 @@ class Json2Client(BaseOdooClient):
         if sig is None:
             if model not in self._signatures_cache:
                 self._signatures_cache[model] = {}
-            cached_sig = self._signatures_cache[model].get(method, False)
-            if cached_sig is False:
+            # We use the _CACHE_MISS sentinel object to distinguish a cache miss
+            # (key not queried yet) from a valid None value (queried but not found).
+            cached_sig = self._signatures_cache[model].get(method, _CACHE_MISS)
+            if cached_sig is _CACHE_MISS:
                 sig = self._fetch_method_signature(model, method)
                 self._signatures_cache[model][method] = sig
             else:
