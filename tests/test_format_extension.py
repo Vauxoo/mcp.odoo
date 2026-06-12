@@ -20,6 +20,7 @@ runner = CliRunner()
 def _clear_metadata_cache():
     """Prevent cross-test pollution from the in-memory metadata cache."""
     from odoo_mcp_multi import operations
+
     operations._metadata_cache.clear()
     yield
     operations._metadata_cache.clear()
@@ -166,14 +167,46 @@ def test_op_list_fields_format_table(mock_client):
     mock_client.return_value = client
 
     result = op_list_fields("res.partner", format="table")
-    assert "format" in result
     assert result["format"] == "table"
     assert "data" in result
-    # Table should contain field names as rows
     assert "name" in result["data"]
     assert "active" in result["data"]
     assert "field_count" in result
     assert result["field_count"] == 2
+
+
+@patch("odoo_mcp_multi.operations._get_client")
+def test_op_list_fields_format_compact(mock_client):
+    """op_list_fields with format=compact returns headers+rows structure."""
+    from odoo_mcp_multi.operations import op_list_fields
+
+    client = MagicMock()
+    client.execute_kw.return_value = {
+        "name": {"type": "char", "string": "Name", "required": True, "help": ""},
+    }
+    mock_client.return_value = client
+
+    result = op_list_fields("res.partner", format="compact")
+    assert result["format"] == "compact"
+    assert "headers" in result
+    assert "rows" in result
+
+
+@patch("odoo_mcp_multi.operations._get_client")
+def test_op_list_fields_format_html(mock_client):
+    """op_list_fields with format=html returns an HTML table string."""
+    from odoo_mcp_multi.operations import op_list_fields
+
+    client = MagicMock()
+    client.execute_kw.return_value = {
+        "name": {"type": "char", "string": "Name", "required": True, "help": ""},
+    }
+    mock_client.return_value = client
+
+    result = op_list_fields("res.partner", format="html")
+    assert result["format"] == "html"
+    assert "<table" in result["data"]
+    assert "name" in result["data"]
 
 
 @patch("odoo_mcp_multi.operations._get_client")
@@ -242,6 +275,56 @@ def test_op_list_models_format_table(mock_client):
 
 
 @patch("odoo_mcp_multi.operations._get_client")
+def test_op_list_models_format_compact(mock_client):
+    """op_list_models with format=compact returns headers+rows structure."""
+    from odoo_mcp_multi.operations import op_list_models
+
+    client = MagicMock()
+    client.search_read.return_value = [
+        {"name": "Contact", "model": "res.partner", "info": ""},
+    ]
+    mock_client.return_value = client
+
+    result = op_list_models(format="compact")
+    assert result["format"] == "compact"
+    assert "headers" in result
+    assert "rows" in result
+
+
+@patch("odoo_mcp_multi.operations._get_client")
+def test_op_list_models_format_html(mock_client):
+    """op_list_models with format=html returns an HTML table string."""
+    from odoo_mcp_multi.operations import op_list_models
+
+    client = MagicMock()
+    client.search_read.return_value = [
+        {"name": "Contact", "model": "res.partner", "info": ""},
+    ]
+    mock_client.return_value = client
+
+    result = op_list_models(format="html")
+    assert result["format"] == "html"
+    assert "<table" in result["data"]
+    assert "Contact" in result["data"]
+
+
+@patch("odoo_mcp_multi.operations._get_client")
+def test_op_list_models_format_csv(mock_client):
+    """op_list_models with format=csv returns CSV string."""
+    from odoo_mcp_multi.operations import op_list_models
+
+    client = MagicMock()
+    client.search_read.return_value = [
+        {"name": "Contact", "model": "res.partner", "info": ""},
+    ]
+    mock_client.return_value = client
+
+    result = op_list_models(format="csv")
+    assert result["format"] == "csv"
+    assert "Contact" in result["data"]
+
+
+@patch("odoo_mcp_multi.operations._get_client")
 def test_op_list_models_format_json_default(mock_client):
     """op_list_models with default format returns models list."""
     from odoo_mcp_multi.operations import op_list_models
@@ -287,6 +370,62 @@ def test_op_export_records_format_table(mock_client):
     result = op_export_records("res.partner", fields="name", format="table")
     assert result["format"] == "table"
     assert "data" in result
+    assert "Alice" in result["data"]
+
+
+@patch("odoo_mcp_multi.operations._get_client")
+def test_op_export_records_format_compact(mock_client):
+    """op_export_records with format=compact returns headers+rows."""
+    from odoo_mcp_multi.operations import op_export_records
+
+    client = MagicMock()
+    client.execute_kw.side_effect = [
+        2,
+        [1, 2],
+        {"datas": [["Alice"], ["Bob"]]},
+    ]
+    mock_client.return_value = client
+
+    result = op_export_records("res.partner", fields="name", format="compact")
+    assert result["format"] == "compact"
+    assert "headers" in result
+    assert "rows" in result
+
+
+@patch("odoo_mcp_multi.operations._get_client")
+def test_op_export_records_format_html(mock_client):
+    """op_export_records with format=html returns an HTML table string."""
+    from odoo_mcp_multi.operations import op_export_records
+
+    client = MagicMock()
+    client.execute_kw.side_effect = [
+        1,
+        [1],
+        {"datas": [["Alice"]]},
+    ]
+    mock_client.return_value = client
+
+    result = op_export_records("res.partner", fields="name", format="html")
+    assert result["format"] == "html"
+    assert "<table" in result["data"]
+    assert "Alice" in result["data"]
+
+
+@patch("odoo_mcp_multi.operations._get_client")
+def test_op_export_records_format_csv(mock_client):
+    """op_export_records with format=csv returns CSV string."""
+    from odoo_mcp_multi.operations import op_export_records
+
+    client = MagicMock()
+    client.execute_kw.side_effect = [
+        1,
+        [1],
+        {"datas": [["Alice"]]},
+    ]
+    mock_client.return_value = client
+
+    result = op_export_records("res.partner", fields="name", format="csv")
+    assert result["format"] == "csv"
     assert "Alice" in result["data"]
 
 
