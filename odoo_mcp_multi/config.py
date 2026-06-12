@@ -75,6 +75,10 @@ class OdooProfile(BaseModel):
     password: Optional[SecretStr] = Field(default=None, description="Password (legacy auth, stored securely)")
     api_key: Optional[SecretStr] = Field(default=None, description="API key for Odoo 19+ bearer auth")
     protocol: str = Field(default="auto", description="RPC protocol: auto, jsonrpcs, json2s, xmlrpcs")
+    verify: bool = Field(
+        default=True,
+        description="Verify SSL certificates. When set to False, SSL verification is bypassed.",
+    )
     permissions: Optional[ProfilePermissions] = Field(
         default=None,
         description="Optional granular permissions. None = full access (backward compat).",
@@ -107,6 +111,7 @@ class OdooProfile(BaseModel):
             "database": self.database,
             "user": self.user,
             "protocol": self.protocol,
+            "verify": self.verify,
         }
         if self.password is not None:
             d["password"] = self.password.get_secret_value()
@@ -127,6 +132,7 @@ class OdooProfile(BaseModel):
             password=SecretStr(data["password"]) if data.get("password") else None,
             api_key=SecretStr(data["api_key"]) if data.get("api_key") else None,
             protocol=data.get("protocol", "auto"),
+            verify=data.get("verify", True),
             permissions=data.get("permissions"),
         )
 
@@ -317,6 +323,7 @@ def list_profiles() -> list[dict]:
             "database": profile.database,
             "user": profile.user,
             "protocol": profile.protocol,
+            "verify": profile.verify,
             "auth": _get_auth_type(profile),
             "is_default": name == config.default_profile,
         }

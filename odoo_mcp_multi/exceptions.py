@@ -11,6 +11,12 @@ class OdooConnectionError(Exception):
     pass
 
 
+class OdooSSLVerificationError(OdooConnectionError):
+    """Exception raised specifically for Odoo SSL certificate validation and verification failures."""
+
+    pass
+
+
 class OdooAuthenticationError(Exception):
     """Exception raised for authentication failures."""
 

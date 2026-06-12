@@ -77,6 +77,7 @@ def main() -> None:
 @click.option("--password", default=None, hide_input=True, help="Odoo password (legacy auth, Odoo < 19)")
 @click.option("--api-key", "api_key", default=None, help="API key for Odoo 19+ Bearer auth (/json/2)")
 @click.option("--protocol", default="auto", help="RPC protocol: auto, json2s, jsonrpcs, xmlrpcs (default: auto)")
+@click.option("--verify/--no-verify", "verify", default=True, help="Verify SSL certificates (default: True)")
 @click.option("--default", "set_default", is_flag=True, help="Set as default profile")
 @click.option("--test/--no-test", "test_connection", default=True, help="Test connection before saving")
 def cmd_add_profile(
@@ -87,6 +88,7 @@ def cmd_add_profile(
     password: str | None,
     api_key: str | None,
     protocol: str,
+    verify: bool,
     set_default: bool,
     test_connection: bool,
 ) -> None:
@@ -121,7 +123,7 @@ def cmd_add_profile(
 
     server_major = 0
     try:
-        version_info = get_server_version(normalize_url(url))
+        version_info = get_server_version(normalize_url(url), verify=verify)
         if version_info:
             ver_str = version_info.get("server_version", version_info.get("version", ""))
             server_major, _, _ = parse_version(ver_str)
@@ -142,13 +144,19 @@ def cmd_add_profile(
         try:
             if api_key:
                 if version_info is None:
-                    version_info = get_server_version(normalize_url(url))
+                    version_info = get_server_version(normalize_url(url), verify=verify)
                 if version_info is None:
                     raise OdooConnectionError("Could not reach server (no version info)")
                 ver = version_info.get("server_version", version_info.get("version", "unknown"))
                 click.secho(f"{TICK} Server reachable! Odoo {ver}", fg="green")
             else:
-                result = op_test_connection(url=url, database=database, user=user or "", password=password or "")
+                result = op_test_connection(
+                    url=url,
+                    database=database,
+                    user=user or "",
+                    password=password or "",
+                    verify=verify,
+                )
                 if result.get("success") is False:
                     click.secho(f"{CROSS} Connection test failed: {result['error']}", fg="red")
                     if not click.confirm("Save profile anyway?"):
@@ -171,6 +179,7 @@ def cmd_add_profile(
         password=password if password else None,
         api_key=api_key if api_key else None,
         protocol=protocol,
+        verify=verify,
     )
     add_profile(profile, set_default=set_default)
     auth_method = f"api_key ({protocol})" if api_key else "password"
@@ -204,6 +213,7 @@ def cmd_list_profiles(as_json: bool) -> None:
         click.echo(f"    URL:      {p['url']}")
         click.echo(f"    Database: {p['database']}")
         click.echo(f"    Auth:     {auth_display}")
+        click.echo(f"    Verify:   {p.get('verify', True)}")
         if p.get("user"):
             click.echo(f"    User:     {p['user']}")
         click.echo()
@@ -272,6 +282,12 @@ def _resolve_secret(new_value: str | None, existing_secret) -> str | None:
     default=None,
     help="New API key for Odoo 19+ (prompts if flag used without value)",
 )
+@click.option(
+    "--verify/--no-verify",
+    "verify",
+    default=None,
+    help="Update SSL certificate verification setting",
+)
 @click.option("--test", "test_connection", is_flag=True, default=False, help="Test connection after editing")
 def cmd_edit_profile(
     name: str,
@@ -281,6 +297,7 @@ def cmd_edit_profile(
     user: str,
     password: str,
     api_key: str,
+    verify: bool | None,
     test_connection: bool,
 ) -> None:
     """Edit an existing profile.
@@ -303,6 +320,7 @@ def cmd_edit_profile(
     new_url = url if url else existing.url
     new_database = database if database else existing.database
     new_user = user if user else existing.user
+    new_verify = verify if verify is not None else existing.verify
 
     new_password = _resolve_secret(password, existing.password)
     new_api_key = _resolve_secret(api_key, existing.api_key)
@@ -318,12 +336,12 @@ def cmd_edit_profile(
                 from odoo_mcp_multi.parsers import normalize_url
                 from odoo_mcp_multi.version import get_server_version
 
-                info = get_server_version(normalize_url(new_url))
+                info = get_server_version(normalize_url(new_url), verify=new_verify)
                 ver = (info or {}).get("server_version", "unknown")
                 click.secho(f"{TICK} Server reachable! Odoo {ver}", fg="green")
             else:
                 result = op_test_connection(
-                    url=new_url, database=new_database, user=new_user, password=new_password or ""
+                    url=new_url, database=new_database, user=new_user, password=new_password or "", verify=new_verify
                 )
                 if result.get("success") is False:
                     click.secho(f"{CROSS} Connection test failed: {result['error']}", fg="red")
@@ -348,6 +366,7 @@ def cmd_edit_profile(
         user=new_user,
         password=new_password if new_password else None,
         api_key=new_api_key if new_api_key else None,
+        verify=new_verify,
     )
     add_profile(updated_profile, set_default=False)
 
