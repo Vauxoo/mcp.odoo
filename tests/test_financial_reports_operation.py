@@ -329,6 +329,41 @@ def test_format_report_html_branches_directly():
     assert "colspan='2'" in html
     assert "<p class='report-company'>" not in html
 
-    # 2. Test fallback in _format_financial_report directly
+    # 3. Test company_ids joining in _format_report_html
+    html_with_companies = _format_report_html(
+        {"companies": [{"name": "Vauxoo Consultores"}, {"name": "Vauxoo"}]},
+        [],
+        cols=[],
+        report_meta={"name": "Test Report", "company_name": "Single Company"},
+        company_ids="19,1",
+    )
+    assert "<p class='report-company'>Vauxoo Consultores, Vauxoo</p>" in html_with_companies
+
+    # 4. Test fallback in _format_financial_report directly
     unsupported_res = _format_financial_report({}, {"lines": []}, "unsupported_format")
     assert unsupported_res == ""
+
+
+@patch("odoo_mcp_multi.operations._get_client")
+def test_op_get_financial_report_company_ids(mock_get_client):
+    mock_client = MagicMock()
+    mock_get_client.return_value = mock_client
+    mock_client.execute_kw.side_effect = [MOCK_OPTIONS, MOCK_REPORT_INFO, MOCK_OPTIONS, MOCK_REPORT_INFO]
+
+    # Test with string company IDs
+    res = op_get_financial_report(report_id_or_name=4, format="json", profile="test", company_ids="19,1")
+    assert res["success"] is True
+    # The fourth positional argument is the kwargs dict passed to execute_kw
+    args_1 = mock_client.execute_kw.call_args_list[0][0]
+    assert args_1[3] == {"context": {"allowed_company_ids": [19, 1]}}
+
+    # Test with list company IDs
+    res2 = op_get_financial_report(report_id_or_name=4, format="json", profile="test", company_ids=[1, 19])
+    assert res2["success"] is True
+    args_2 = mock_client.execute_kw.call_args_list[2][0]
+    assert args_2[3] == {"context": {"allowed_company_ids": [1, 19]}}
+
+    # Test with invalid company IDs string
+    res3 = op_get_financial_report(report_id_or_name=4, format="json", profile="test", company_ids="invalid,1")
+    assert res3["success"] is False
+    assert "Invalid company_ids" in res3["error"]

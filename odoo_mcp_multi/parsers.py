@@ -7,6 +7,7 @@ objects suitable for Odoo RPC calls.  They have zero internal dependencies
 
 from __future__ import annotations
 
+import ast
 import json
 import re
 from typing import Any
@@ -44,8 +45,6 @@ def parse_domain(domain_str: str | list) -> list:
         pass
 
     try:
-        import ast
-
         return ast.literal_eval(domain_str)
     except (ValueError, SyntaxError) as e:
         raise ValueError(f"Invalid domain format: {domain_str}") from e
@@ -100,8 +99,6 @@ def parse_json_arg(arg: str | dict | list, default: Any = None) -> Any:
         return json.loads(arg)
     except json.JSONDecodeError:
         try:
-            import ast
-
             return ast.literal_eval(arg)
         except (ValueError, SyntaxError):
             return default

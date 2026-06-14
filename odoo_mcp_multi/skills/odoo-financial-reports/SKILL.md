@@ -13,6 +13,17 @@ This skill guides you on how to query Odoo financial reports (`account.report`) 
 - Active connection profile in `odoo-mcp-multi`.
 - Direct execution access to the `execute_kw` and `search_read` tools.
 
+## Odoo Version Context Awareness
+
+This skill is designed and validated specifically for **Odoo 19.0+**.
+Before executing report queries on a connection profile, you should verify the target Odoo version using the `get_version` tool:
+
+- **Odoo 19.0+**: Uses the `get_financial_report` tool or CLI command which invokes `get_options` and `get_report_information` on the `account.report` model.
+- **Odoo 17.0 - 18.0**: The reporting engine utilizes similar model-based methods, but the options dictionary schema and field definitions may differ.
+- **Odoo < 17.0**: Financial reports are handled differently (community/enterprise use distinct engines, and the database does not store report configurations in `account.report` records in the same way).
+
+Ensure you inspect the target server version before executing financial report commands.
+
 ## Reference Catalog
 
 Refer to the [financial_reports_options.md](file:///Users/nhomar/Source/odoo-mcp/odoo_mcp_multi/skills/odoo-financial-reports/financial_reports_options.md) catalog for:

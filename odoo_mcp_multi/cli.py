@@ -804,7 +804,13 @@ def _run_upgrade_command(cmd: list[str]) -> tuple[int, str]:
     help="Output format: json (default), table (markdown), html, or csv",
 )
 @click.option("--profile", "-p", default=None, help="Profile name to use")
-def cmd_get_financial_report(report, date_from, date_to, date_filter, fmt, profile) -> None:
+@click.option(
+    "--company-ids",
+    "--cids",
+    default=None,
+    help="Comma-separated company IDs (e.g. '19,1') to calculate the report for",
+)
+def cmd_get_financial_report(report, date_from, date_to, date_filter, fmt, profile, company_ids) -> None:
     """Calculate and format an Odoo financial report."""
     _output(
         op_get_financial_report(
@@ -814,6 +820,7 @@ def cmd_get_financial_report(report, date_from, date_to, date_filter, fmt, profi
             date_filter=date_filter,
             format=fmt,
             profile=profile,
+            company_ids=company_ids,
         )
     )
 

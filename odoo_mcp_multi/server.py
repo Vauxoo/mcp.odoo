@@ -382,6 +382,7 @@ def get_financial_report(
     date_filter: Optional[str] = None,
     format: str = "json",
     profile: Optional[str] = None,
+    company_ids: Optional[str] = None,
 ) -> str:
     """Calculate and retrieve an Odoo financial report (e.g. Balance Sheet, Profit and Loss).
 
@@ -396,6 +397,15 @@ def get_financial_report(
         date_filter: Optional preset filter (e.g., 'today', 'this_month', 'this_year', 'last_month').
         format: Response format: 'json' (default), 'table' (markdown), 'html', or 'csv'.
         profile: Optional name of the Odoo profile to connect to.
+        company_ids: Optional comma-separated list of company IDs (e.g. '19,1') to calculate the report for.
+
+    Returns:
+        JSON string containing the formatted report output or error message.
+
+    Examples:
+        - Get balance sheet: report_id_or_name='4', format='html', profile='vauxoo'
+        - Get P&L for 2026: report_id_or_name='Profit and Loss', date_filter='this_year', format='json'
+        - Get Trial Balance with company context: report_id_or_name='12', company_ids='19,1', format='html'
     """
     denied = _check_permission("get_financial_report", profile)
     if denied:
@@ -408,6 +418,7 @@ def get_financial_report(
             date_filter=date_filter,
             format=format,
             profile=profile,
+            company_ids=company_ids,
         )
     )
 

@@ -813,13 +813,8 @@ def _load_skill_resource(filename: str) -> str:
         return f.read()
 
 
-def _format_report_html(options: dict, lines: list, cols: list, report_meta: dict) -> str:
-    report_name = report_meta.get("name", "Financial Report")
-    company_name = report_meta.get("company_name", "")
-
-    css_content = _load_skill_resource("financial_report.css")
-    html_tpl_string = _load_skill_resource("financial_report.html")
-
+def _build_report_headers(options: dict, cols: list) -> list[list[dict]]:
+    """Construct the header rows including multi-row date headers and concept headers."""
     header_rows = []
     column_headers = options.get("column_headers", [])
     for row_idx, row in enumerate(column_headers):
@@ -842,6 +837,30 @@ def _format_report_html(options: dict, lines: list, cols: list, report_meta: dic
         name = col.get("name", "")
         last_header_row.append({"name": name, "colspan": 1, "class_attr": ""})
     header_rows.append(last_header_row)
+    return header_rows
+
+
+def _format_report_html(
+    options: dict,
+    lines: list,
+    cols: list,
+    report_meta: dict,
+    company_ids: Optional[str | list[int]] = None,
+) -> str:
+    report_name = report_meta.get("name", "Financial Report")
+
+    # If company_ids is provided, join the names of selected companies.
+    # Otherwise default to report_meta.get("company_name", "").
+    companies = options.get("companies", [])
+    if company_ids and companies:
+        company_name = ", ".join([c["name"] for c in companies if "name" in c])
+    else:
+        company_name = report_meta.get("company_name", "")
+
+    css_content = _load_skill_resource("financial_report.css")
+    html_tpl_string = _load_skill_resource("financial_report.html")
+
+    header_rows = _build_report_headers(options, cols)
 
     data_lines = []
     for line in lines:
@@ -909,7 +928,12 @@ def _format_report_html(options: dict, lines: list, cols: list, report_meta: dic
     )
 
 
-def _format_financial_report(options: dict, report_info: dict, format_name: str) -> Any:
+def _format_financial_report(
+    options: dict,
+    report_info: dict,
+    format_name: str,
+    company_ids: Optional[str | list[int]] = None,
+) -> Any:
     # Replicates Odoo's native OWL report presentation logic for hierarchy, spacing,
     # and styling when rendering HTML/Markdown.
     if format_name == "json":
@@ -923,7 +947,7 @@ def _format_financial_report(options: dict, report_info: dict, format_name: str)
     if format_name == "csv":
         return _format_report_csv(lines, cols)
     if format_name == "html":
-        return _format_report_html(options, lines, cols, report_info.get("report", {}))
+        return _format_report_html(options, lines, cols, report_info.get("report", {}), company_ids=company_ids)
     return ""
 
 
@@ -959,6 +983,7 @@ def op_get_financial_report(
     date_filter: Optional[str] = None,
     format: str = "json",
     profile: Optional[str] = None,
+    company_ids: Optional[str | list[int]] = None,
 ) -> dict:
     """Calculate and format an Odoo financial report.
 
@@ -981,6 +1006,23 @@ def op_get_financial_report(
                 "error": f"Could not resolve financial report with ID, XML ID, or name '{report_id_or_name}'",
             }
 
+        # Handle custom company context
+        ctx = {}
+        if company_ids:
+            if isinstance(company_ids, str):
+                try:
+                    ctx["allowed_company_ids"] = [int(x.strip()) for x in company_ids.split(",") if x.strip()]
+                except ValueError:
+                    return {
+                        "success": False,
+                        "error": (
+                            f"Invalid company_ids '{company_ids}'. "
+                            "Must be a list of integers or comma-separated string."
+                        ),
+                    }
+            elif isinstance(company_ids, list):
+                ctx["allowed_company_ids"] = [int(x) for x in company_ids]
+
         # Format date options matching Odoo's filter schemas.
         previous_options = {}
         if date_from or date_to or date_filter:
@@ -998,13 +1040,23 @@ def op_get_financial_report(
             previous_options["date"] = date_opt
 
         # get_options resolves country redirects and sets up the active variant ID.
-        options = client.execute_kw("account.report", "get_options", [[report_id], previous_options])
+        options = client.execute_kw(
+            "account.report",
+            "get_options",
+            [[report_id], previous_options],
+            {"context": ctx},
+        )
         actual_report_id = options.get("report_id", report_id)
 
         # get_report_information returns the calculated rows.
-        report_info = client.execute_kw("account.report", "get_report_information", [[actual_report_id], options])
+        report_info = client.execute_kw(
+            "account.report",
+            "get_report_information",
+            [[actual_report_id], options],
+            {"context": ctx},
+        )
 
-        formatted_data = _format_financial_report(options, report_info, format)
+        formatted_data = _format_financial_report(options, report_info, format, company_ids=company_ids)
 
         if format == "json":
             return _with_warning(formatted_data, client)

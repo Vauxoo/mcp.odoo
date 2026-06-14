@@ -11,6 +11,7 @@ import json
 import logging
 import socket
 import ssl
+import time
 import xmlrpc.client
 from abc import ABC, abstractmethod
 from typing import Any, Optional
@@ -515,8 +516,6 @@ class Json2Client(BaseOdooClient):
             >>> client._fetch_method_signature("res.partner", "create")
             (["vals_list"], False)
         """
-        import time
-
         url = f"{self.url}/doc-bearer/{model}.json"
         attempts = 3
         delay = 1.0
