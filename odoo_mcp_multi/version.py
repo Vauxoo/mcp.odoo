@@ -118,3 +118,32 @@ def detect_protocol(url: str, timeout: int = 30, verify: bool = True) -> Protoco
         return Protocol.JSONRPCS
 
     return Protocol.XMLRPCS
+
+
+def validate_version_compatibility(
+    server_version: str,
+    min_version: int,
+    feature_name: str,
+    max_version: Optional[int] = None,
+) -> int:
+    """Validate that the server version is within compatible bounds.
+
+    Exposes a standardized version check pattern across the repository.
+
+    Args:
+        server_version: The version string (e.g. '19.0+e').
+        min_version: The minimum supported Odoo major version (inclusive).
+        feature_name: Human readable name of the feature to display in errors.
+        max_version: Optional maximum supported Odoo major version (inclusive).
+
+    Returns:
+        The major version integer.
+
+    Raises:
+        ValueError: If compatibility checks fail.
+    """
+    major, _, _ = parse_version(server_version)
+    if major < min_version or (max_version is not None and major > max_version):
+        bounds = f"Odoo {min_version}.0+" if max_version is None else f"Odoo {min_version}.0 to {max_version}.0"
+        raise ValueError(f"{feature_name} is not supported on Odoo version {server_version} (requires {bounds}).")
+    return major

@@ -15,11 +15,10 @@ This skill guides you on how to query Odoo financial reports (`account.report`) 
 
 ## Odoo Version Context Awareness
 
-This skill is designed and validated specifically for **Odoo 19.0+**.
+This skill is designed and validated specifically for **Odoo 17.0, 18.0, and 19.0+**.
 Before executing report queries on a connection profile, you should verify the target Odoo version using the `get_version` tool:
 
-- **Odoo 19.0+**: Uses the `get_financial_report` tool or CLI command which invokes `get_options` and `get_report_information` on the `account.report` model.
-- **Odoo 17.0 - 18.0**: The reporting engine utilizes similar model-based methods, but the options dictionary schema and field definitions may differ.
+- **Odoo 17.0, 18.0, and 19.0+**: Uses the `get_financial_report` tool or CLI command which invokes `get_options` and `get_report_information` (singular for 19.0+, plural `get_report_informations` for 17.0/18.0) on the `account.report` model.
 - **Odoo < 17.0**: Financial reports are handled differently (community/enterprise use distinct engines, and the database does not store report configurations in `account.report` records in the same way).
 
 Ensure you inspect the target server version before executing financial report commands.
@@ -33,7 +32,7 @@ Refer to the [financial_reports_options.md](file:///Users/nhomar/Source/odoo-mcp
 
 ## Execution Workflow
 
-Calculating a financial report in Odoo 19 must be done using the native `get_financial_report` tool or CLI command. This encapsulates the 2-step resolution chain (country redirects, active variants, and dates merging) into a single optimized operation.
+Calculating a financial report in Odoo 17, 18, or 19+ must be done using the native `get_financial_report` tool or CLI command. This encapsulates the 2-step resolution chain (country redirects, active variants, and dates merging) into a single optimized operation.
 
 ### MCP Tool Usage
 

@@ -1,6 +1,9 @@
-# Odoo 19 Financial Reports Catalog
+# Odoo 17, 18, and 19+ Financial Reports Catalog
 
-Complete catalog of all active financial reports configured in the Odoo 19.0+e instance. This directory serves as a reference for agents performing accounting analysis to identify report IDs and their structures.
+Complete catalog of all active financial reports configured in Odoo 17, 18, and 19+ instances. This directory serves as a reference for agents performing accounting analysis to identify report IDs and their structures.
+
+> [!NOTE]
+> This catalog is automatically generated via repository helper scripts by querying active database metadata. It should be updated periodically when localization modules or customized reports are added or upgraded.
 
 ## Overview Table
 

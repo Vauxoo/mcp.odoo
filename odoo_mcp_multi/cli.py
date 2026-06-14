@@ -811,7 +811,15 @@ def _run_upgrade_command(cmd: list[str]) -> tuple[int, str]:
     help="Comma-separated company IDs (e.g. '19,1') to calculate the report for",
 )
 def cmd_get_financial_report(report, date_from, date_to, date_filter, fmt, profile, company_ids) -> None:
-    """Calculate and format an Odoo financial report."""
+    """Calculate and format an Odoo financial report.
+
+    Designed, validated, and explicitly compatible with Odoo 17.0, 18.0, and 19.0+.
+    At runtime, Odoo version compatibility is validated:
+    - Odoo 17.0 and 18.0: The reporting engine dynamically uses the plural 'get_report_informations'
+      method. Option schemas and field definitions are fully supported and validated.
+    - Odoo 19.0+: Uses the singular 'get_report_information' method.
+    - Odoo < 17.0: Unsupported; returns a validation error.
+    """
     _output(
         op_get_financial_report(
             report_id_or_name=report,

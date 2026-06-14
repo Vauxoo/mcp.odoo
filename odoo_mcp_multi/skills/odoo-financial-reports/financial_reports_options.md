@@ -1,6 +1,6 @@
-# Odoo 19 Financial Reports XML IDs and Options Catalog
+# Odoo 17, 18, and 19+ Financial Reports XML IDs and Options Catalog
 
-This guide provides the official XML IDs for standard financial reports in Odoo 19 and details the schema of the `options` dictionary to enable direct, optimized querying.
+This guide provides the official XML IDs for standard financial reports in Odoo 17, 18, and 19+ and details the schema of the `options` dictionary to enable direct, optimized querying.
 
 ---
 

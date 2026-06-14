@@ -91,6 +91,30 @@ class TestParseVersion:
 
 
 # ---------------------------------------------------------------------------
+# validate_version_compatibility
+# ---------------------------------------------------------------------------
+
+
+class TestValidateVersionCompatibility:
+    def test_valid_versions(self):
+        from odoo_mcp_multi.version import validate_version_compatibility
+
+        assert validate_version_compatibility("17.0", min_version=17, feature_name="Test") == 17
+        assert validate_version_compatibility("18.0+e", min_version=17, feature_name="Test") == 18
+        assert validate_version_compatibility("19.0", min_version=17, feature_name="Test") == 19
+        assert validate_version_compatibility("17.5", min_version=17, feature_name="Test", max_version=18) == 17
+
+    def test_invalid_versions(self):
+        from odoo_mcp_multi.version import validate_version_compatibility
+
+        with pytest.raises(ValueError, match="Test is not supported on Odoo version 16.0"):
+            validate_version_compatibility("16.0", min_version=17, feature_name="Test")
+
+        with pytest.raises(ValueError, match="Test is not supported on Odoo version 19.0"):
+            validate_version_compatibility("19.0", min_version=17, feature_name="Test", max_version=18)
+
+
+# ---------------------------------------------------------------------------
 # parse_fields
 # ---------------------------------------------------------------------------
 

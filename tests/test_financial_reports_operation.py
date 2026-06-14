@@ -2,7 +2,10 @@
 
 from unittest.mock import MagicMock, patch
 
-from odoo_mcp_multi.operations import op_get_financial_report
+import pytest
+
+from odoo_mcp_multi.exceptions import OdooMethodNotFoundError
+from odoo_mcp_multi.operations import _validate_server_version, op_get_financial_report
 
 # Standard mock objects for options and calculated report results.
 MOCK_OPTIONS = {
@@ -134,14 +137,13 @@ def test_op_get_financial_report_html(mock_get_client):
     assert "<tr class='empty'>" in html
 
     # Verify level classes and indentation style
-    assert "class='line_level_0'" in html
-    assert "class='line_level_1'" in html
+    assert 'class="line_level_0"' in html
+    assert 'class="line_level_1"' in html
     # Cash at level 2 should have padding corresponding to ((2 + 1) * 8) - 20 = 4px
     assert "padding-left: 4px;" in html
 
     # Verify total line styling
-    assert "class='line_level_1 total'" in html
-    assert "border-bottom: 2px double #212529" in html
+    assert 'class="line_level_1 total"' in html
 
 
 @patch("odoo_mcp_multi.operations._get_client")
@@ -291,6 +293,17 @@ def test_op_get_financial_report_rpc_exception(mock_get_client):
     assert "Failed to get financial report: Odoo RPC Error" in result["error"]
 
 
+@patch("odoo_mcp_multi.operations._get_client")
+def test_op_get_financial_report_unsupported_method_exception(mock_get_client):
+    mock_client = MagicMock()
+    mock_get_client.return_value = mock_client
+    mock_client.execute_kw.side_effect = Exception("Object account.report has no attribute 'get_options'")
+
+    result = op_get_financial_report(report_id_or_name=4, format="json", profile="test")
+    assert result["success"] is False
+    assert "is not supported on this Odoo version" in result["error"]
+
+
 def test_format_report_html_branches_directly():
     from odoo_mcp_multi.operations import _format_financial_report, _format_report_html
 
@@ -367,3 +380,320 @@ def test_op_get_financial_report_company_ids(mock_get_client):
     res3 = op_get_financial_report(report_id_or_name=4, format="json", profile="test", company_ids="invalid,1")
     assert res3["success"] is False
     assert "Invalid company_ids" in res3["error"]
+
+
+def test_format_report_html_autoescape_injection():
+    from odoo_mcp_multi.operations import _format_report_html
+
+    html = _format_report_html(
+        options={"column_headers": [[{"name": "<script>alert(1)</script>"}]]},
+        lines=[{"id": "1", "name": "<b>Inject</b>", "level": 0, "columns": []}],
+        cols=[],
+        report_meta={"name": "<i>XSS</i>", "company_name": "<u>Vauxoo</u>"},
+    )
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
+    assert "&lt;b&gt;Inject&lt;/b&gt;" in html
+    assert "&lt;i&gt;XSS&lt;/i&gt;" in html
+    assert "&lt;u&gt;Vauxoo&lt;/u&gt;" in html
+    # css_content is trusted and must NOT be escaped
+    assert "body {" in html
+
+
+def test_assert_no_credentials():
+    from odoo_mcp_multi.operations import _assert_no_credentials
+
+    # Valid data should not raise
+    _assert_no_credentials({"name": "Report Name", "company": "Vauxoo"})
+
+    # Dictionary keys containing secrets should raise
+    import pytest
+
+    with pytest.raises(ValueError, match="Sensitive key"):
+        _assert_no_credentials({"api_key": "somekey"})
+
+    # Nested dictionary keys containing secrets should raise
+    with pytest.raises(ValueError, match="Sensitive key"):
+        _assert_no_credentials({"nested": {"password": "pwd"}})
+
+    # Nested lists containing dicts with secrets should raise
+    with pytest.raises(ValueError, match="Sensitive key"):
+        _assert_no_credentials([{"name": "test"}, {"secret": "secretvalue"}])
+
+    # String values with assignments should raise
+    with pytest.raises(ValueError, match="Potential assignment"):
+        _assert_no_credentials("Here is api_key=secret")
+
+
+def test_load_skill_resource_security():
+    import pytest
+
+    from odoo_mcp_multi.operations import _load_skill_resource
+
+    # Safe loading should pass
+    css = _load_skill_resource("financial_report.css")
+    assert "body {" in css
+
+    # Relative paths with authorized basenames should succeed
+    html = _load_skill_resource("skills/odoo-financial-reports/financial_report.html")
+    assert "report_name" in html
+
+    # Path traversal / unknown filename should raise ValueError
+    with pytest.raises(ValueError, match="Could not load resource"):
+        _load_skill_resource("some_other_file.txt")
+
+    with pytest.raises(ValueError, match="Could not load resource"):
+        _load_skill_resource("../operations.py")
+
+    with pytest.raises(ValueError, match="Could not load resource"):
+        _load_skill_resource("..\\operations.py")
+
+
+@patch("odoo_mcp_multi.operations.get_server_version")
+@patch("odoo_mcp_multi.operations._get_client")
+def test_op_get_financial_report_version_compatibility(mock_get_client, mock_get_server_version):
+    mock_client = MagicMock()
+    mock_client.url = "http://real-odoo-url.com"
+    mock_client.verify = True
+    mock_get_client.return_value = mock_client
+    mock_client.execute_kw.side_effect = [
+        MOCK_OPTIONS,
+        MOCK_REPORT_INFO,
+        MOCK_OPTIONS,
+        MOCK_REPORT_INFO,
+        MOCK_OPTIONS,
+        MOCK_REPORT_INFO,
+        MOCK_OPTIONS,
+        MOCK_REPORT_INFO,
+        MOCK_OPTIONS,
+        MOCK_REPORT_INFO,
+        MOCK_OPTIONS,
+        MOCK_REPORT_INFO,
+    ]
+
+    # Test Odoo 16.0 (unsupported)
+    mock_get_server_version.return_value = {"server_version": "16.0"}
+    res = op_get_financial_report(report_id_or_name=4, format="json", profile="test")
+    assert res["success"] is False
+    assert "requires Odoo 17.0+" in res["error"]
+
+    # Test Odoo 17.0 (supported with warning)
+    mock_client.last_warning = None
+    mock_get_server_version.return_value = {"server_version": "17.0"}
+    res2 = op_get_financial_report(report_id_or_name=4, format="json", profile="test")
+    assert res2["success"] is True
+    assert "Using plural Odoo 17/18 get_report_informations" in mock_client.last_warning
+
+    # Test Odoo 18.0 (supported with warning)
+    mock_client.last_warning = None
+    mock_get_server_version.return_value = {"server_version": "18.0"}
+    res3 = op_get_financial_report(report_id_or_name=4, format="json", profile="test")
+    assert res3["success"] is True
+    assert "Using plural Odoo 17/18 get_report_informations" in mock_client.last_warning
+
+    # Test Odoo 19.0 (supported without compatibility warning)
+    mock_client.last_warning = None
+    mock_get_server_version.return_value = {"server_version": "19.0"}
+    res4 = op_get_financial_report(report_id_or_name=4, format="json", profile="test")
+    assert res4["success"] is True
+    assert mock_client.last_warning is None
+
+    # Test get_server_version returning None (continues without warning)
+    mock_client.last_warning = None
+    mock_get_server_version.return_value = None
+    res_none = op_get_financial_report(report_id_or_name=4, format="json", profile="test")
+    assert res_none["success"] is True
+    assert mock_client.last_warning is None
+
+    # Test get_server_version exception (fails gracefully with warning)
+    mock_client.last_warning = None
+    mock_get_server_version.side_effect = Exception("Connection refused")
+    res5 = op_get_financial_report(report_id_or_name=4, format="json", profile="test")
+    assert res5["success"] is True
+    assert "Could not verify Odoo server version compatibility: Connection refused" in mock_client.last_warning
+
+    # Verify correct methods are invoked according to version detection
+    calls = mock_client.execute_kw.call_args_list
+    assert calls[1][0][1] == "get_report_informations"  # Odoo 17.0
+    assert calls[3][0][1] == "get_report_informations"  # Odoo 18.0
+    assert calls[5][0][1] == "get_report_information"  # Odoo 19.0
+    assert calls[7][0][1] == "get_report_information"  # None version (default)
+    assert calls[9][0][1] == "get_report_information"  # Exception version (default)
+
+
+@patch("odoo_mcp_multi.operations.get_server_version")
+@patch("odoo_mcp_multi.operations._get_client")
+def test_get_financial_report_dynamic_fallback(mock_get_client, mock_get_server_version):
+    mock_client = MagicMock()
+    mock_client.url = "http://real-odoo-url.com"
+    mock_client.verify = True
+    mock_get_client.return_value = mock_client
+    mock_get_server_version.return_value = None  # Force fallback behavior
+
+    # Mock execute_kw to fail on first call to get_report_information but succeed on get_report_informations
+    def side_effect(model, method, args, kwargs=None):
+        if method == "get_options":
+            return MOCK_OPTIONS
+        if method == "get_report_information":
+            # Simulate method not existing
+            raise OdooMethodNotFoundError("object has no attribute 'get_report_information'")
+        if method == "get_report_informations":
+            return MOCK_REPORT_INFO
+        raise Exception("unexpected method")
+
+    mock_client.execute_kw.side_effect = side_effect
+
+    res = op_get_financial_report(report_id_or_name=4, format="json", profile="test")
+    assert res["success"] is True
+    assert "Switched dynamically to fallback method" in mock_client.last_warning
+
+    # Test when both methods fail
+    mock_client.execute_kw.side_effect = [
+        MOCK_OPTIONS,
+        OdooMethodNotFoundError("object has no attribute 'get_report_information'"),
+        OdooMethodNotFoundError("object has no attribute 'get_report_informations'"),
+    ]
+    res2 = op_get_financial_report(report_id_or_name=4, format="json", profile="test")
+    assert res2["success"] is False
+    assert "Failed to get financial report" in res2["error"]
+
+
+def test_load_skill_resource_error_wrapping():
+    from unittest.mock import patch
+    import pytest
+    from odoo_mcp_multi.operations import _load_skill_resource
+
+    # Verify that any generic package resource errors are caught and wrapped in ValueError
+    with patch("importlib.resources.files", side_effect=Exception("Package resource error")):
+        with pytest.raises(ValueError, match="Could not load resource"):
+            _load_skill_resource("financial_report.css")
+
+
+def test_get_financial_report_inline_compat_fail():
+    from unittest.mock import patch
+
+    from odoo_mcp_multi.operations import op_get_financial_report
+
+    with (
+        patch("odoo_mcp_multi.operations._get_client"),
+        patch("odoo_mcp_multi.operations._validate_server_version", return_value=("16.0", 16)),
+    ):
+        res = op_get_financial_report(report_id_or_name=4, format="json", profile="test")
+        assert res["success"] is False
+        assert "requires Odoo 17.0+" in res["error"]
+
+
+def test_validate_server_version_non_mock():
+    class CustomNonMockClient:
+        def __init__(self):
+            self.url = "http://my-odoo.local"
+            self.verify = True
+            self.last_warning = None
+
+        def search_read(self, model, domain, fields):
+            if model == "ir.module.module":
+                return [{"latest_version": "17.0"}]
+            return []
+
+    client = CustomNonMockClient()
+    with patch("odoo_mcp_multi.operations.get_server_version", return_value=None):
+        version, major = _validate_server_version(client)
+        assert version == "17.0"
+        assert major == 17
+
+    client2 = CustomNonMockClient()
+    client2.search_read = lambda model, domain, fields: [{"latest_version": "16.0"}]
+    with patch("odoo_mcp_multi.operations.get_server_version", return_value=None):
+        with pytest.raises(ValueError, match="requires Odoo 17.0+"):
+            _validate_server_version(client2)
+
+    client3 = CustomNonMockClient()
+
+    # To simulate an actual raised exception, we can define a method that raises an error
+    def fail_search_read(model, domain, fields):
+        raise Exception("RPC failed")
+
+    client3.search_read = fail_search_read
+    with patch("odoo_mcp_multi.operations.get_server_version", return_value=None):
+        with pytest.raises(ValueError, match="Could not determine Odoo server version"):
+            _validate_server_version(client3)
+
+    client4 = CustomNonMockClient()
+    client4.search_read = lambda model, domain, fields: []
+    with patch("odoo_mcp_multi.operations.get_server_version", return_value=None):
+        with pytest.raises(ValueError, match="Could not determine Odoo server version"):
+            _validate_server_version(client4)
+
+
+def test_client_version_validation_and_caching():
+    from unittest.mock import patch
+    from odoo_mcp_multi.client import XmlRpcClient
+
+    client = XmlRpcClient(
+        url="http://real-odoo-url.com",
+        database="testdb",
+        user="admin",
+        password="pwd",
+    )
+
+    # 1. Success case: public version info endpoint is reachable
+    with patch("odoo_mcp_multi.client.get_server_version") as mock_get_ver:
+        mock_get_ver.return_value = {"server_version": "19.0"}
+        ver = client.get_server_version()
+        assert ver == "19.0"
+        assert client._server_version == "19.0"
+        # Test caching on subsequent calls
+        ver_cached = client.get_server_version()
+        assert ver_cached == "19.0"
+        assert mock_get_ver.call_count == 1
+
+    # Reset cache for another client
+    client2 = XmlRpcClient(
+        url="http://real-odoo-url.com",
+        database="testdb",
+        user="admin",
+        password="pwd",
+    )
+
+    # 2. Fallback case: public version info fails, falls back to ir.module.module search_read via execute_kw
+    with (
+        patch("odoo_mcp_multi.client.get_server_version", side_effect=Exception("Connection timed out")),
+        patch.object(client2, "execute_kw") as mock_exec_kw,
+    ):
+        mock_exec_kw.return_value = [{"latest_version": "17.0"}]
+        ver = client2.get_server_version()
+        assert ver == "17.0"
+        assert client2._server_version == "17.0"
+        mock_exec_kw.assert_called_once_with(
+            "ir.module.module",
+            "search_read",
+            [[("name", "=", "base")], ["latest_version"]],
+            {}
+        )
+
+    # 3. Failure case: all endpoints fail, returns 'unknown' and raises ValueError on validation
+    client3 = XmlRpcClient(
+        url="http://real-odoo-url.com",
+        database="testdb",
+        user="admin",
+        password="pwd",
+    )
+    with (
+        patch("odoo_mcp_multi.client.get_server_version", side_effect=Exception("Failed")),
+        patch.object(client3, "execute_kw", side_effect=Exception("RPC failed")),
+    ):
+        ver = client3.get_server_version()
+        assert ver == "unknown"
+        with pytest.raises(ValueError, match="Could not determine Odoo server version"):
+            client3.validate_version(min_version=17, feature_name="Test")
+
+    # 4. Success validate case
+    client4 = XmlRpcClient(
+        url="http://real-odoo-url.com",
+        database="testdb",
+        user="admin",
+        password="pwd",
+    )
+    client4._server_version = "18.0"
+    major = client4.validate_version(min_version=17, feature_name="Test")
+    assert major == 18
+

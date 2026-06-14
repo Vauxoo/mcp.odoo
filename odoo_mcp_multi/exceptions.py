@@ -27,3 +27,9 @@ class OdooExecutionError(Exception):
     """Exception raised for method execution failures."""
 
     pass
+
+
+class OdooMethodNotFoundError(OdooExecutionError):
+    """Exception raised specifically when a model method does not exist on the server."""
+
+    pass

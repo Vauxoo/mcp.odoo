@@ -1,17 +1,43 @@
+/* Google Fonts are imported for premium typography; if loading fails (e.g. offline), the font-family falls back to system fonts */
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;600&family=Sora:wght@400;600;700;800&display=swap');
+
+:root {
+    --report-font-family: "Sora", "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --report-bg-color: #f8f9fa;
+    --report-text-color: #282C2F;
+    
+    --report-container-bg: #ffffff;
+    --report-container-border: #D6DAE0;
+    
+    --report-header-border: #AC0340;
+    --report-title-color: #AC0340;
+    --report-company-color: #455A64;
+    
+    --report-table-th-bg: #f8f9fa;
+    --report-table-th-color: #455A64;
+    --report-table-th-border: #455A64;
+    
+    --report-table-td-border: #e9ecef;
+    --report-level-0-bg: #DCEFFE;
+    --report-level-0-text: #282C2F;
+    
+    --report-total-border: #D6DAE0;
+    --report-total-double-border: #AC0340;
+}
+
 body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    background-color: #f8f9fa;
-    color: #212529;
+    font-family: var(--report-font-family);
+    background-color: var(--report-bg-color);
+    color: var(--report-text-color);
     margin: 0;
     padding: 20px;
 }
 .report-container {
     max-width: 1200px;
     margin: 0 auto;
-    background: #ffffff;
-    border: 1px solid #dee2e6;
+    background: var(--report-container-bg);
+    border: 1px solid var(--report-container-border);
     border-radius: 6px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
     padding: 24px;
 }
 .report-container th, .report-container td {
@@ -19,18 +45,18 @@ body {
 }
 .report-header {
     margin-bottom: 20px;
-    border-bottom: 2px solid #dee2e6;
+    border-bottom: 2px solid var(--report-header-border);
     padding-bottom: 12px;
 }
 .report-title {
     font-size: 24px;
-    font-weight: bold;
+    font-weight: 800;
     margin: 0 0 4px 0;
-    color: #343a40;
+    color: var(--report-title-color);
 }
 .report-company {
     font-size: 14px;
-    color: #6c757d;
+    color: var(--report-company-color);
     margin: 0;
 }
 table.account_report_table {
@@ -42,20 +68,20 @@ table.account_report_table {
 }
 table.account_report_table th {
     padding: 8px 12px;
-    border-bottom: 2px solid #dee2e6;
-    font-weight: bold;
-    color: #495057;
+    border-bottom: 2px solid var(--report-table-th-border);
+    font-weight: 700;
+    color: var(--report-table-th-color);
     text-align: right;
-    background-color: #f8f9fa;
+    background-color: var(--report-table-th-bg);
 }
 table.account_report_table th.concept-header {
     text-align: left;
 }
 table.account_report_table td {
     padding: 8px 12px;
-    border-bottom: 1px solid #e9ecef;
+    border-bottom: 1px solid var(--report-table-td-border);
     vertical-align: middle;
-    color: #495057;
+    color: var(--report-text-color);
 }
 table.account_report_table tr.empty td {
     height: 16px;
@@ -64,20 +90,20 @@ table.account_report_table tr.empty td {
     border-top: none !important;
 }
 table.account_report_table tr.line_level_0 {
-    font-weight: bold;
-    color: #212529;
+    font-weight: 700;
+    color: var(--report-level-0-text);
 }
 table.account_report_table tr.line_level_0 td {
-    background-color: #dee2e6;
+    background-color: var(--report-level-0-bg);
     border-bottom: none !important;
 }
 table.account_report_table tr.total {
-    font-weight: bold;
-    color: #212529;
+    font-weight: 700;
+    color: var(--report-text-color);
 }
 table.account_report_table tr.total td {
-    border-bottom: 2px double #212529;
-    border-top: 1px solid #dee2e6;
+    border-bottom: 2px double var(--report-total-double-border);
+    border-top: 1px solid var(--report-total-border);
 }
 table.account_report_table td.numeric {
     text-align: right;

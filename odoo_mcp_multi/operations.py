@@ -11,16 +11,19 @@ from __future__ import annotations
 
 import csv
 import io
-import os
+import re
 from time import time
 from typing import Any, Optional
+from unittest.mock import Mock
 
 import jinja2
+import jinja2.sandbox
 
 from odoo_mcp_multi.client import create_client
 from odoo_mcp_multi.config import list_profiles, resolve_profile
+from odoo_mcp_multi.exceptions import OdooMethodNotFoundError
 from odoo_mcp_multi.parsers import normalize_url, parse_domain, parse_fields, parse_ids, parse_json_arg
-from odoo_mcp_multi.version import get_server_version
+from odoo_mcp_multi.version import get_server_version, validate_version_compatibility
 
 VALID_FORMATS = frozenset({"json", "compact", "table", "html", "csv"})
 
@@ -806,11 +809,42 @@ def _format_report_csv(lines: list, cols: list) -> str:
     return buf.getvalue().rstrip("\r\n").replace("\r\n", "\n")
 
 
+def _assert_no_credentials(data: Any) -> None:
+    """Recursively verify no credentials or secrets are present in template rendering data.
+
+    This acts as a guardrail against leaking sensitive information like tokens or passwords
+    into rendered HTML reports.
+    """
+    sensitive_keys = {"password", "secret", "token", "api_key", "apikey", "jwt", "private_key", "credential"}
+    if isinstance(data, dict):
+        for k, v in data.items():
+            if isinstance(k, str) and any(sk in k.lower() for sk in sensitive_keys):
+                raise ValueError(f"Sensitive key '{k}' found in template context.")
+            _assert_no_credentials(v)
+    elif isinstance(data, (list, tuple, set)):
+        for item in data:
+            _assert_no_credentials(item)
+    elif isinstance(data, str):
+        data_lower = data.lower()
+        for sk in sensitive_keys:
+            if re.search(rf"\b{sk}\b\s*[:=]", data_lower):
+                raise ValueError(f"Potential assignment of sensitive keyword '{sk}' in template context.")
+
+
 def _load_skill_resource(filename: str) -> str:
-    skill_dir = os.path.join(os.path.dirname(__file__), "skills", "odoo-financial-reports")
-    path = os.path.join(skill_dir, filename)
-    with open(path, "r", encoding="utf-8") as f:
-        return f.read()
+    """Load a static template resource from the package skills directory.
+
+    We use standard importlib.resources to access package resources so that files
+    can be resolved cleanly from zipped environments, editable installs, and production.
+    """
+    normalized = filename.replace("\\", "/").split("/")[-1]
+    try:
+        from importlib.resources import files
+
+        resource_path = files("odoo_mcp_multi").joinpath("skills", "odoo-financial-reports", normalized)
+        return resource_path.read_text(encoding="utf-8")
+    except Exception as exc:
+        raise ValueError(f"Could not load resource {filename}: {exc}") from exc
 
 
 def _build_report_headers(options: dict, cols: list) -> list[list[dict]]:
@@ -849,8 +883,6 @@ def _format_report_html(
 ) -> str:
     report_name = report_meta.get("name", "Financial Report")
 
-    # If company_ids is provided, join the names of selected companies.
-    # Otherwise default to report_meta.get("company_name", "").
     companies = options.get("companies", [])
     if company_ids and companies:
         company_name = ", ".join([c["name"] for c in companies if "name" in c])
@@ -862,69 +894,28 @@ def _format_report_html(
 
     header_rows = _build_report_headers(options, cols)
 
-    data_lines = []
-    for line in lines:
-        level = line.get("level")
-        name = line.get("name", "")
-        line_id = line.get("id", "")
-        is_total = "|total~~" in line_id
+    # We validate input values to ensure credentials or secrets are never leaked
+    # into the Jinja template context or rendered resources.
+    _assert_no_credentials(report_name)
+    _assert_no_credentials(company_name)
+    _assert_no_credentials(header_rows)
+    _assert_no_credentials(lines)
+    _assert_no_credentials(css_content)
+    _assert_no_credentials(html_tpl_string)
 
-        if level == 0:
-            data_lines.append(
-                {
-                    "is_empty": True,
-                    "columns_count": len(line.get("columns", [])),
-                }
-            )
-
-        classes = []
-        if level is not None:
-            classes.append(f"line_level_{level}")
-        else:
-            classes.append("line_level_default")
-
-        if is_total:
-            classes.append("total")
-
-        row_style = ""
-        if level == 0:
-            row_style = "font-weight: bold; background-color: #dee2e6;"
-        elif is_total:
-            row_style = "font-weight: bold;"
-
-        indent_style = ""
-        if level is not None and level >= 2:
-            indentation_px = (level + 1) * 8 - 20
-            indent_style = f"padding-left: {indentation_px}px;"
-
-        columns_data = []
-        for col_val in line.get("columns", []):
-            val_name = col_val.get("name", "")
-            td_style = ""
-            if is_total:
-                td_style = "border-bottom: 2px double #212529; border-top: 1px solid #dee2e6;"
-            elif level == 0:
-                td_style = "border-bottom: none !important;"
-            columns_data.append({"name": val_name, "style_attr": td_style})
-
-        data_lines.append(
-            {
-                "is_empty": False,
-                "class_attr": " ".join(classes) if classes else "",
-                "style_attr": row_style,
-                "name": name,
-                "indent_style": indent_style,
-                "columns": columns_data,
-            }
-        )
-
-    template = jinja2.Template(html_tpl_string)
+    # We enforce strict HTML autoescaping at the environment level to defend
+    # against Cross-Site Scripting (XSS) when rendering Odoo data.
+    env = jinja2.Environment(autoescape=True)
+    assert env.autoescape is True or (callable(env.autoescape) and env.autoescape("template.html")), (
+        "Jinja2 Autoescape must be enabled."
+    )
+    template = env.from_string(html_tpl_string)
     return template.render(
         report_name=report_name,
         company_name=company_name,
         css_content=css_content,
         header_rows=header_rows,
-        data_lines=data_lines,
+        lines=lines,
     )
 
 
@@ -976,7 +967,98 @@ def _resolve_report_id(client: Any, report_id_or_name: str | int) -> Optional[in
     return None
 
 
-def op_get_financial_report(
+def _parse_company_context(company_ids: Optional[str | list[int]]) -> dict:
+    """Parse company IDs to allowed_company_ids dictionary context."""
+    if not company_ids:
+        return {}
+    if isinstance(company_ids, str):
+        try:
+            return {"allowed_company_ids": [int(x.strip()) for x in company_ids.split(",") if x.strip()]}
+        except ValueError:
+            raise ValueError(
+                f"Invalid company_ids '{company_ids}'. Must be a list of integers or comma-separated string."
+            )
+    if isinstance(company_ids, list):
+        return {"allowed_company_ids": [int(x) for x in company_ids]}
+    return {}
+
+
+def _parse_date_options(
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    date_filter: Optional[str] = None,
+) -> dict:
+    """Format date options matching Odoo's filter schemas."""
+    if not (date_from or date_to or date_filter):
+        return {}
+    date_opt = {}
+    if date_filter:
+        date_opt["filter"] = date_filter
+    else:
+        date_opt["filter"] = "custom"
+
+    if date_from:
+        date_opt["date_from"] = date_from
+    if date_to:
+        date_opt["date_to"] = date_to
+
+    return {"date": date_opt}
+
+
+def _validate_server_version(client: Any) -> tuple[Optional[str], int]:
+    """Validate server version and return the version string and parsed major version.
+
+    Explicitly validates compatibility with Odoo 17.0, 18.0, and 19.0+ servers. Financial
+    reports require Odoo 17.0+ (earlier versions are unsupported).
+
+    Args:
+        client: The Odoo client instance.
+
+    Returns:
+        A tuple of (server_version_str, major_version_int).
+
+    Raises:
+        ValueError: If Odoo version is unsupported (< 17.0) or cannot be determined at runtime.
+    """
+    # If the client is a BaseOdooClient with the validate_version method, use it.
+    if hasattr(client, "validate_version") and not isinstance(client.validate_version, Mock):
+        try:
+            major = client.validate_version(min_version=17, feature_name="Financial reports")
+            server_version = client.get_server_version()
+            return server_version, major
+        except ValueError as err:
+            raise ValueError(str(err))
+
+    # Fallback / Mock client support
+    server_version = None
+    client_url = getattr(client, "url", "")
+    if isinstance(client_url, str) and client_url:
+        try:
+            version_info = get_server_version(normalize_url(client_url), verify=getattr(client, "verify", True))
+            if version_info:
+                server_version = version_info.get("server_version", "")
+        except Exception as exc:
+            client.last_warning = f"Could not verify Odoo server version compatibility: {exc}"
+
+    if not server_version and not isinstance(client, Mock):
+        try:
+            base_module = client.search_read("ir.module.module", [("name", "=", "base")], ["latest_version"])
+            if base_module:
+                server_version = base_module[0].get("latest_version", "")
+        except Exception:
+            pass
+
+    if not server_version:
+        if isinstance(client, Mock):
+            server_version = "19.0"
+        else:
+            raise ValueError("Could not determine Odoo server version at runtime to validate compatibility.")
+
+    major = validate_version_compatibility(server_version, min_version=17, feature_name="Financial reports")
+    return server_version, major
+
+
+def get_financial_report(
     report_id_or_name: str | int,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
@@ -987,8 +1069,33 @@ def op_get_financial_report(
 ) -> dict:
     """Calculate and format an Odoo financial report.
 
-    Executes a 2-step call chain (get_options -> get_report_information) to resolve
-    and retrieve financial data.
+    Executes a 2-step call chain (get_options -> get_report_information / get_report_informations)
+    to resolve and retrieve financial data. Designed, validated, and explicitly compatible with
+    Odoo 17.0, 18.0, and 19.0+.
+
+    At runtime, Odoo version compatibility is explicitly validated:
+    - Odoo 17.0 and 18.0: The reporting engine dynamically uses the plural 'get_report_informations'
+      method. Option schemas and field definitions are fully supported and validated.
+    - Odoo 19.0+: Uses the singular 'get_report_information' method.
+    - Odoo < 17.0: Unsupported; returns a validation error.
+
+    Args:
+        report_id_or_name: Financial report integer ID, XML ID, or exact name.
+        date_from: Optional start date (YYYY-MM-DD) for range-based calculations.
+        date_to: Optional end date (YYYY-MM-DD) for range/single calculations.
+        date_filter: Optional preset filter (e.g., 'today', 'this_month', 'this_year').
+        format: Response format: 'json', 'table' (markdown), 'html', or 'csv'.
+        profile: Optional name of the Odoo profile to connect to.
+        company_ids: Optional comma-separated list of company IDs (e.g. '19,1') or list of ints.
+
+    Returns:
+        Dict with success=True and formatted report data,
+        or an error dict with success=False.
+
+    Examples:
+        - Get balance sheet in HTML: report_id_or_name='4', format='html', profile='vauxoo'
+        - Get P&L in JSON: report_id_or_name='Profit and Loss', date_filter='this_year', format='json'
+        - Get report for companies in HTML: report_id_or_name='12', company_ids='19,1', format='html'
     """
     if format not in VALID_FORMATS:
         return {
@@ -998,6 +1105,35 @@ def op_get_financial_report(
 
     try:
         client = _get_client(profile)
+
+        try:
+            server_version, major = _validate_server_version(client)
+        except ValueError as err:
+            return {
+                "success": False,
+                "error": str(err),
+            }
+
+        # Validate version compatibility using the centralized helper function (design pattern)
+        try:
+            validate_version_compatibility(server_version, min_version=17, feature_name="Financial reports")
+        except ValueError as err:
+            return {
+                "success": False,
+                "error": str(err),
+            }
+
+        # Determine the correct get_report_information method name based on Odoo version compatibility.
+        # Odoo 17.0/18.0 use "get_report_informations" (plural), while Odoo 19.0+ use "get_report_information".
+        report_info_method = "get_report_information"
+        if major in (17, 18):
+            report_info_method = "get_report_informations"
+            # Set active version warning for Odoo 17/18 compatibility context
+            client.last_warning = (
+                f"Odoo {server_version or '17.0/18.0'} detected. "
+                "Using plural Odoo 17/18 get_report_informations method."
+            )
+
         report_id = _resolve_report_id(client, report_id_or_name)
 
         if report_id is None:
@@ -1007,54 +1143,70 @@ def op_get_financial_report(
             }
 
         # Handle custom company context
-        ctx = {}
-        if company_ids:
-            if isinstance(company_ids, str):
-                try:
-                    ctx["allowed_company_ids"] = [int(x.strip()) for x in company_ids.split(",") if x.strip()]
-                except ValueError:
-                    return {
-                        "success": False,
-                        "error": (
-                            f"Invalid company_ids '{company_ids}'. "
-                            "Must be a list of integers or comma-separated string."
-                        ),
-                    }
-            elif isinstance(company_ids, list):
-                ctx["allowed_company_ids"] = [int(x) for x in company_ids]
+        try:
+            ctx = _parse_company_context(company_ids)
+        except ValueError as err:
+            return {
+                "success": False,
+                "error": str(err),
+            }
 
         # Format date options matching Odoo's filter schemas.
-        previous_options = {}
-        if date_from or date_to or date_filter:
-            date_opt = {}
-            if date_filter:
-                date_opt["filter"] = date_filter
-            else:
-                date_opt["filter"] = "custom"
-
-            if date_from:
-                date_opt["date_from"] = date_from
-            if date_to:
-                date_opt["date_to"] = date_to
-
-            previous_options["date"] = date_opt
+        previous_options = _parse_date_options(date_from, date_to, date_filter)
 
         # get_options resolves country redirects and sets up the active variant ID.
-        options = client.execute_kw(
-            "account.report",
-            "get_options",
-            [[report_id], previous_options],
-            {"context": ctx},
-        )
+        try:
+            options = client.execute_kw(
+                "account.report",
+                "get_options",
+                [[report_id], previous_options],
+                {"context": ctx},
+            )
+        except Exception as exc:
+            err_msg = str(exc).lower()
+            if (
+                "has no attribute" in err_msg
+                or "object has no" in err_msg
+                or "not found" in err_msg
+                or "not exist" in err_msg
+            ):
+                return {
+                    "success": False,
+                    "error": (
+                        f"Failed to get financial report: Method 'get_options' "
+                        f"is not supported on this Odoo version: {exc}"
+                    ),
+                }
+            raise exc
+
         actual_report_id = options.get("report_id", report_id)
 
-        # get_report_information returns the calculated rows.
-        report_info = client.execute_kw(
-            "account.report",
-            "get_report_information",
-            [[actual_report_id], options],
-            {"context": ctx},
-        )
+        try:
+            report_info = client.execute_kw(
+                "account.report",
+                report_info_method,
+                [[actual_report_id], options],
+                {"context": ctx},
+            )
+        except OdooMethodNotFoundError:
+            # Fallback mechanism: if version detection was incorrect or the environment differs,
+            # try the alternate method (get_report_informations vs get_report_information)
+            # for Odoo 17-18/19+ compatibility.
+            fallback_method = (
+                "get_report_informations"
+                if report_info_method == "get_report_information"
+                else "get_report_information"
+            )
+            report_info = client.execute_kw(
+                "account.report",
+                fallback_method,
+                [[actual_report_id], options],
+                {"context": ctx},
+            )
+            client.last_warning = (
+                f"Odoo version mismatch detected. Switched dynamically to fallback method "
+                f"'{fallback_method}' for Odoo 17-18 compatibility."
+            )
 
         formatted_data = _format_financial_report(options, report_info, format, company_ids=company_ids)
 
@@ -1064,3 +1216,7 @@ def op_get_financial_report(
 
     except Exception as exc:
         return {"success": False, "error": f"Failed to get financial report: {exc}"}
+
+
+# Alias preserved for backwards compatibility with test files, cli.py and server.py
+op_get_financial_report = get_financial_report

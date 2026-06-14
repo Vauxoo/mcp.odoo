@@ -23,10 +23,11 @@ from odoo_mcp_multi.exceptions import (
     OdooAuthenticationError,
     OdooConnectionError,
     OdooExecutionError,
+    OdooMethodNotFoundError,
     OdooSSLVerificationError,
 )
 from odoo_mcp_multi.parsers import normalize_url
-from odoo_mcp_multi.version import Protocol, detect_protocol
+from odoo_mcp_multi.version import Protocol, detect_protocol, get_server_version, validate_version_compatibility
 
 _logger = logging.getLogger(__name__)
 
@@ -105,6 +106,64 @@ class BaseOdooClient(ABC):
         self.verify = verify
         self.last_warning: Optional[str] = None
         self._uid: Optional[int] = None
+        self._server_version: Optional[str] = None
+
+    def get_server_version(self) -> str:
+        """Get Odoo server version, caching it on the instance.
+
+        Tries the public version endpoint, and if unreachable, falls back to
+        querying the base module's version via XML/JSON-RPC.
+        """
+        if self._server_version is not None:
+            return self._server_version
+
+        # 1. Try public endpoint
+        try:
+            version_info = get_server_version(self.url, timeout=10, verify=self.verify)
+            if version_info and "server_version" in version_info:
+                self._server_version = version_info["server_version"]
+                return self._server_version
+        except Exception as exc:
+            self.last_warning = f"Could not verify Odoo server version compatibility: {exc}"
+
+        # 2. Fallback: query base module version via RPC if public check failed
+        try:
+            base_modules = self.execute_kw(
+                "ir.module.module", "search_read", [[("name", "=", "base")], ["latest_version"]], {}
+            )
+            if base_modules:
+                self._server_version = base_modules[0].get("latest_version", "")
+                return self._server_version
+        except Exception:
+            pass
+
+        self._server_version = "unknown"
+        return self._server_version
+
+    def validate_version(
+        self,
+        min_version: int,
+        feature_name: str,
+        max_version: Optional[int] = None,
+    ) -> int:
+        """Validate Odoo version compatibility for this client instance.
+
+        Args:
+            min_version: Minimum Odoo major version (inclusive).
+            feature_name: The feature name to display in error messages.
+            max_version: Optional maximum Odoo major version (inclusive).
+
+        Returns:
+            The major version integer.
+
+        Raises:
+            ValueError: If the version cannot be determined or is incompatible.
+        """
+        ver = self.get_server_version()
+        if ver == "unknown" or not ver:
+            raise ValueError("Could not determine Odoo server version at runtime to validate compatibility.")
+
+        return validate_version_compatibility(ver, min_version, feature_name, max_version)
 
     @abstractmethod
     def authenticate(self) -> int:
@@ -338,6 +397,14 @@ class JsonRpcClient(BaseOdooClient):
         if "error" in result:
             error = result["error"]
             msg = error.get("data", {}).get("message", error.get("message", str(error)))
+            msg_lower = msg.lower()
+            is_missing = (
+                "has no attribute" in msg_lower
+                or "object has no" in msg_lower
+                or ("method" in msg_lower and "not found" in msg_lower)
+            )
+            if is_missing:
+                raise OdooMethodNotFoundError(f"Method '{method}' not found on service '{service}': {msg}")
             raise OdooExecutionError(f"Odoo error: {msg}")
 
         return result.get("result")
@@ -772,6 +839,15 @@ class XmlRpcClient(BaseOdooClient):
         except socket.timeout as e:
             raise OdooExecutionError(f"Execution timed out: {e}") from e
         except xmlrpc.client.Fault as e:
+            fault_str = e.faultString or ""
+            fault_lower = fault_str.lower()
+            is_missing = (
+                "has no attribute" in fault_lower
+                or "object has no" in fault_lower
+                or ("method" in fault_lower and "not found" in fault_lower)
+            )
+            if is_missing:
+                raise OdooMethodNotFoundError(f"Method '{method}' not found on model '{model}': {fault_str}") from e
             raise OdooExecutionError(f"Execution fault: {e.faultString}") from e
         except Exception as e:
             if is_ssl_verification_error(e):

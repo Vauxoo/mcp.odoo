@@ -408,3 +408,44 @@ async def test_metadata_always_allowed(mock_op):
     assert data[0]["name"] == "locked"
 
     _set_fallback_ref(None)
+
+
+@pytest.mark.asyncio
+async def test_get_financial_report_registration():
+    """Verify get_financial_report is registered in FastMCP with complete docstring/examples."""
+    tools = await mcp.list_tools()
+    tool = next((t for t in tools if t.name == "get_financial_report"), None)
+    assert tool is not None, "Tool 'get_financial_report' is not registered in FastMCP"
+    assert tool.description, "Tool 'get_financial_report' has no docstring"
+    assert "Examples:" in tool.description, "Tool 'get_financial_report' docstring lacks 'Examples:' section"
+    assert "report_id_or_name" in tool.description, "Tool docstring is incomplete"
+
+
+@pytest.mark.asyncio
+@patch("odoo_mcp_multi.server.op_get_financial_report")
+async def test_get_financial_report_pass_through(mock_op):
+    """Verify get_financial_report tool correctly forwards all parameters to operations."""
+    mock_op.return_value = {"success": True}
+    result = await mcp.call_tool(
+        "get_financial_report",
+        {
+            "report_id_or_name": "4",
+            "date_from": "2026-01-01",
+            "date_to": "2026-12-31",
+            "date_filter": "this_year",
+            "format": "html",
+            "profile": "vauxoo",
+            "company_ids": "19,1",
+        },
+    )
+    data = _json_data(result)
+    assert data["success"] is True
+    mock_op.assert_called_once_with(
+        report_id_or_name="4",
+        date_from="2026-01-01",
+        date_to="2026-12-31",
+        date_filter="this_year",
+        format="html",
+        profile="vauxoo",
+        company_ids="19,1",
+    )

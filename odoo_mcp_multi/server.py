@@ -387,7 +387,14 @@ def get_financial_report(
     """Calculate and retrieve an Odoo financial report (e.g. Balance Sheet, Profit and Loss).
 
     Conceptually aligns with Odoo's native OWL presentation layer, rendering HTML with
-    proper nesting, indentation styles, and total lines.
+    proper nesting, indentation styles, and total lines. Designed, validated, and explicitly
+    compatible with Odoo 17.0, 18.0, and 19.0+.
+
+    At runtime, Odoo version compatibility is explicitly validated:
+    - Odoo 17.0 and 18.0: The reporting engine dynamically uses the plural 'get_report_informations'
+      method. Option schemas and field definitions are fully supported and validated.
+    - Odoo 19.0+: Uses the singular 'get_report_information' method.
+    - Odoo < 17.0: Unsupported; returns a validation error.
 
     Args:
         report_id_or_name: Financial report integer ID, XML ID (e.g. 'account.report_balance_sheet'),
@@ -403,9 +410,9 @@ def get_financial_report(
         JSON string containing the formatted report output or error message.
 
     Examples:
-        - Get balance sheet: report_id_or_name='4', format='html', profile='vauxoo'
-        - Get P&L for 2026: report_id_or_name='Profit and Loss', date_filter='this_year', format='json'
-        - Get Trial Balance with company context: report_id_or_name='12', company_ids='19,1', format='html'
+        - Get balance sheet in HTML: report_id_or_name='4', format='html', profile='vauxoo'
+        - Get P&L in JSON: report_id_or_name='Profit and Loss', date_filter='this_year', format='json'
+        - Get report for companies in HTML: report_id_or_name='12', company_ids='19,1', format='html'
     """
     denied = _check_permission("get_financial_report", profile)
     if denied:

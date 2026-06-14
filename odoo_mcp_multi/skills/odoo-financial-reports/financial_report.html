@@ -4,7 +4,7 @@
     <meta charset='utf-8'>
     <title>{{ report_name }}</title>
     <style>
-{{ css_content }}
+{{ css_content | safe }}
     </style>
 </head>
 <body>
@@ -21,32 +21,37 @@
             {% for row in header_rows %}
             <tr>
                 {% for cell in row %}
-                <th colspan='{{ cell.colspan }}'{% if cell.class_attr %} class='{{ cell.class_attr }}'{% endif %}>{{ cell.name }}</th>
+                <th colspan='{{ cell.colspan | default(1) }}'{% if cell.class_attr %} class='{{ cell.class_attr }}'{% endif %}>{{ cell.name }}</th>
                 {% endfor %}
             </tr>
             {% endfor %}
         </thead>
         <tbody>
-            {% for line in data_lines %}
-            {% if line.is_empty %}
+            {% for line in lines %}
+            {% set level = line.get("level") %}
+            {% set name = line.get("name", "") %}
+            {% set line_id = line.get("id", "") %}
+            {% set is_total = line_id and "|total~~" in line_id %}
+
+            {% if level == 0 %}
             <tr class='empty'>
                 <td></td>
-                {% for _ in range(line.columns_count) %}
+                {% for _ in range(line.get("columns", []) | length) %}
                 <td></td>
-                {% endfor %}
-            </tr>
-            {% else %}
-            <tr{% if line.class_attr %} class='{{ line.class_attr }}'{% endif %}{% if line.style_attr %} style='{{ line.style_attr }}'{% endif %}>
-                <td class='concept-cell'{% if line.indent_style %} style='{{ line.indent_style }}'{% endif %}>
-                    <div class='wrapper'>
-                        <div class='content'>{{ line.name }}</div>
-                    </div>
-                </td>
-                {% for col in line.columns %}
-                <td class='numeric'{% if col.style_attr %} style='{{ col.style_attr }}'{% endif %}>{{ col.name }}</td>
                 {% endfor %}
             </tr>
             {% endif %}
+
+            <tr class="line_level_{{ level if level is not none else 'default' }}{% if is_total %} total{% endif %}">
+                <td class='concept-cell'{% if level is not none and level >= 2 %} style='padding-left: {{ (level + 1) * 8 - 20 }}px;'{% endif %}>
+                    <div class='wrapper'>
+                        <div class='content'>{{ name }}</div>
+                    </div>
+                </td>
+                {% for col in line.get("columns", []) %}
+                <td class='numeric'>{{ col.get("name", "") }}</td>
+                {% endfor %}
+            </tr>
             {% endfor %}
         </tbody>
     </table>
