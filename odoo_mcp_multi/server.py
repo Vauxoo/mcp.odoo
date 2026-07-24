@@ -63,7 +63,15 @@ mcp = FastMCP(
         "'has_more' and use 'next_offset' to fetch additional pages.\n"
         "- If a result contains 'success': false, read the 'error' field for "
         "a verbose explanation of what went wrong.\n"
-        "- Report issues at https://git.vauxoo.com/nhomar/mcp.odoo/-/issues"
+        "- Report issues at https://git.vauxoo.com/nhomar/mcp.odoo/-/issues\n\n"
+        "Token efficiency (results stay in context for the whole session — keep reads lean):\n"
+        "- Always pass explicit 'fields' to search_read/export_records instead of "
+        "reading every field.\n"
+        "- Prefer format='compact' (~60% smaller) or 'csv' for large or summarized "
+        "reads; keep 'json' only when you must parse values programmatically.\n"
+        "- Keep 'limit' small (default 25) and page with 'next_offset' rather than "
+        "requesting large batches up front.\n"
+        "- Use execute_kw 'search_count' to size a result set before a wide read."
     ),
 )
 
@@ -113,7 +121,7 @@ def search_read(
     model: str,
     domain: Union[str, list] = "[]",
     fields: str = "",
-    limit: int = 100,
+    limit: int = 25,
     offset: int = 0,
     order: str = "",
     format: str = "json",
@@ -121,11 +129,17 @@ def search_read(
 ) -> str:
     """Search and read records from an Odoo model.
 
+    For token efficiency, pass explicit `fields` and prefer `format='compact'`
+    (or `csv`) for large/summarized reads — results stay in context for the rest
+    of the session. Keep `limit` small and page with `next_offset`.
+
     Args:
         model: Model name (e.g., 'res.partner', 'sale.order')
         domain: Search domain as string (e.g., "[('name', 'ilike', 'John')]") or list
-        fields: Comma-separated field names (e.g., "name,email,phone")
-        limit: Maximum number of records to return (default: 100)
+        fields: Comma-separated field names (e.g., "name,email,phone"). Strongly
+            recommended — leaving this empty returns every field and adds a hint.
+        limit: Maximum number of records to return (default: 25). Page larger sets
+            with the returned `next_offset` instead of raising this.
         offset: Number of records to skip (default: 0)
         order: Sort order (e.g., "name asc, id desc")
         format: Response data format. Choose based on your needs:

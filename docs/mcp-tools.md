@@ -44,12 +44,17 @@ list_available_profiles()
 |-----------|------|---------|-------------|
 | `model` | string | *(required)* | Model name (e.g., `res.partner`) |
 | `domain` | string | `[]` | Search domain |
-| `fields` | string | `""` | Comma-separated field names |
-| `limit` | int | `100` | Max records to return |
+| `fields` | string | `""` | Comma-separated field names. Recommended — empty returns all fields and adds an efficiency `hint` |
+| `limit` | int | `25` | Max records to return; page larger sets via `next_offset` |
 | `offset` | int | `0` | Records to skip (pagination) |
 | `order` | string | `""` | Sort order |
 | `format` | string | `json` | Output format: `json`, `compact`, `table`, `html`, `csv` |
 | `profile` | string | *(default)* | Target profile name |
+
+!!! tip "Token efficiency"
+    Results stay in the agent's context for the whole session. Pass explicit `fields`,
+    prefer `format='compact'` (~60% smaller) or `csv` for large/summarized reads, and
+    keep `limit` small — page with `next_offset` instead of raising it.
 
 ```python
 search_read(

@@ -518,7 +518,7 @@ def cmd_run(profile: str) -> None:
 @click.option("--model", "-m", required=True, help="Model name (e.g., 'res.partner')")
 @click.option("--domain", "-d", default="[]", help="Search domain as string (e.g., \"[('name','ilike','John')]\")")
 @click.option("--fields", "-f", default="", help="Comma-separated field names (e.g., 'name,email,phone')")
-@click.option("--limit", "-l", default=100, type=int, help="Maximum number of records (default: 100)")
+@click.option("--limit", "-l", default=25, type=int, help="Maximum number of records (default: 25)")
 @click.option("--offset", default=0, type=int, help="Number of records to skip (default: 0)")
 @click.option("--order", default="", help="Sort order (e.g., 'name asc, id desc')")
 @click.option(

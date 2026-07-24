@@ -278,7 +278,7 @@ def op_search_read(
     model: str,
     domain: str = "[]",
     fields: str = "",
-    limit: int = 100,
+    limit: int = 25,
     offset: int = 0,
     order: str = "",
     format: str = "json",
@@ -286,11 +286,17 @@ def op_search_read(
 ) -> dict:
     """Search and read records from an Odoo model.
 
+    For token efficiency, prefer passing explicit ``fields`` and, for large or
+    summarized reads, ``format='compact'`` (or ``'csv'``). Results stay in the
+    agent's context for the rest of the session, so narrower reads pay off.
+
     Args:
         model: Model name (e.g., 'res.partner')
         domain: Search domain as string
-        fields: Comma-separated field names
-        limit: Maximum number of records
+        fields: Comma-separated field names. Leave empty to return all fields
+            (verbose — a hint is added to the response nudging explicit fields).
+        limit: Maximum number of records (default: 25). Page through larger sets
+            with the returned ``next_offset`` instead of raising this.
         offset: Number of records to skip
         order: Sort order
         format: Response format — 'json' (default), 'compact', 'table', 'html', or 'csv'.
@@ -337,6 +343,15 @@ def op_search_read(
         "next_offset": offset + limit,
         "format": format,
     }
+
+    # Nudge the agent toward explicit fields when it read every field. Kept as a
+    # separate 'hint' key so it never collides with the SSL 'warning' injected by
+    # _with_warning, and so the response shape stays backward compatible.
+    if not fields:
+        envelope["hint"] = (
+            "No 'fields' specified — all fields were returned. Pass explicit fields "
+            "(e.g. 'name,email') to cut token usage."
+        )
 
     if format == "compact":
         return _with_warning({**_format_compact(records), **envelope}, client)

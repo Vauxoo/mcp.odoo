@@ -79,7 +79,7 @@ def test_cli_search_read_format_flag(mock_op):
     )
 
     assert result.exit_code == 0
-    mock_op.assert_called_once_with("res.partner", "[]", "", 100, 0, "", "compact", "dev")
+    mock_op.assert_called_once_with("res.partner", "[]", "", 25, 0, "", "compact", "dev")
 
 
 @patch("odoo_mcp_multi.cli.op_search_read", return_value={"success": False, "error": "No Odoo profile configured."})

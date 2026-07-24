@@ -58,6 +58,8 @@ def test_op_search_read_basic(mock_get_client):
     assert result["records"][0]["name"] == "Test"
     assert result["total"] == 1
     assert result["has_more"] is False
+    # Explicit fields → no efficiency hint.
+    assert "hint" not in result
     mock_client.search_read.assert_called_once()
 
 
@@ -74,8 +76,11 @@ def test_op_search_read_empty_fields(mock_get_client):
     assert result["total"] == 0
     assert result["has_more"] is False
     assert result["format"] == "json"
+    # Empty fields → efficiency hint nudging explicit fields.
+    assert "hint" in result
+    assert "fields" in result["hint"]
     mock_client.search_read.assert_called_once_with(
-        model="res.partner", domain=[], fields=None, limit=100, offset=0, order=None
+        model="res.partner", domain=[], fields=None, limit=25, offset=0, order=None
     )
 
 
