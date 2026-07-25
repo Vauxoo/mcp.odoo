@@ -378,6 +378,66 @@ def test_cli_add_profile_prompts_credential_when_interactive(mock_version, mock_
     assert saved.password is None
 
 
+@patch("odoo_mcp_multi.cli.add_profile")
+@patch("odoo_mcp_multi.version.get_server_version", return_value=None)
+def test_cli_add_profile_bare_api_key_prompts_hidden(mock_version, mock_add):
+    """A bare --api-key flag prompts for the key (hidden) instead of requiring it inline."""
+    result = runner.invoke(
+        main,
+        [
+            "add-profile",
+            "--name",
+            "prod19",
+            "--url",
+            "https://odoo19.example.com",
+            "--database",
+            "mydb",
+            "--protocol",
+            "json2s",
+            "--api-key",
+            "--no-test",
+        ],
+        input="secretkey\n",
+    )
+    assert result.exit_code == 0, result.output
+    mock_add.assert_called_once()
+    saved = mock_add.call_args[0][0]
+    assert saved.api_key.get_secret_value() == "secretkey"
+    assert saved.password is None
+    # The secret must not be echoed back to the terminal.
+    assert "secretkey" not in result.output
+
+
+@patch("odoo_mcp_multi.cli.add_profile")
+@patch("odoo_mcp_multi.version.get_server_version", return_value=None)
+def test_cli_add_profile_bare_flag_does_not_swallow_next_arg(mock_version, mock_add):
+    """Regression: a bare --api-key must not consume the following --database token.
+
+    Before the fix, `--api-key --database mydb` bound api_key="--database" and
+    left "mydb" as an unexpected extra argument.
+    """
+    result = runner.invoke(
+        main,
+        [
+            "add-profile",
+            "--name",
+            "t",
+            "--url",
+            "https://x.example.com",
+            "--api-key",
+            "--database",
+            "mydb",
+            "--no-test",
+        ],
+        input="mykey123\n",
+    )
+    assert result.exit_code == 0, result.output
+    assert "unexpected extra argument" not in result.output.lower()
+    saved = mock_add.call_args[0][0]
+    assert saved.database == "mydb"
+    assert saved.api_key.get_secret_value() == "mykey123"
+
+
 @patch("odoo_mcp_multi.cli.list_profiles")
 def test_cli_list_profiles_shows_auth_method(mock_list):
     """T18b: list-profiles human output shows auth method (password vs api_key)."""

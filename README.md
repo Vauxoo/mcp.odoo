@@ -189,17 +189,23 @@ Profiles define how `odoo-mcp` connects to each Odoo instance. Each profile
 stores a URL, database name, and authentication credentials (user/password for
 Odoo < 19, or an API key for Odoo 19+).
 
+Pass `--password` or `--api-key` **without a value** and the secret is
+prompted for with hidden input, so it never lands in your shell history or in
+another process' view of the command line. Only put a secret directly on the
+command line in a trusted, non-interactive context (e.g. a CI job reading it
+from a masked variable).
+
 ```bash
-# Interactive wizard (prompts for all fields)
+# Interactive wizard (prompts for every field, secret included)
 odoo-mcp add-profile
 
-# Non-interactive — Odoo < 19 (XML-RPC / JSON-RPC, user + password)
+# Odoo < 19 (XML-RPC / JSON-RPC, user + password) — password prompted, hidden
 odoo-mcp add-profile --name prod --url https://odoo.example.com \
-  --database mydb --user admin --password secret
+  --database mydb --user admin --password
 
-# Non-interactive — Odoo 19+ (JSON/2 REST, API key)
+# Odoo 19+ (JSON/2 REST, API key) — key prompted, hidden
 odoo-mcp add-profile --name prod19 --url https://odoo19.example.com \
-  --database mydb --api-key YOUR_API_KEY --protocol json2s
+  --database mydb --protocol json2s --api-key
 ```
 
 | Command | Description |
