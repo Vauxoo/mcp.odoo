@@ -6,6 +6,15 @@
 - **Nombre del Agente:** C3PO
 - **Nombre de los Subagentes:** R2D2
 
+## Git Worktree Policy
+
+1. **Mandatory Isolated Worktrees:** Never switch branches or develop directly in the primary workspace directory. Always create a new isolated git worktree in a portable relative path adjacent to the repository root:
+   ```bash
+   REPO_NAME=$(basename "$(git rev-parse --show-toplevel)")
+   git worktree add "../${REPO_NAME}_<branch_name>" <branch_name>
+   ```
+2. **Zero Hardcoded Paths:** Never use user-specific or environment-specific absolute paths. All worktree and repository paths must be relative or dynamically inspected.
+
 ## Push & Pipeline Rules
 
 1. **Verificación Pre-Push Mandatoria:** C3PO jamás debe hacer un `git push` a ciegas. Antes de cualquier `push` que invoques, debes **ejecutar localmente los linters (Ruff) y la suite de pruebas (Pytest)** para asegurar que el pipeline no se rompa (evitar "MR rojos").

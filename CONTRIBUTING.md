@@ -16,11 +16,18 @@ If you've noticed a bug or have a feature request, make sure to check our **Issu
    pip install -e ".[dev]"
    ```
 
-## 3. Making Changes
+## 3. Making Changes & Git Worktrees
 
-- Create a new branch for your feature or bug fix: `git checkout -b feature/your-feature-name`
+- Use **Git Worktrees** to isolate feature branches and keep `main` clean without dirtying the primary repository directory:
+
+   ```bash
+   REPO_NAME=$(basename "$(git rev-parse --show-toplevel)")
+   git worktree add "../${REPO_NAME}_your-feature-name" -b feature/your-feature-name
+   cd "../${REPO_NAME}_your-feature-name"
+   ```
+
 - Write tests for your changes where applicable.
-- Make your changes in the codebase.
+- Make your changes in the codebase inside the isolated worktree directory.
 
 ## 4. Code Quality and Testing
 
