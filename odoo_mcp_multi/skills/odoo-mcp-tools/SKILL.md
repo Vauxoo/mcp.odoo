@@ -231,7 +231,11 @@ Import via Odoo's `load`. Updates records with matching External IDs; creates ne
 | `profile` | string | *(default)* | Target profile name |
 
 ```python
-import_records(model="res.partner", fields="id,name,phone", rows='[{"id": "base.res_partner_1", "name": "Updated", "phone": "12345"}, {"name": "New Partner", "phone": "67890"}]')
+import_records(
+    model="res.partner",
+    fields="id,name,phone",
+    rows='[{"id": "base.res_partner_1", "name": "Updated", "phone": "12345"}, {"name": "New Partner", "phone": "67890"}]',
+)
 ```
 
 ---
@@ -329,7 +333,9 @@ search_read(model="res.partner", domain="[('name', 'ilike', 'John')]", fields="n
 
 ```python
 # Step 1: Export from staging
-export_records(model="product.template", domain="[('active', '=', True)]", fields="id,name,list_price", profile="staging")
+export_records(
+    model="product.template", domain="[('active', '=', True)]", fields="id,name,list_price", profile="staging"
+)
 
 # Step 2: Import to prod (use the exported rows as input)
 import_records(model="product.template", fields="id,name,list_price", rows="[...]", profile="prod")
