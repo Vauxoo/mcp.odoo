@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Fixed interactive `add-profile` CLI wizard to complete prompts cleanly in terminal mode without raising errors when username is omitted for Odoo 19+ API Key auth.
+- Delegated connection testing in `add-profile` directly to `op_test_connection`, enabling auto-credential migration (`password` → `api_key`) when Odoo 19+ (`json2s`) is detected.
+- Guaranteed zero network calls when `--no-test` is passed to `add-profile`.
+- Passed `previous_options` and `options` as named keyword arguments (`kwargs`) in `get_financial_report` to ensure robust parameter serialization on Odoo 19+ JSON-2 REST API.
+- Added `*.lock` pattern to `.gitignore` to prevent untracked lockfiles from polluting working trees.
+
+### Added
+
+- Added portable Git worktree policy guidelines to `CONTRIBUTING.md` and `.cursorrules`.
+
 ## [0.9.0] - 2026-06-11
 
 ### Added

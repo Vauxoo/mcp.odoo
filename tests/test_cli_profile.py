@@ -337,7 +337,85 @@ def test_cli_add_profile_without_auth_fails(mock_version):
         ],
     )
     assert result.exit_code != 0
-    assert "password" in result.output.lower() or "api" in result.output.lower() or result.exit_code != 0
+    assert "password" in result.output.lower() or "api" in result.output.lower()
+
+
+@patch("odoo_mcp_multi.cli.add_profile")
+def test_cli_add_profile_wizard_prompts_missing_credential(mock_add):
+    """Interactive wizard prompts for missing credentials when running in a TTY."""
+    with (
+        patch("odoo_mcp_multi.cli.sys") as sys_mock,
+        patch("odoo_mcp_multi.cli.click.prompt", side_effect=["admin", "WIZSECRET"]) as mock_prompt,
+    ):
+        sys_mock.stdin.isatty.return_value = True
+        result = runner.invoke(
+            main,
+            [
+                "add-profile",
+                "--name",
+                "prod",
+                "--url",
+                "https://odoo.example.com",
+                "--database",
+                "mydb",
+                "--no-test",
+            ],
+        )
+    assert result.exit_code == 0, result.output
+    assert mock_prompt.call_count == 2
+    saved = mock_add.call_args[0][0]
+    assert saved.user == "admin"
+    assert saved.password.get_secret_value() == "WIZSECRET"
+
+
+@patch("odoo_mcp_multi.cli.add_profile")
+def test_cli_add_profile_wizard_prompts_empty_username_for_api_key(mock_add):
+    """Interactive wizard allows leaving username empty to default to API Key auth."""
+    with (
+        patch("odoo_mcp_multi.cli.sys") as sys_mock,
+        patch("odoo_mcp_multi.cli.click.prompt", side_effect=["", "MY_API_KEY"]) as mock_prompt,
+    ):
+        sys_mock.stdin.isatty.return_value = True
+        result = runner.invoke(
+            main,
+            [
+                "add-profile",
+                "--name",
+                "prod19",
+                "--url",
+                "https://odoo19.example.com",
+                "--database",
+                "mydb",
+                "--no-test",
+            ],
+        )
+    assert result.exit_code == 0, result.output
+    assert mock_prompt.call_count == 2
+    saved = mock_add.call_args[0][0]
+    assert saved.user == ""
+    assert saved.api_key.get_secret_value() == "MY_API_KEY"
+
+
+@patch("odoo_mcp_multi.version.get_server_version")
+def test_cli_add_profile_no_test_executes_zero_network_calls(mock_version):
+    """Passing --no-test must execute ZERO network calls (get_server_version must NOT be called)."""
+    result = runner.invoke(
+        main,
+        [
+            "add-profile",
+            "--name",
+            "offline",
+            "--url",
+            "https://offline.example.com",
+            "--database",
+            "mydb",
+            "--api-key",
+            "mykey",
+            "--no-test",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    mock_version.assert_not_called()
 
 
 @patch("odoo_mcp_multi.cli.list_profiles")
@@ -362,7 +440,7 @@ def test_cli_list_profiles_shows_auth_method(mock_list):
 @patch("odoo_mcp_multi.cli.add_profile")
 @patch("odoo_mcp_multi.version.get_server_version")
 def test_cli_add_profile_v19_auto_migrates_password_to_api_key(mock_version, mock_add):
-    """T19: When server is Odoo 19+ and --password is given, it auto-migrates to api_key."""
+    """T19: When server is Odoo 19+ and --password is given, it auto-migrates to api_key during connection test."""
     mock_version.return_value = {
         "server_version": "19.0+e",
         "version": "19.0",
@@ -383,7 +461,6 @@ def test_cli_add_profile_v19_auto_migrates_password_to_api_key(mock_version, moc
             "admin",
             "--password",
             "my_api_key_value",
-            "--no-test",
         ],
     )
     assert result.exit_code == 0, result.output

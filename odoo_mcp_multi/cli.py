@@ -125,6 +125,41 @@ def main() -> None:
 # ---------------------------------------------------------------------------
 
 
+def _prompt_wizard_credential(
+    user: str | None,
+    password: str | None,
+    api_key: str | None,
+    protocol: str,
+) -> tuple[str | None, str | None, str | None]:
+    """Prompt for missing username and credentials in interactive TTY wizard."""
+    if password or api_key:
+        return user, password, api_key
+
+    if not sys.stdin.isatty():
+        click.secho(
+            f"{CROSS} Provide either --password (legacy) or --api-key (Odoo 19+).",
+            fg="red",
+        )
+        raise SystemExit(1)
+
+    if protocol == "json2s":
+        api_val = click.prompt("API key (Odoo 19+ Bearer token)", hide_input=True)
+        return user, None, api_val
+
+    # For auto/legacy protocols, prompt for username if not provided
+    if not user:
+        user = click.prompt("Odoo username (leave empty for API Key auth >19.0)", default="", show_default=False)
+
+    # Prompt for credential
+    cred_prompt = "Password" if user else "Password (or API key for Odoo 19+)"
+    cred_val = click.prompt(cred_prompt, hide_input=True)
+
+    if user:
+        return user, cred_val, None
+
+    return None, None, cred_val
+
+
 @main.command("add-profile")
 @click.option("--name", prompt="Profile name", help="Unique identifier (e.g., 'prod', 'staging')")
 @click.option("--url", prompt="Odoo URL", help="Instance URL (e.g., 'https://odoo.example.com')")
@@ -148,84 +183,30 @@ def cmd_add_profile(
     set_default: bool,
     test_connection: bool,
 ) -> None:
-    """Add a new Odoo profile with credentials.
-
-    For Odoo < 19  (XML-RPC / JSON-RPC): use --user + --password.
-    For Odoo >= 19 (JSON-2 REST API):     use --api-key.
-
-    When the server is Odoo 19+ and --password is provided instead of
-    --api-key, the credential is automatically stored as api_key
-    (the JSON-2 protocol requires a Bearer token, not user/password).
-
-    Examples:
-
-      odoo-mcp add-profile --name prod --url https://odoo.example.com \\
-          --database mydb --user admin --password
-
-      odoo-mcp add-profile --name prod19 --url https://odoo19.example.com \\
-          --database mydb --api-key YOUR_KEY --protocol json2s
-    """
-    # Validation: require at least one auth method
-    if not password and not api_key:
-        click.secho(
-            f"{CROSS} Provide either --password (legacy) or --api-key (Odoo 19+).",
-            fg="red",
-        )
-        raise SystemExit(1)
-
-    # Detect server version to auto-migrate password → api_key for Odoo 19+
-    from odoo_mcp_multi.parsers import normalize_url, parse_version
-    from odoo_mcp_multi.version import get_server_version
-
-    server_major = 0
-    try:
-        version_info = get_server_version(normalize_url(url), verify=verify)
-        if version_info:
-            ver_str = version_info.get("server_version", version_info.get("version", ""))
-            server_major, _, _ = parse_version(ver_str)
-    except Exception:
-        pass
-
-    if server_major >= 19 and password and not api_key:
-        # Odoo 19+ requires Bearer token — treat the provided password as api_key
-        api_key = password
-        password = None
-        click.secho(
-            f"[WARN] Odoo {server_major} detected — credential stored as api_key (Bearer token).",
-            fg="yellow",
-        )
+    """Add a new Odoo profile with credentials."""
+    user, password, api_key = _prompt_wizard_credential(user, password, api_key, protocol)
 
     if test_connection:
         click.echo(f"Testing connection to {url}...")
-        try:
-            if api_key:
-                if version_info is None:
-                    version_info = get_server_version(normalize_url(url), verify=verify)
-                if version_info is None:
-                    raise OdooConnectionError("Could not reach server (no version info)")
-                ver = version_info.get("server_version", version_info.get("version", "unknown"))
-                click.secho(f"{TICK} Server reachable! Odoo {ver}", fg="green")
-            else:
-                result = op_test_connection(
-                    url=url,
-                    database=database,
-                    user=user or "",
-                    password=password or "",
-                    verify=verify,
-                )
-                if result.get("success") is False:
-                    click.secho(f"{CROSS} Connection test failed: {result['error']}", fg="red")
-                    if not click.confirm("Save profile anyway?"):
-                        return
-                else:
-                    click.secho(
-                        f"{TICK} Connection successful! Authenticated as UID {result['uid']}",
-                        fg="green",
-                    )
-        except OdooConnectionError as e:
-            click.secho(f"{CROSS} Connection failed: {e}", fg="red")
+        res = op_test_connection(
+            url=url,
+            database=database,
+            user=user or "",
+            password=password or "",
+            api_key=api_key or "",
+            protocol=protocol if protocol != "auto" else None,
+            verify=verify,
+        )
+        if res.get("success") is False:
+            click.secho(f"{CROSS} Connection test failed: {res.get('error')}", fg="red")
             if not click.confirm("Save profile anyway?"):
                 return
+        else:
+            uid_info = f"Authenticated as UID {res['uid']}" if "uid" in res else "Server reachable"
+            click.secho(f"{TICK} Connection successful! {uid_info}", fg="green")
+            # Auto-migrate password -> api_key if server was detected as Odoo 19+ (JSON2S)
+            if res.get("protocol") == "json2s" and password and not api_key:
+                api_key, password = password, None
 
     profile = OdooProfile(
         name=name,

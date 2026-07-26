@@ -330,6 +330,7 @@ class JsonRpcClient(BaseOdooClient):
         """
         super().__init__(url, database, user, password, timeout, verify=verify)
         self.use_json2 = use_json2
+        self.protocol = Protocol.JSONRPCS
         self._endpoint = "/jsonrpc" if not use_json2 else "/jsonrpc/2"
 
     def _post(self, url: str, json_payload: dict) -> httpx.Response:
@@ -514,6 +515,7 @@ class Json2Client(BaseOdooClient):
             self._api_key: str = api_key.get_secret_value()
         else:
             self._api_key = api_key
+        self.protocol = Protocol.JSON2S
         # We cache Odoo endpoint method signatures (mapped by model -> method) to avoid redundant network
         # round-trips because the Odoo environment metadata remains static during the client lifecycle.
         self._signatures_cache: dict[str, dict[str, tuple[list[str], bool] | None]] = {}
@@ -905,18 +907,23 @@ def create_client(
     Returns:
         Configured Odoo client instance
     """
-    if isinstance(protocol, str):
+    if not protocol or protocol == Protocol.AUTO:
+        protocol = Protocol.AUTO
+    elif isinstance(protocol, str):
         protocol = Protocol(protocol.lower())
 
     if protocol == Protocol.AUTO:
         protocol = detect_protocol(url, timeout=min(timeout, 30), verify=verify)
 
-    # JSON-2 requires an API key — fail fast before constructing the client
+    # JSON-2 requires an API key — if password was passed instead, use it as api_key
     if protocol in (Protocol.JSON2, Protocol.JSON2S) and not api_key:
-        raise OdooAuthenticationError(
-            "Protocol JSON2/JSON2S requires an 'api_key'. "
-            "Generate one via Settings > Users > Account Security > API Keys."
-        )
+        if password:
+            api_key = password
+        else:
+            raise OdooAuthenticationError(
+                "Protocol JSON2/JSON2S requires an 'api_key'. "
+                "Generate one via Settings > Users > Account Security > API Keys."
+            )
 
     if protocol in (Protocol.JSON2, Protocol.JSON2S):
         return Json2Client(

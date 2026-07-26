@@ -112,8 +112,9 @@ def _with_warning(result: Any, client: Any) -> Any:
 def op_test_connection(
     url: str,
     database: str,
-    user: str,
-    password: str,
+    user: str = "",
+    password: str = "",
+    api_key: str = "",
     protocol: Optional[str] = None,
     timeout: int = 30,
     verify: bool = True,
@@ -128,6 +129,7 @@ def op_test_connection(
         database: Database name
         user: Login username
         password: Login password
+        api_key: Login API key (Odoo 19+)
         protocol: Protocol to use (auto-detected if None)
         timeout: Connection timeout in seconds
         verify: Verify SSL certificates (default: True)
@@ -142,6 +144,7 @@ def op_test_connection(
             database=database,
             user=user,
             password=password,
+            api_key=api_key,
             protocol=protocol,
             timeout=timeout,
             verify=verify,
@@ -150,11 +153,16 @@ def op_test_connection(
     except Exception as exc:
         return {"success": False, "error": f"Connection test failed: {exc}"}
 
-    version = get_server_version(normalize_url(url), timeout=timeout, verify=verify)
+    det_protocol = getattr(client, "protocol", protocol or "auto")
+    if hasattr(det_protocol, "value"):
+        det_protocol = det_protocol.value
+
+    ver_info = get_server_version(normalize_url(url), timeout=timeout, verify=verify)
     return {
+        "success": True,
         "uid": uid,
-        "server_version": version.get("server_version", "unknown") if version else "unknown",
-        "protocol": protocol or "auto",
+        "server_version": (ver_info or {}).get("server_version", "unknown"),
+        "protocol": det_protocol,
     }
 
 
