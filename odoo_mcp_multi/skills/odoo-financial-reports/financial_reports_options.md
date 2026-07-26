@@ -114,8 +114,15 @@ opts_raw = execute_kw(
     method="get_options",
     args=[
         [resolved_db_id],
-        {"date": {"mode": "range", "filter": "custom", "date_from": "2026-01-01", "date_to": "2026-05-31"}},
-    ],
+        {
+            "date": {
+                "mode": "range",
+                "filter": "custom",
+                "date_from": "2026-01-01",
+                "date_to": "2026-05-31"
+            }
+        }
+    ]
 )
 ```
 
@@ -125,6 +132,8 @@ Extract the `report_id` from `opts_raw.result.report_id` (resolving any country 
 
 ```python
 report_data = execute_kw(
-    model="account.report", method="get_report_information", args=[[target_report_id], opts_raw.result]
+    model="account.report",
+    method="get_report_information",
+    args=[[target_report_id], opts_raw.result]
 )
 ```
