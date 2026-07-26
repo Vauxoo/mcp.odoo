@@ -13,17 +13,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   credential is supplied. It now completes the interactive wizard by prompting
   for the credential, and fails fast with a clear message only when run
   non-interactively (e.g. in CI).
-- A bare `--password`/`--api-key` flag no longer swallows the following token
-  (e.g. `--api-key --database mydb` used to bind `api_key="--database"` and
-  report `mydb` as an unexpected extra argument). Both now use an
-  optional-value flag, mirroring `edit-profile`.
-
-### Security
-
-- `add-profile` credentials are prompted for with hidden input when the flag is
-  passed without a value, so the API key or password no longer needs to be
-  written on the command line, where it would be visible in the shell history
-  and to other processes. The README examples were updated accordingly.
 
 ## [0.9.0] - 2026-06-11
 

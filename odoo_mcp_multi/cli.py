@@ -134,21 +134,14 @@ def _resolve_add_profile_credentials(
 ) -> tuple[str | None, str | None, dict | None]:
     """Resolve the add-profile credential and detect the server version.
 
-    A bare --password/--api-key flag (sentinel ``__PROMPT__``), or no credential
-    at all in a terminal, is prompted for with hidden input; no credential in a
-    non-interactive context (no tty, e.g. CI) fails fast. For Odoo 19+ a password
-    is migrated to an api_key. Returns ``(password, api_key, version_info)``; the
-    version_info is handed back so the caller's connection test can reuse it
-    instead of probing the server again.
+    No credential at all in a terminal is prompted for with hidden input; no
+    credential in a non-interactive context (no tty, e.g. CI) fails fast. For
+    Odoo 19+ a password is migrated to an api_key. Returns
+    ``(password, api_key, version_info)``; the version_info is handed back so the
+    caller's connection test can reuse it instead of probing the server again.
     """
     from odoo_mcp_multi.parsers import normalize_url, parse_version
     from odoo_mcp_multi.version import get_server_version
-
-    # A bare --password/--api-key flag asks for the secret with hidden input.
-    if password == "__PROMPT__":
-        password = click.prompt("Password", hide_input=True)
-    if api_key == "__PROMPT__":
-        api_key = click.prompt("API key (Odoo 19+ Bearer token)", hide_input=True)
 
     # No credential at all when run non-interactively (e.g. CI): fail fast with a
     # clear message, before any network probe or prompt.
@@ -196,21 +189,8 @@ def _resolve_add_profile_credentials(
 @click.option("--url", prompt="Odoo URL", help="Instance URL (e.g., 'https://odoo.example.com')")
 @click.option("--database", prompt="Database name", help="Odoo database name")
 @click.option("--user", default=None, help="Odoo username (legacy auth, Odoo < 19)")
-@click.option(
-    "--password",
-    is_flag=False,
-    flag_value="__PROMPT__",
-    default=None,
-    help="Odoo password (legacy auth, Odoo < 19); prompts hidden if the flag is used without a value",
-)
-@click.option(
-    "--api-key",
-    "api_key",
-    is_flag=False,
-    flag_value="__PROMPT__",
-    default=None,
-    help="API key for Odoo 19+ Bearer auth (/json/2); prompts hidden if the flag is used without a value",
-)
+@click.option("--password", default=None, hide_input=True, help="Odoo password (legacy auth, Odoo < 19)")
+@click.option("--api-key", "api_key", default=None, help="API key for Odoo 19+ Bearer auth (/json/2)")
 @click.option("--protocol", default="auto", help="RPC protocol: auto, json2s, jsonrpcs, xmlrpcs (default: auto)")
 @click.option("--verify/--no-verify", "verify", default=True, help="Verify SSL certificates (default: True)")
 @click.option("--default", "set_default", is_flag=True, help="Set as default profile")
@@ -232,11 +212,6 @@ def cmd_add_profile(
     For Odoo < 19  (XML-RPC / JSON-RPC): use --user + --password.
     For Odoo >= 19 (JSON-2 REST API):     use --api-key.
 
-    The credential is never required on the command line: pass --password or
-    --api-key without a value (or omit it entirely in an interactive terminal)
-    and it is prompted for with hidden input, so the secret never lands in the
-    shell history or in another process' view of the command line.
-
     When the server is Odoo 19+ and --password is provided instead of
     --api-key, the credential is automatically stored as api_key
     (the JSON-2 protocol requires a Bearer token, not user/password).
@@ -247,7 +222,7 @@ def cmd_add_profile(
           --database mydb --user admin --password
 
       odoo-mcp add-profile --name prod19 --url https://odoo19.example.com \\
-          --database mydb --protocol json2s --api-key
+          --database mydb --api-key YOUR_KEY --protocol json2s
     """
     from odoo_mcp_multi.parsers import normalize_url
     from odoo_mcp_multi.version import get_server_version
