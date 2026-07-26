@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-07-26
+
 ### Fixed
 
 - Fixed interactive `add-profile` CLI wizard to complete prompts cleanly in terminal mode without raising errors when username is omitted for Odoo 19+ API Key auth.
@@ -18,6 +20,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Added portable Git worktree policy guidelines to `CONTRIBUTING.md` and `.cursorrules`.
+
+## [0.10.0] - 2026-06-15
+
+### Added
+
+- Expose Odoo's financial reports (Balance Sheet, Profit & Loss, Partner Ledger, etc.) via new `get_financial_report` CLI command and MCP tool.
+- Add complete test coverage for the financial reports operation, including mocking Odoo RPC calls, testing date options, company context propagation, multiple format outputs, and RPC error handling.
+
+### Changed
+
+- Refactored HTML report rendering to use Jinja2 templates (`financial_report.html` and `financial_report.css`), decoupling layout structure from Python logic.
+- Simplified resource loading via standard Python `importlib.resources`.
+- Added multi-company support to `get_financial_report` allowing reports filtering by multiple company IDs.
+- Applied Vauxoo corporate design guidelines and visual brand identity (colors, typography) to HTML reports.
+- Centralized version validation under `BaseOdooClient` to support Odoo 19+ singular (`get_report_information`) and Odoo 17-18 plural (`get_report_informations`) financial report RPC endpoints.
 
 ## [0.9.0] - 2026-06-11
 
