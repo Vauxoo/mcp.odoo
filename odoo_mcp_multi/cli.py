@@ -125,65 +125,6 @@ def main() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _resolve_add_profile_credentials(
-    url: str,
-    verify: bool,
-    protocol: str,
-    password: str | None,
-    api_key: str | None,
-) -> tuple[str | None, str | None, dict | None]:
-    """Resolve the add-profile credential and detect the server version.
-
-    No credential at all in a terminal is prompted for with hidden input; no
-    credential in a non-interactive context (no tty, e.g. CI) fails fast. For
-    Odoo 19+ a password is migrated to an api_key. Returns
-    ``(password, api_key, version_info)``; the version_info is handed back so the
-    caller's connection test can reuse it instead of probing the server again.
-    """
-    from odoo_mcp_multi.parsers import normalize_url, parse_version
-    from odoo_mcp_multi.version import get_server_version
-
-    # No credential at all when run non-interactively (e.g. CI): fail fast with a
-    # clear message, before any network probe or prompt.
-    if not password and not api_key and not sys.stdin.isatty():
-        click.secho(
-            f"{CROSS} Provide either --password (legacy) or --api-key (Odoo 19+).",
-            fg="red",
-        )
-        raise SystemExit(1)
-
-    # Detect the server version: it decides both which credential to ask for when
-    # none was given, and whether to migrate a password to api_key.
-    server_major = 0
-    version_info = None
-    try:
-        version_info = get_server_version(normalize_url(url), verify=verify)
-        if version_info:
-            ver_str = version_info.get("server_version", version_info.get("version", ""))
-            server_major, _, _ = parse_version(ver_str)
-    except Exception:
-        pass
-
-    # Still no credential: prompt for it (hidden), choosing the type by protocol
-    # or detected server version.
-    if not password and not api_key:
-        if protocol == "json2s" or server_major >= 19:
-            api_key = click.prompt("API key (Odoo 19+ Bearer token)", hide_input=True)
-        else:
-            password = click.prompt("Password", hide_input=True)
-
-    if server_major >= 19 and password and not api_key:
-        # Odoo 19+ requires Bearer token — treat the provided password as api_key
-        api_key = password
-        password = None
-        click.secho(
-            f"[WARN] Odoo {server_major} detected — credential stored as api_key (Bearer token).",
-            fg="yellow",
-        )
-
-    return password, api_key, version_info
-
-
 @main.command("add-profile")
 @click.option("--name", prompt="Profile name", help="Unique identifier (e.g., 'prod', 'staging')")
 @click.option("--url", prompt="Odoo URL", help="Instance URL (e.g., 'https://odoo.example.com')")
@@ -224,10 +165,35 @@ def cmd_add_profile(
       odoo-mcp add-profile --name prod19 --url https://odoo19.example.com \\
           --database mydb --api-key YOUR_KEY --protocol json2s
     """
-    from odoo_mcp_multi.parsers import normalize_url
+    # Validation: require at least one auth method
+    if not password and not api_key:
+        click.secho(
+            f"{CROSS} Provide either --password (legacy) or --api-key (Odoo 19+).",
+            fg="red",
+        )
+        raise SystemExit(1)
+
+    # Detect server version to auto-migrate password → api_key for Odoo 19+
+    from odoo_mcp_multi.parsers import normalize_url, parse_version
     from odoo_mcp_multi.version import get_server_version
 
-    password, api_key, version_info = _resolve_add_profile_credentials(url, verify, protocol, password, api_key)
+    server_major = 0
+    try:
+        version_info = get_server_version(normalize_url(url), verify=verify)
+        if version_info:
+            ver_str = version_info.get("server_version", version_info.get("version", ""))
+            server_major, _, _ = parse_version(ver_str)
+    except Exception:
+        pass
+
+    if server_major >= 19 and password and not api_key:
+        # Odoo 19+ requires Bearer token — treat the provided password as api_key
+        api_key = password
+        password = None
+        click.secho(
+            f"[WARN] Odoo {server_major} detected — credential stored as api_key (Bearer token).",
+            fg="yellow",
+        )
 
     if test_connection:
         click.echo(f"Testing connection to {url}...")
