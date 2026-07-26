@@ -1163,12 +1163,20 @@ def get_financial_report(
         previous_options = _parse_date_options(date_from, date_to, date_filter)
 
         # get_options resolves country redirects and sets up the active variant ID.
+        # NOTE: `previous_options` must be passed as a named kwarg, not as a positional
+        # arg, because the JSON-2 client (Odoo 19+) translates positional args to named
+        # parameters using the /doc-bearer signature. If the method is not in the static
+        # _JSON2_METHOD_SIGNATURES dict, unknown positional args fall back to `_arg0`,
+        # `_arg1`, etc., which Odoo does not recognise — causing a 422 error:
+        #   "missing a required argument: 'previous_options'"
+        # Passing it in kwargs guarantees the correct parameter name in the JSON body
+        # for both JSON-2 (Odoo 19+) and JSON-RPC / XML-RPC (Odoo 17-18).
         try:
             options = client.execute_kw(
                 "account.report",
                 "get_options",
-                [[report_id], previous_options],
-                {"context": ctx},
+                [[report_id]],
+                {"previous_options": previous_options, "context": ctx},
             )
         except Exception as exc:
             err_msg = str(exc).lower()
@@ -1193,8 +1201,8 @@ def get_financial_report(
             report_info = client.execute_kw(
                 "account.report",
                 report_info_method,
-                [[actual_report_id], options],
-                {"context": ctx},
+                [[actual_report_id]],
+                {"options": options, "context": ctx},
             )
         except OdooMethodNotFoundError:
             # Fallback mechanism: if version detection was incorrect or the environment differs,
@@ -1208,8 +1216,8 @@ def get_financial_report(
             report_info = client.execute_kw(
                 "account.report",
                 fallback_method,
-                [[actual_report_id], options],
-                {"context": ctx},
+                [[actual_report_id]],
+                {"options": options, "context": ctx},
             )
             client.last_warning = (
                 f"Odoo version mismatch detected. Switched dynamically to fallback method "

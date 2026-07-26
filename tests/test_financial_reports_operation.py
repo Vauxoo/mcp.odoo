@@ -243,10 +243,12 @@ def test_op_get_financial_report_dates_and_options(mock_get_client):
         format="json",
         profile="test",
     )
-    first_call_options = mock_client.execute_kw.call_args_list[0][0][2]
-    assert first_call_options[1]["date"]["filter"] == "this_year"
-    assert first_call_options[1]["date"]["date_from"] == "2025-01-01"
-    assert first_call_options[1]["date"]["date_to"] == "2025-12-31"
+    # previous_options is now passed as a named kwarg (4th positional arg to execute_kw)
+    # to ensure the JSON-2 client serializes it with the correct parameter name.
+    first_call_odoo_kwargs = mock_client.execute_kw.call_args_list[0][0][3]
+    assert first_call_odoo_kwargs["previous_options"]["date"]["filter"] == "this_year"
+    assert first_call_odoo_kwargs["previous_options"]["date"]["date_from"] == "2025-01-01"
+    assert first_call_odoo_kwargs["previous_options"]["date"]["date_to"] == "2025-12-31"
 
     # Test 2: date_from only (triggers custom filter assignment)
     op_get_financial_report(
@@ -255,9 +257,9 @@ def test_op_get_financial_report_dates_and_options(mock_get_client):
         format="json",
         profile="test",
     )
-    second_call_options = mock_client.execute_kw.call_args_list[2][0][2]
-    assert second_call_options[1]["date"]["filter"] == "custom"
-    assert second_call_options[1]["date"]["date_from"] == "2025-01-01"
+    second_call_odoo_kwargs = mock_client.execute_kw.call_args_list[2][0][3]
+    assert second_call_odoo_kwargs["previous_options"]["date"]["filter"] == "custom"
+    assert second_call_odoo_kwargs["previous_options"]["date"]["date_from"] == "2025-01-01"
 
     # Test 3: date_to only (triggers custom filter assignment)
     op_get_financial_report(
@@ -266,9 +268,9 @@ def test_op_get_financial_report_dates_and_options(mock_get_client):
         format="json",
         profile="test",
     )
-    third_call_options = mock_client.execute_kw.call_args_list[4][0][2]
-    assert third_call_options[1]["date"]["filter"] == "custom"
-    assert third_call_options[1]["date"]["date_to"] == "2025-12-31"
+    third_call_odoo_kwargs = mock_client.execute_kw.call_args_list[4][0][3]
+    assert third_call_odoo_kwargs["previous_options"]["date"]["filter"] == "custom"
+    assert third_call_odoo_kwargs["previous_options"]["date"]["date_to"] == "2025-12-31"
 
     # Test 4: date_filter only (no custom date)
     op_get_financial_report(
@@ -277,9 +279,9 @@ def test_op_get_financial_report_dates_and_options(mock_get_client):
         format="json",
         profile="test",
     )
-    fourth_call_options = mock_client.execute_kw.call_args_list[6][0][2]
-    assert fourth_call_options[1]["date"]["filter"] == "today"
-    assert "date_from" not in fourth_call_options[1]["date"]
+    fourth_call_odoo_kwargs = mock_client.execute_kw.call_args_list[6][0][3]
+    assert fourth_call_odoo_kwargs["previous_options"]["date"]["filter"] == "today"
+    assert "date_from" not in fourth_call_odoo_kwargs["previous_options"]["date"]
 
 
 @patch("odoo_mcp_multi.operations._get_client")
@@ -366,15 +368,15 @@ def test_op_get_financial_report_company_ids(mock_get_client):
     # Test with string company IDs
     res = op_get_financial_report(report_id_or_name=4, format="json", profile="test", company_ids="19,1")
     assert res["success"] is True
-    # The fourth positional argument is the kwargs dict passed to execute_kw
-    args_1 = mock_client.execute_kw.call_args_list[0][0]
-    assert args_1[3] == {"context": {"allowed_company_ids": [19, 1]}}
+    # context is the 4th positional arg passed to execute_kw (the Odoo kwargs dict)
+    odoo_kwargs_1 = mock_client.execute_kw.call_args_list[0][0][3]
+    assert odoo_kwargs_1["context"] == {"allowed_company_ids": [19, 1]}
 
     # Test with list company IDs
     res2 = op_get_financial_report(report_id_or_name=4, format="json", profile="test", company_ids=[1, 19])
     assert res2["success"] is True
-    args_2 = mock_client.execute_kw.call_args_list[2][0]
-    assert args_2[3] == {"context": {"allowed_company_ids": [1, 19]}}
+    odoo_kwargs_2 = mock_client.execute_kw.call_args_list[2][0][3]
+    assert odoo_kwargs_2["context"] == {"allowed_company_ids": [1, 19]}
 
     # Test with invalid company IDs string
     res3 = op_get_financial_report(report_id_or_name=4, format="json", profile="test", company_ids="invalid,1")
@@ -559,7 +561,9 @@ def test_get_financial_report_dynamic_fallback(mock_get_client, mock_get_server_
 
 def test_load_skill_resource_error_wrapping():
     from unittest.mock import patch
+
     import pytest
+
     from odoo_mcp_multi.operations import _load_skill_resource
 
     # Verify that any generic package resource errors are caught and wrapped in ValueError
@@ -626,6 +630,7 @@ def test_validate_server_version_non_mock():
 
 def test_client_version_validation_and_caching():
     from unittest.mock import patch
+
     from odoo_mcp_multi.client import XmlRpcClient
 
     client = XmlRpcClient(
@@ -664,10 +669,7 @@ def test_client_version_validation_and_caching():
         assert ver == "17.0"
         assert client2._server_version == "17.0"
         mock_exec_kw.assert_called_once_with(
-            "ir.module.module",
-            "search_read",
-            [[("name", "=", "base")], ["latest_version"]],
-            {}
+            "ir.module.module", "search_read", [[("name", "=", "base")], ["latest_version"]], {}
         )
 
     # 3. Failure case: all endpoints fail, returns 'unknown' and raises ValueError on validation
@@ -696,4 +698,3 @@ def test_client_version_validation_and_caching():
     client4._server_version = "18.0"
     major = client4.validate_version(min_version=17, feature_name="Test")
     assert major == 18
-
