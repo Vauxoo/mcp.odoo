@@ -647,12 +647,15 @@ def cmd_list_fields(model, fmt, profile) -> None:
 # Plugins & Skills management commands
 # ---------------------------------------------------------------------------
 
+# "agents" is the cross-agent standard location (agentskills.io), read
+# natively by Codex, Gemini CLI, OpenCode, Kimi and Hermes.
 AGENT_DIRS = {
-    "gemini": "~/.gemini/config/skills",
+    "agents": "~/.agents/skills",
     "antigravity": "~/.gemini/config/plugins/odoo-mcp",
     "claude": "~/.claude/skills",
-    "codex": "~/.codex/skills",
-    "opencode": "~/.opencode/skills",
+    "codex": "~/.agents/skills",
+    "gemini": "~/.gemini/skills",
+    "opencode": "~/.config/opencode/skills",
     "kimi": "~/.kimi/skills",
     "hermes": "~/.hermes/skills",
 }
