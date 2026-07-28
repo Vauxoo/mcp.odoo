@@ -7,27 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-07-28
+
+### Added
+
+- Added support for `kimi` (`~/.kimi/skills`) and `hermes` (`~/.hermes/skills`) agent managers to `odoo-mcp skills install <agent>`.
+
 ### Changed
 
-- Lowered the default `limit` of `search_read` from 100 to 25 (MCP tool, operation,
-  and CLI). Larger sets are reached by paging with the returned `next_offset`, so this
-  cuts default result size ~4x without losing reach. `export_records` (bulk) is unchanged.
-- `search_read` now returns an additive `hint` key when no `fields` are specified,
-  nudging callers to pass explicit fields to reduce token usage. The response shape is
-  otherwise unchanged (backward compatible).
-- Extended the MCP server `instructions` and `search_read` docstrings with a
-  "Token efficiency" section (prefer `format='compact'`/`csv`, explicit `fields`, small
-  `limit` + pagination, `search_count` before wide reads).
+- Lowered default `limit` of `search_read` from 100 to 25 across FastMCP tool, operations, CLI, and bundled skill guides (`odoo-mcp-tools` and `odoo-mcp-cli`). Paging via `next_offset` reaches larger sets with ~4x smaller default payload.
+- Added additive `hint` key when no `fields` are passed to `search_read`, nudging callers toward explicit fields to cut token usage.
+- Added token-efficiency guidance in MCP server system prompt, docstrings, and skills documentation (explicit `fields`, `format='compact'`/`csv`, small `limit` + `next_offset`, `search_count`).
 
 ### Fixed
 
 - Fixed `odoo-mcp skills install antigravity` and `gemini` target paths to align with modern Antigravity plugin (`~/.gemini/config/plugins/odoo-mcp/skills`) and Gemini skills (`~/.gemini/config/skills`) directory structure.
 - Removed hardcoded absolute file path in `odoo-financial-reports/SKILL.md` to restore skill portability across environments.
 - Pinned `mcp[cli]>=1.0.0,<2.0.0` dependency to prevent breaking changes in PyPI releases of `mcp 2.0.0` from breaking CI builds.
-
-### Added
-
-- Added support for `kimi` (`~/.kimi/skills`) and `hermes` (`~/.hermes/skills`) agent managers to `odoo-mcp skills install <agent>`.
 
 ## [0.11.0] - 2026-07-26
 
