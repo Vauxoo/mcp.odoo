@@ -426,28 +426,28 @@ def test_assert_no_credentials():
         _assert_no_credentials("Here is api_key=secret")
 
 
-def test_load_skill_resource_security():
+def test_load_template_resource_security():
     import pytest
 
-    from odoo_mcp_multi.operations import _load_skill_resource
+    from odoo_mcp_multi.operations import _load_template_resource
 
     # Safe loading should pass
-    css = _load_skill_resource("financial_report.css")
+    css = _load_template_resource("financial_report.css")
     assert "body {" in css
 
     # Relative paths with authorized basenames should succeed
-    html = _load_skill_resource("skills/odoo-financial-reports/financial_report.html")
+    html = _load_template_resource("templates/financial_report.html")
     assert "report_name" in html
 
     # Path traversal / unknown filename should raise ValueError
     with pytest.raises(ValueError, match="Could not load resource"):
-        _load_skill_resource("some_other_file.txt")
+        _load_template_resource("some_other_file.txt")
 
     with pytest.raises(ValueError, match="Could not load resource"):
-        _load_skill_resource("../operations.py")
+        _load_template_resource("../operations.py")
 
     with pytest.raises(ValueError, match="Could not load resource"):
-        _load_skill_resource("..\\operations.py")
+        _load_template_resource("..\\operations.py")
 
 
 @patch("odoo_mcp_multi.operations.get_server_version")
@@ -559,17 +559,17 @@ def test_get_financial_report_dynamic_fallback(mock_get_client, mock_get_server_
     assert "Failed to get financial report" in res2["error"]
 
 
-def test_load_skill_resource_error_wrapping():
+def test_load_template_resource_error_wrapping():
     from unittest.mock import patch
 
     import pytest
 
-    from odoo_mcp_multi.operations import _load_skill_resource
+    from odoo_mcp_multi.operations import _load_template_resource
 
     # Verify that any generic package resource errors are caught and wrapped in ValueError
     with patch("importlib.resources.files", side_effect=Exception("Package resource error")):
         with pytest.raises(ValueError, match="Could not load resource"):
-            _load_skill_resource("financial_report.css")
+            _load_template_resource("financial_report.css")
 
 
 def test_get_financial_report_inline_compat_fail():

@@ -854,19 +854,20 @@ def _assert_no_credentials(data: Any) -> None:
                 raise ValueError(f"Potential assignment of sensitive keyword '{sk}' in template context.")
 
 
-def _load_skill_resource(filename: str) -> str:
-    """Load a static template resource from the package skills directory.
+def _load_template_resource(filename: str) -> str:
+    """Load a static template resource from the package templates directory.
 
-    We use standard importlib.resources to access package resources so that files
-    can be resolved cleanly from zipped environments, editable installs, and production.
+    Templates live under odoo_mcp_multi/templates/ so the server runtime
+    never depends on agent-facing skill content. We use standard
+    importlib.resources to access package resources so that files can be
+    resolved cleanly from zipped environments, editable installs, and
+    production.
     """
     normalized = filename.replace("\\", "/").split("/")[-1]
     try:
         from importlib.resources import files
 
-        resource_path = files("odoo_mcp_multi").joinpath(
-            "plugins", "odoo-mcp", "skills", "odoo-financial-reports", normalized
-        )
+        resource_path = files("odoo_mcp_multi").joinpath("templates", normalized)
         return resource_path.read_text(encoding="utf-8")
     except Exception as exc:
         raise ValueError(f"Could not load resource {filename}: {exc}") from exc
@@ -914,8 +915,8 @@ def _format_report_html(
     else:
         company_name = report_meta.get("company_name", "")
 
-    css_content = _load_skill_resource("financial_report.css")
-    html_tpl_string = _load_skill_resource("financial_report.html")
+    css_content = _load_template_resource("financial_report.css")
+    html_tpl_string = _load_template_resource("financial_report.html")
 
     header_rows = _build_report_headers(options, cols)
 
