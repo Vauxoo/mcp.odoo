@@ -655,7 +655,7 @@ def cmd_list_fields(model, fmt, profile) -> None:
 # installs the full plugin (manifest + skills).
 AGENT_DIRS = {
     "agents": "~/.agents/skills",
-    "antigravity": "~/.gemini/config/plugins/odoo-mcp",
+    "antigravity": "~/.gemini/config/plugins",
     "agy": "~/.gemini/config/skills",
     "claude": "~/.claude/skills",
     "codex": "~/.agents/skills",
@@ -791,6 +791,8 @@ def _install_plugin_or_skills(agent: str, force: bool, symlink: bool = False) ->
     target_dir = Path(target_dir_str).expanduser()
 
     if agent == "antigravity":
+        # The plugin directory name is the single source of the plugin id.
+        target_dir = target_dir / plugin_dir.name
         installed, failed, skipped = _install_antigravity_plugin(plugin_dir, skills_dir, target_dir, force, symlink)
         _report_installation_result(agent, installed, failed, skipped)
         return
@@ -856,6 +858,7 @@ def _uninstall_plugin_or_skills(agent: str) -> None:
     # The antigravity target is a plugin directory owned entirely by
     # odoo-mcp, so it is removed as a whole.
     if agent == "antigravity":
+        target_dir = target_dir / _get_plugin_dir().name
         if not target_dir.exists() and not target_dir.is_symlink():
             click.echo(f"Nothing to uninstall for {agent} ({target_dir} not found).")
             return
