@@ -587,9 +587,10 @@ def test_cli_skills_install_no_skills_dir(mock_path_cls):
     assert result.exit_code == 1
 
 
-@patch("pathlib.Path.symlink_to", side_effect=OSError("Permission denied"))
-def test_cli_skills_install_symlink_failure(mock_symlink):
-    """When symlink creation fails, report error and exit 1."""
-    result = runner.invoke(main, ["skills", "install", "antigravity", "--force"])
+def test_cli_skills_install_copy_failure(tmp_path, monkeypatch):
+    """When file installation fails, report error and exit 1."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    with patch("odoo_mcp_multi.cli.shutil.copytree", side_effect=OSError("Permission denied")):
+        result = runner.invoke(main, ["skills", "install", "antigravity", "--force"])
     assert result.exit_code == 1
     assert "failed" in result.output.lower() or "error" in result.output.lower()

@@ -314,7 +314,9 @@ def test_cli_plugins_install_antigravity_layout(tmp_path, monkeypatch):
     assert "Successfully installed for antigravity!" in result.output
 
     plugin_root = tmp_path / ".gemini" / "config" / "plugins" / "odoo-mcp"
-    assert (plugin_root / "plugin.json").exists()
+    assert (plugin_root / "plugin.json").is_file()
+    # Copies by default: real files, not symlinks into the package
+    assert not (plugin_root / "plugin.json").is_symlink()
     skills = plugin_root / "skills"
     skill_names = sorted(p.name for p in skills.iterdir())
     assert "odoo-mcp-cli" in skill_names
@@ -331,7 +333,7 @@ def test_cli_plugins_install_idempotent_and_force(tmp_path, monkeypatch):
     rerun = runner.invoke(main, ["plugins", "install", "antigravity"])
     assert rerun.exit_code == 0
     assert "Skipping" in rerun.output
-    assert "0 linked" in rerun.output
+    assert "0 installed" in rerun.output
 
     forced = runner.invoke(main, ["plugins", "install", "antigravity", "--force"])
     assert forced.exit_code == 0
@@ -348,10 +350,20 @@ def test_cli_skills_install_flat_agent(tmp_path, monkeypatch):
     assert not (target / "plugin.json").exists()
 
 
-def test_cli_plugins_install_reports_link_failures(tmp_path, monkeypatch):
-    """Link failures are reported per item and the command exits non-zero."""
+def test_cli_plugins_install_symlink_mode(tmp_path, monkeypatch):
+    """--symlink links into the package source instead of copying."""
     monkeypatch.setenv("HOME", str(tmp_path))
-    with patch("pathlib.Path.symlink_to", side_effect=OSError("permission denied")):
+    result = runner.invoke(main, ["plugins", "install", "claude", "--symlink"])
+    assert result.exit_code == 0
+    target = tmp_path / ".claude" / "skills"
+    assert (target / "odoo-mcp-tools").is_symlink()
+    assert (target / "odoo-mcp-tools" / "SKILL.md").exists()
+
+
+def test_cli_plugins_install_reports_failures(tmp_path, monkeypatch):
+    """Install failures are reported per item and the command exits non-zero."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    with patch("odoo_mcp_multi.cli.shutil.copytree", side_effect=OSError("permission denied")):
         result = runner.invoke(main, ["plugins", "install", "claude"])
     assert result.exit_code == 1
     assert "Completed with errors" in result.output

@@ -8,6 +8,7 @@ the MCP tool interface. Both interfaces share logic via operations.py.
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -669,36 +670,56 @@ def _get_skills_dir() -> Path:
     return _get_plugin_dir() / "skills"
 
 
-def _link_symlink_item(item: Path, dest: Path, force: bool) -> tuple[int, int, int]:
-    """Helper to link a single file or directory via symlink."""
+def _remove_existing(dest: Path) -> None:
+    """Remove a previously installed symlink, file, or copied directory."""
+    if dest.is_symlink() or dest.is_file():
+        dest.unlink()
+    elif dest.is_dir():
+        shutil.rmtree(dest)
+
+
+def _install_item(item: Path, dest: Path, force: bool, symlink: bool) -> tuple[int, int, int]:
+    """Install a single file or directory by copy (default) or symlink.
+
+    Copying is the default because symlinks are not discovered by the
+    Antigravity IDE, require elevated privileges on Windows, and dangle
+    when an editable install lives in a temporary git worktree. Returns
+    (installed, failed, skipped) counts for aggregation.
+    """
     if (dest.exists() or dest.is_symlink()) and not force:
         click.secho(f"  - Skipping {dest.name}: already exists. Use --force to overwrite.", fg="yellow")
         return (0, 0, 1)
 
-    if dest.exists() or dest.is_symlink():
-        dest.unlink()
-
     try:
-        dest.symlink_to(item.absolute())
-        click.secho(f"  {TICK} Linked {dest.name}", fg="green")
+        if dest.exists() or dest.is_symlink():
+            _remove_existing(dest)
+        if symlink:
+            dest.symlink_to(item.absolute())
+        elif item.is_dir():
+            shutil.copytree(item, dest)
+        else:
+            shutil.copy2(item, dest)
+        verb = "Linked" if symlink else "Copied"
+        click.secho(f"  {TICK} {verb} {dest.name}", fg="green")
         return (1, 0, 0)
     except Exception as e:
-        click.secho(f"  {CROSS} Failed to link {dest.name}: {e}", fg="red", err=True)
+        click.secho(f"  {CROSS} Failed to install {dest.name}: {e}", fg="red", err=True)
         return (0, 1, 0)
 
 
 def _install_antigravity_plugin(
-    plugin_dir: Path, skills_dir: Path, target_dir: Path, force: bool
+    plugin_dir: Path, skills_dir: Path, target_dir: Path, force: bool, symlink: bool
 ) -> tuple[int, int, int]:
+    """Install plugin.json plus every skill into the Antigravity plugin tree."""
     target_dir.mkdir(parents=True, exist_ok=True)
     click.echo(f"Installing plugin for antigravity into {target_dir}...")
 
-    linked, failed, skipped = 0, 0, 0
+    installed, failed, skipped = 0, 0, 0
 
     plugin_json = plugin_dir / "plugin.json"
     if plugin_json.exists():
-        link_cnt, fail_cnt, skip_cnt = _link_symlink_item(plugin_json, target_dir / "plugin.json", force)
-        linked += link_cnt
+        inst_cnt, fail_cnt, skip_cnt = _install_item(plugin_json, target_dir / "plugin.json", force, symlink)
+        installed += inst_cnt
         failed += fail_cnt
         skipped += skip_cnt
 
@@ -708,45 +729,50 @@ def _install_antigravity_plugin(
     for item in sorted(skills_dir.iterdir()):
         if not item.is_dir() or not (item / "SKILL.md").exists():
             continue
-        link_cnt, fail_cnt, skip_cnt = _link_symlink_item(item, target_skills_dir / item.name, force)
-        linked += link_cnt
+        inst_cnt, fail_cnt, skip_cnt = _install_item(item, target_skills_dir / item.name, force, symlink)
+        installed += inst_cnt
         failed += fail_cnt
         skipped += skip_cnt
 
-    return linked, failed, skipped
+    return installed, failed, skipped
 
 
-def _install_flat_skills(agent: str, skills_dir: Path, target_dir: Path, force: bool) -> tuple[int, int, int]:
+def _install_flat_skills(
+    agent: str, skills_dir: Path, target_dir: Path, force: bool, symlink: bool
+) -> tuple[int, int, int]:
+    """Install bare skill directories for agents without a plugin manifest."""
     target_dir.mkdir(parents=True, exist_ok=True)
     click.echo(f"Installing skills for {agent} into {target_dir}...")
 
-    linked, failed, skipped = 0, 0, 0
+    installed, failed, skipped = 0, 0, 0
     for item in sorted(skills_dir.iterdir()):
         if not item.is_dir() or not (item / "SKILL.md").exists():
             continue
-        link_cnt, fail_cnt, skip_cnt = _link_symlink_item(item, target_dir / item.name, force)
-        linked += link_cnt
+        inst_cnt, fail_cnt, skip_cnt = _install_item(item, target_dir / item.name, force, symlink)
+        installed += inst_cnt
         failed += fail_cnt
         skipped += skip_cnt
 
-    return linked, failed, skipped
+    return installed, failed, skipped
 
 
-def _report_installation_result(agent: str, linked: int, failed: int, skipped: int) -> None:
+def _report_installation_result(agent: str, installed: int, failed: int, skipped: int) -> None:
+    """Print the aggregate install summary and exit non-zero on failures."""
     if failed:
         click.secho(
-            f"\n{CROSS} Completed with errors: {linked} linked, {failed} failed, {skipped} skipped.",
+            f"\n{CROSS} Completed with errors: {installed} installed, {failed} failed, {skipped} skipped.",
             fg="red",
         )
         sys.exit(1)
 
     click.secho(
-        f"\n{TICK} Successfully installed for {agent}! ({linked} linked, {skipped} skipped)",
+        f"\n{TICK} Successfully installed for {agent}! ({installed} installed, {skipped} skipped)",
         fg="green",
     )
 
 
-def _install_plugin_or_skills(agent: str, force: bool) -> None:
+def _install_plugin_or_skills(agent: str, force: bool, symlink: bool = False) -> None:
+    """Shared driver for plugins/skills install across all supported agents."""
     target_dir_str = AGENT_DIRS.get(agent)
     if not target_dir_str:
         click.secho(f"{CROSS} Unknown agent: {agent}", fg="red", err=True)
@@ -762,12 +788,12 @@ def _install_plugin_or_skills(agent: str, force: bool) -> None:
     target_dir = Path(target_dir_str).expanduser()
 
     if agent == "antigravity":
-        linked, failed, skipped = _install_antigravity_plugin(plugin_dir, skills_dir, target_dir, force)
-        _report_installation_result(agent, linked, failed, skipped)
+        installed, failed, skipped = _install_antigravity_plugin(plugin_dir, skills_dir, target_dir, force, symlink)
+        _report_installation_result(agent, installed, failed, skipped)
         return
 
-    linked, failed, skipped = _install_flat_skills(agent, skills_dir, target_dir, force)
-    _report_installation_result(agent, linked, failed, skipped)
+    installed, failed, skipped = _install_flat_skills(agent, skills_dir, target_dir, force, symlink)
+    _report_installation_result(agent, installed, failed, skipped)
 
 
 @main.group("plugins", invoke_without_command=True)
@@ -798,10 +824,21 @@ def cmd_plugins_list() -> None:
 
 @cmd_plugins.command("install")
 @click.argument("agent", type=click.Choice(list(AGENT_DIRS.keys())))
-@click.option("--force", is_flag=True, help="Overwrite existing symlinks")
-def cmd_plugins_install(agent: str, force: bool) -> None:
-    """Install plugin and skills to the specified agentic IDE via symbolic link."""
-    _install_plugin_or_skills(agent, force)
+@click.option("--force", is_flag=True, help="Overwrite existing installed files")
+@click.option(
+    "--symlink",
+    is_flag=True,
+    help="Symlink into the package instead of copying (dev mode; not discovered by Antigravity IDE)",
+)
+def cmd_plugins_install(agent: str, force: bool, symlink: bool) -> None:
+    """Install plugin and skills for the specified agentic IDE.
+
+    Files are copied by default so the install works on Windows, inside
+    the Antigravity IDE, and survives package relocation. Use --symlink
+    to link into the package source while developing; re-run with
+    --force after upgrading to refresh copied files.
+    """
+    _install_plugin_or_skills(agent, force, symlink)
 
 
 # Historic entry point kept as a true alias: both names expose the exact
