@@ -7,9 +7,10 @@ and error behavior — ensuring CLI and MCP are functionally equivalent.
 import json
 from unittest.mock import patch
 
+import pytest
 from click.testing import CliRunner
 
-from odoo_mcp_multi.cli import main
+from odoo_mcp_multi.cli import _install_plugin_or_skills, main
 
 runner = CliRunner()
 
@@ -305,12 +306,67 @@ def test_cli_skills_list():
     assert "odoo-mcp-cli" in result.output
 
 
-@patch("pathlib.Path.symlink_to")
-def test_cli_plugins_install(mock_symlink):
-    for agent in ("antigravity", "gemini", "kimi", "hermes"):
-        result = runner.invoke(main, ["plugins", "install", agent, "--force"])
-        assert result.exit_code == 0
-        assert f"Successfully installed for {agent}!" in result.output
-    assert mock_symlink.called
+def test_cli_plugins_install_antigravity_layout(tmp_path, monkeypatch):
+    """Antigravity install places plugin.json plus every skill in the plugin tree."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    result = runner.invoke(main, ["plugins", "install", "antigravity"])
+    assert result.exit_code == 0
+    assert "Successfully installed for antigravity!" in result.output
+
+    plugin_root = tmp_path / ".gemini" / "config" / "plugins" / "odoo-mcp"
+    assert (plugin_root / "plugin.json").exists()
+    skills = plugin_root / "skills"
+    skill_names = sorted(p.name for p in skills.iterdir())
+    assert "odoo-mcp-cli" in skill_names
+    assert "odoo-financial-reports" in skill_names
+    for skill in skills.iterdir():
+        assert (skill / "SKILL.md").exists()
 
 
+def test_cli_plugins_install_idempotent_and_force(tmp_path, monkeypatch):
+    """Re-running without --force skips existing items; --force reinstalls them."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    assert runner.invoke(main, ["plugins", "install", "antigravity"]).exit_code == 0
+
+    rerun = runner.invoke(main, ["plugins", "install", "antigravity"])
+    assert rerun.exit_code == 0
+    assert "Skipping" in rerun.output
+    assert "0 linked" in rerun.output
+
+    forced = runner.invoke(main, ["plugins", "install", "antigravity", "--force"])
+    assert forced.exit_code == 0
+    assert "Skipping" not in forced.output
+
+
+def test_cli_skills_install_flat_agent(tmp_path, monkeypatch):
+    """Flat agents get bare skill directories without the plugin manifest."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    result = runner.invoke(main, ["skills", "install", "claude"])
+    assert result.exit_code == 0
+    target = tmp_path / ".claude" / "skills"
+    assert (target / "odoo-mcp-tools" / "SKILL.md").exists()
+    assert not (target / "plugin.json").exists()
+
+
+def test_cli_plugins_install_reports_link_failures(tmp_path, monkeypatch):
+    """Link failures are reported per item and the command exits non-zero."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    with patch("pathlib.Path.symlink_to", side_effect=OSError("permission denied")):
+        result = runner.invoke(main, ["plugins", "install", "claude"])
+    assert result.exit_code == 1
+    assert "Completed with errors" in result.output
+
+
+def test_cli_plugins_install_without_skills_dir(tmp_path, monkeypatch):
+    """A missing packaged skills directory aborts the install with an error."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    with patch("odoo_mcp_multi.cli._get_skills_dir", return_value=tmp_path / "missing"):
+        result = runner.invoke(main, ["plugins", "install", "claude"])
+    assert result.exit_code == 1
+    assert "No skills found" in result.output
+
+
+def test_install_unknown_agent_exits():
+    """The shared install helper rejects agents outside AGENT_DIRS."""
+    with pytest.raises(SystemExit):
+        _install_plugin_or_skills("not-an-agent", force=False)
