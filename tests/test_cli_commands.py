@@ -382,3 +382,38 @@ def test_install_unknown_agent_exits():
     """The shared install helper rejects agents outside AGENT_DIRS."""
     with pytest.raises(SystemExit):
         _install_plugin_or_skills("not-an-agent", force=False)
+
+
+def test_cli_plugins_uninstall_antigravity(tmp_path, monkeypatch):
+    """Uninstall removes the whole antigravity plugin directory."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    assert runner.invoke(main, ["plugins", "install", "antigravity"]).exit_code == 0
+    plugin_root = tmp_path / ".gemini" / "config" / "plugins" / "odoo-mcp"
+    assert plugin_root.exists()
+
+    result = runner.invoke(main, ["plugins", "uninstall", "antigravity"])
+    assert result.exit_code == 0
+    assert not plugin_root.exists()
+
+
+def test_cli_plugins_uninstall_flat_agent_only_own_skills(tmp_path, monkeypatch):
+    """Flat uninstall removes only odoo-mcp skills, keeping unrelated ones."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    assert runner.invoke(main, ["plugins", "install", "claude"]).exit_code == 0
+    target = tmp_path / ".claude" / "skills"
+    foreign = target / "someone-elses-skill"
+    foreign.mkdir()
+    (foreign / "SKILL.md").write_text("---\nname: other\n---\n")
+
+    result = runner.invoke(main, ["plugins", "uninstall", "claude"])
+    assert result.exit_code == 0
+    assert not (target / "odoo-mcp-tools").exists()
+    assert foreign.exists()
+
+
+def test_cli_plugins_uninstall_nothing_installed(tmp_path, monkeypatch):
+    """Uninstall on a clean HOME reports nothing to do and exits 0."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    result = runner.invoke(main, ["plugins", "uninstall", "claude"])
+    assert result.exit_code == 0
+    assert "Nothing to uninstall" in result.output

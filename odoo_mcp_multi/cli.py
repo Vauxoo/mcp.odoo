@@ -841,6 +841,50 @@ def cmd_plugins_install(agent: str, force: bool, symlink: bool) -> None:
     _install_plugin_or_skills(agent, force, symlink)
 
 
+def _uninstall_plugin_or_skills(agent: str) -> None:
+    """Remove installed plugin/skill files (copies or symlinks) for an agent."""
+    target_dir_str = AGENT_DIRS.get(agent)
+    if not target_dir_str:
+        click.secho(f"{CROSS} Unknown agent: {agent}", fg="red", err=True)
+        sys.exit(1)
+
+    target_dir = Path(target_dir_str).expanduser()
+
+    # The antigravity target is a plugin directory owned entirely by
+    # odoo-mcp, so it is removed as a whole.
+    if agent == "antigravity":
+        if not target_dir.exists() and not target_dir.is_symlink():
+            click.echo(f"Nothing to uninstall for {agent} ({target_dir} not found).")
+            return
+        _remove_existing(target_dir)
+        click.secho(f"{TICK} Removed {target_dir}", fg="green")
+        return
+
+    # Flat agents share their skills directory with other packages —
+    # remove only the skills bundled with odoo-mcp.
+    removed = 0
+    for item in sorted(_get_skills_dir().iterdir()):
+        if not item.is_dir() or not (item / "SKILL.md").exists():
+            continue
+        dest = target_dir / item.name
+        if dest.exists() or dest.is_symlink():
+            _remove_existing(dest)
+            click.secho(f"  {TICK} Removed {dest.name}", fg="green")
+            removed += 1
+
+    if removed:
+        click.secho(f"\n{TICK} Uninstalled {removed} skill(s) for {agent}.", fg="green")
+    else:
+        click.echo(f"Nothing to uninstall for {agent} in {target_dir}.")
+
+
+@cmd_plugins.command("uninstall")
+@click.argument("agent", type=click.Choice(list(AGENT_DIRS.keys())))
+def cmd_plugins_uninstall(agent: str) -> None:
+    """Remove installed plugin and skills for the specified agentic IDE."""
+    _uninstall_plugin_or_skills(agent)
+
+
 # Historic entry point kept as a true alias: both names expose the exact
 # same group object, so subcommands and options can never drift apart.
 main.add_command(cmd_plugins, name="skills")
