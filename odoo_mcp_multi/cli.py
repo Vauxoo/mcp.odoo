@@ -773,7 +773,7 @@ def _install_plugin_or_skills(agent: str, force: bool) -> None:
 @main.group("plugins", invoke_without_command=True)
 @click.pass_context
 def cmd_plugins(ctx: click.Context) -> None:
-    """Manage agentic plugins provided by odoo-mcp."""
+    """Manage agentic plugins provided by odoo-mcp (alias: skills)."""
     if ctx.invoked_subcommand is None:
         ctx.invoke(cmd_plugins_list)
 
@@ -804,26 +804,9 @@ def cmd_plugins_install(agent: str, force: bool) -> None:
     _install_plugin_or_skills(agent, force)
 
 
-@main.group("skills", invoke_without_command=True)
-@click.pass_context
-def cmd_skills(ctx: click.Context) -> None:
-    """Manage agentic skills provided by odoo-mcp (alias for plugins)."""
-    if ctx.invoked_subcommand is None:
-        ctx.invoke(cmd_skills_list)
-
-
-@cmd_skills.command("list")
-def cmd_skills_list() -> None:
-    """List available skills bundled with odoo-mcp."""
-    _list_plugins_and_skills()
-
-
-@cmd_skills.command("install")
-@click.argument("agent", type=click.Choice(list(AGENT_DIRS.keys())))
-@click.option("--force", is_flag=True, help="Overwrite existing symlinks")
-def cmd_skills_install(agent: str, force: bool) -> None:
-    """Install skills to the specified agentic IDE via symbolic link."""
-    _install_plugin_or_skills(agent, force)
+# Historic entry point kept as a true alias: both names expose the exact
+# same group object, so subcommands and options can never drift apart.
+main.add_command(cmd_plugins, name="skills")
 
 
 # ---------------------------------------------------------------------------
