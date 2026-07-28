@@ -705,7 +705,7 @@ def _install_item(item: Path, dest: Path, force: bool, symlink: bool) -> tuple[i
         verb = "Linked" if symlink else "Copied"
         click.secho(f"  {TICK} {verb} {dest.name}", fg="green")
         return (1, 0, 0)
-    except Exception as e:
+    except OSError as e:
         click.secho(f"  {CROSS} Failed to install {dest.name}: {e}", fg="red", err=True)
         return (0, 1, 0)
 
