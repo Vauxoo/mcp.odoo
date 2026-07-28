@@ -27,7 +27,7 @@ depend on lower ones.
 ### Quick run
 
 ```bash
-python /path/to/odoo_mcp_multi/skills/odoo-module-deps/scripts/module_deps.py --profile <profile_name>
+python /path/to/odoo_mcp_multi/plugins/odoo-mcp/skills/odoo-module-deps/scripts/module_deps.py --profile <profile_name>
 ```
 
 ### Options

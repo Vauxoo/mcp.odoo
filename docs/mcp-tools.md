@@ -69,19 +69,14 @@ search_read(
 
 ---
 
-## `search_count`
+## Counting records (`execute_kw` + `search_count`)
 
-Count records matching a domain without fetching data. Returns ~100 bytes
-instead of potentially hundreds of KB.
-
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `model` | string | *(required)* | Model name |
-| `domain` | string | `[]` | Search domain |
-| `profile` | string | *(default)* | Target profile |
+`search_count` is not a standalone MCP tool — invoke the ORM method through
+`execute_kw` to count records matching a domain without fetching data.
+Returns ~100 bytes instead of potentially hundreds of KB.
 
 ```python
-search_count(model="account.move", domain="[('state', '=', 'posted')]")
+execute_kw(model="account.move", method="search_count", args="[[('state', '=', 'posted')]]")
 ```
 
 ---
@@ -97,6 +92,20 @@ search_count(model="account.move", domain="[('state', '=', 'posted')]")
 
 ```python
 write(model="res.partner", ids="[1, 2]", values='{"phone": "+52 555 1234"}')
+```
+
+---
+
+## `unlink`
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `model` | string | Model name |
+| `ids` | string | Record IDs as JSON array or comma-separated |
+| `profile` | string | Target profile |
+
+```python
+unlink(model="res.partner", ids="[42]")
 ```
 
 ---
@@ -206,6 +215,27 @@ list_fields(model="account.move", attributes="string,type", profile="prod")
 
 ```python
 get_version(profile="prod")
+```
+
+---
+
+## `get_financial_report`
+
+Calculate and format Odoo financial reports (Balance Sheet, P&L, Trial
+Balance, ledgers). Validated for Odoo 17.0, 18.0 and 19.0+. See the
+`odoo-financial-reports` skill for the full report catalog and options.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `report_id_or_name` | string | *(required)* | Report ID, XML ID, or exact name |
+| `date_from` / `date_to` | string | *(none)* | Date range (YYYY-MM-DD) |
+| `date_filter` | string | *(none)* | Preset filter (e.g. `this_month`) |
+| `format` | string | `json` | json, table, html, or csv |
+| `company_ids` | string | *(none)* | Comma-separated company IDs |
+| `profile` | string | *(default)* | Target profile |
+
+```python
+get_financial_report(report_id_or_name="Balance Sheet", date_filter="this_year", format="table")
 ```
 
 ---

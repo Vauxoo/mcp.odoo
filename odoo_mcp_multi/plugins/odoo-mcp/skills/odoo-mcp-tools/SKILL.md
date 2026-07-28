@@ -6,7 +6,7 @@ last_validated: 2026-05-09
 
 # Odoo MCP Tools Reference
 
-Complete reference for the 11 MCP tools provided by `odoo-mcp-multi`.
+Complete reference for the 12 MCP tools provided by `odoo-mcp-multi`.
 Use this skill when interacting with any Odoo instance via an MCP client
 (Antigravity, Claude Desktop, Cursor, VS Code).
 
@@ -290,6 +290,19 @@ list_fields(model="account.move", profile="prod")
 
 ```python
 get_version(profile="prod")
+```
+
+---
+
+### `get_financial_report` — Financial Reports
+
+Calculate and format Odoo financial reports (Balance Sheet, P&L, Trial
+Balance, ledgers) for Odoo 17.0, 18.0 and 19.0+. For the full report
+catalog, date filters, and formatting guidance use the dedicated
+`odoo-financial-reports` skill.
+
+```python
+get_financial_report(report_id_or_name="Balance Sheet", date_filter="this_year", format="table")
 ```
 
 ---

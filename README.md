@@ -39,9 +39,9 @@ through `jq`, and automate workflows without writing Python.
 - **Multi-profile management** — store credentials for `prod`, `staging`, `dev` (or any name) and switch with `-p`
 - **Auto protocol detection** — XML-RPC (8.0+), JSON-RPC, JSON/2 REST (19.0+) selected automatically per profile
 - **Secure credential storage** — `~/.config/odoo-mcp/profiles.json` with Unix `600` permissions (owner-read-only)
-- **12 MCP tools** — `search_read`, `search_count`, `write`, `unlink`, `create`, `export_records`, `import_records`, `execute_kw`, `list_models`, `list_fields`, `list_available_profiles`, `get_version`
+- **12 MCP tools** — `search_read`, `write`, `unlink`, `create`, `export_records`, `import_records`, `execute_kw`, `list_models`, `list_fields`, `list_available_profiles`, `get_version`, `get_financial_report`
 - **Full CLI parity** — every MCP tool works as a terminal command with JSON output, composable with `jq` and shell scripts
-- **Agentic skills** — ships two installable skill files for AI agents (`odoo-mcp skills install <agent>`)
+- **Agentic skills** — ships four installable skills for AI agents (`odoo-mcp plugins install <agent>`)
 - **No Odoo module required** — connects through standard XML-RPC or the native `/json/2` REST API
 
 ## How It Differs From Other Odoo MCP Servers
@@ -54,7 +54,7 @@ through `jq`, and automate workflows without writing Python.
 | Odoo-side module required | No | No | Optional (recommended for prod) |
 | CLI with identical logic | Full parity (all 12 operations) | No CLI | No CLI |
 | Native `export_data` / `load` | `export_records` / `import_records` | No | No |
-| Agentic skills shipped | 2 installable skills | No | No |
+| Agentic skills shipped | 4 installable skills | No | No |
 | Odoo 19+ JSON/2 REST support | Automatic with API key | Manual config | No |
 | Package distribution | PyPI (`pip install odoo-mcp-multi`) | PyPI (`pip install odoo-mcp`) | PyPI (`pip install mcp-server-odoo`) |
 
@@ -96,8 +96,8 @@ Once added, remind me to restart my AI client so I can use the 11 Odoo tools ava
 
 ```text
 Please install the agentic skills bundled with the `odoo-mcp` package.
-Run the command `odoo-mcp skills install <agent_name>` where `<agent_name>` is your own identity (e.g., `antigravity`, `gemini`, `claude`, `codex`, `opencode`, `kimi`, or `hermes`).
-This will automatically symlink the skills into my global skills directory so you can use them in future tasks.
+Run the command `odoo-mcp plugins install <agent_name>` where `<agent_name>` is your own identity (e.g., `antigravity`, `agy`, `agents`, `claude`, `codex`, `opencode`, `kimi`, or `hermes`).
+This will copy the skills into my global skills directory so you can use them in future tasks.
 ```
 
 ## Installation
@@ -267,7 +267,6 @@ Odoo environment dynamically.
 |------|-------------|
 | `list_available_profiles` | Discover configured environments |
 | `search_read` | Query records with 5 output formats (json, compact, table, html, csv) |
-| `search_count` | Count records without fetching data (~100 bytes response) |
 | `write` | Update values on existing records |
 | `unlink` | Delete records by ID |
 | `create` | Create new records in a model |
@@ -277,6 +276,10 @@ Odoo environment dynamically.
 | `list_models` | Discover available models (`search` filter) |
 | `list_fields` | Inspect model schema (field names, types, metadata) |
 | `get_version` | Retrieve server version and protocol info |
+| `get_financial_report` | Calculate and format Odoo financial reports (17.0–19.0+) |
+
+> **Tip:** to count records without fetching data (~100 bytes response), call the
+> ORM method through `execute_kw`: `execute_kw(model=..., method="search_count", args="[[domain]]")`.
 
 ## Usage Examples
 

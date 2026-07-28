@@ -178,6 +178,48 @@ odoo-mcp list-fields -m account.move -p prod
 
 ---
 
+## Plugins & Skills
+
+Manage the agentic skills bundled with the package. `plugins` is the
+canonical group; `skills` is a full alias.
+
+### `plugins list`
+
+```bash
+odoo-mcp plugins list
+```
+
+### `plugins install`
+
+Copies the bundled skills (and, for `antigravity`, the `plugin.json`
+manifest) into the agent's directory. Use `--force` to overwrite an
+existing install — for example right after upgrading the package — and
+`--symlink` to link into the package source instead of copying (dev
+mode; note the Antigravity IDE does not discover symlinked skills).
+
+```bash
+odoo-mcp plugins install antigravity          # full plugin: manifest + skills
+odoo-mcp plugins install claude               # flat skills for Claude Code
+odoo-mcp plugins install agents               # ~/.agents/skills (cross-agent standard)
+odoo-mcp plugins install claude --force       # refresh after an upgrade
+odoo-mcp plugins install claude --symlink     # dev mode
+```
+
+Supported agents: `antigravity`, `agy`, `agents`, `claude`, `codex`,
+`opencode`, `kimi`, `hermes`.
+
+### `plugins uninstall`
+
+Removes the installed files. For `antigravity` the whole plugin
+directory is removed; for flat agents only the skills bundled with
+`odoo-mcp` are removed — other skills sharing the directory are kept.
+
+```bash
+odoo-mcp plugins uninstall claude
+```
+
+---
+
 ## Practical Examples
 
 ### Pipe with `jq`
