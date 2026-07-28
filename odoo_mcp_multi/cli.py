@@ -648,11 +648,13 @@ def cmd_list_fields(model, fmt, profile) -> None:
 # ---------------------------------------------------------------------------
 
 AGENT_DIRS = {
-    "gemini": "~/.gemini/skills",
-    "antigravity": "~/.gemini/antigravity/skills",
+    "gemini": "~/.gemini/config/skills",
+    "antigravity": "~/.gemini/config/plugins/odoo-mcp/skills",
     "claude": "~/.claude/skills",
     "codex": "~/.codex/skills",
     "opencode": "~/.opencode/skills",
+    "kimi": "~/.kimi/skills",
+    "hermes": "~/.hermes/skills",
 }
 
 

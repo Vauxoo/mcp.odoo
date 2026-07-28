@@ -293,7 +293,9 @@ def test_cli_skills_list():
 
 @patch("pathlib.Path.symlink_to")
 def test_cli_skills_install(mock_symlink):
-    result = runner.invoke(main, ["skills", "install", "antigravity", "--force"])
-    assert result.exit_code == 0
-    assert "Skills successfully installed for antigravity!" in result.output
+    for agent in ("antigravity", "gemini", "kimi", "hermes"):
+        result = runner.invoke(main, ["skills", "install", agent, "--force"])
+        assert result.exit_code == 0
+        assert f"Skills successfully installed for {agent}!" in result.output
     assert mock_symlink.called
+

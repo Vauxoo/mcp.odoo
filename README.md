@@ -96,7 +96,7 @@ Once added, remind me to restart my AI client so I can use the 11 Odoo tools ava
 
 ```text
 Please install the agentic skills bundled with the `odoo-mcp` package.
-Run the command `odoo-mcp skills install <agent_name>` where `<agent_name>` is your own identity (e.g., `gemini`, `antigravity`, `claude`, `codex`, or `opencode`).
+Run the command `odoo-mcp skills install <agent_name>` where `<agent_name>` is your own identity (e.g., `antigravity`, `gemini`, `claude`, `codex`, `opencode`, `kimi`, or `hermes`).
 This will automatically symlink the skills into my global skills directory so you can use them in future tasks.
 ```
 
