@@ -644,12 +644,12 @@ def cmd_list_fields(model, fmt, profile) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Skills management commands
+# Plugins & Skills management commands
 # ---------------------------------------------------------------------------
 
 AGENT_DIRS = {
     "gemini": "~/.gemini/config/skills",
-    "antigravity": "~/.gemini/config/plugins/odoo-mcp/skills",
+    "antigravity": "~/.gemini/config/plugins/odoo-mcp",
     "claude": "~/.claude/skills",
     "codex": "~/.codex/skills",
     "opencode": "~/.opencode/skills",
@@ -658,14 +658,153 @@ AGENT_DIRS = {
 }
 
 
+def _get_plugin_dir() -> Path:
+    return Path(__file__).parent / "plugins" / "odoo-mcp"
+
+
+def _get_skills_dir() -> Path:
+    return _get_plugin_dir() / "skills"
+
+
+def _link_symlink_item(item: Path, dest: Path, force: bool) -> tuple[int, int, int]:
+    """Helper to link a single file or directory via symlink."""
+    if (dest.exists() or dest.is_symlink()) and not force:
+        click.secho(f"  - Skipping {dest.name}: already exists. Use --force to overwrite.", fg="yellow")
+        return (0, 0, 1)
+
+    if dest.exists() or dest.is_symlink():
+        dest.unlink()
+
+    try:
+        dest.symlink_to(item.absolute())
+        click.secho(f"  {TICK} Linked {dest.name}", fg="green")
+        return (1, 0, 0)
+    except Exception as e:
+        click.secho(f"  {CROSS} Failed to link {dest.name}: {e}", fg="red", err=True)
+        return (0, 1, 0)
+
+
+def _install_antigravity_plugin(
+    plugin_dir: Path, skills_dir: Path, target_dir: Path, force: bool
+) -> tuple[int, int, int]:
+    target_dir.mkdir(parents=True, exist_ok=True)
+    click.echo(f"Installing plugin for antigravity into {target_dir}...")
+
+    linked, failed, skipped = 0, 0, 0
+
+    plugin_json = plugin_dir / "plugin.json"
+    if plugin_json.exists():
+        link_cnt, fail_cnt, skip_cnt = _link_symlink_item(plugin_json, target_dir / "plugin.json", force)
+        linked += link_cnt
+        failed += fail_cnt
+        skipped += skip_cnt
+
+    target_skills_dir = target_dir / "skills"
+    target_skills_dir.mkdir(parents=True, exist_ok=True)
+
+    for item in sorted(skills_dir.iterdir()):
+        if not item.is_dir() or not (item / "SKILL.md").exists():
+            continue
+        link_cnt, fail_cnt, skip_cnt = _link_symlink_item(item, target_skills_dir / item.name, force)
+        linked += link_cnt
+        failed += fail_cnt
+        skipped += skip_cnt
+
+    return linked, failed, skipped
+
+
+def _install_flat_skills(agent: str, skills_dir: Path, target_dir: Path, force: bool) -> tuple[int, int, int]:
+    target_dir.mkdir(parents=True, exist_ok=True)
+    click.echo(f"Installing skills for {agent} into {target_dir}...")
+
+    linked, failed, skipped = 0, 0, 0
+    for item in sorted(skills_dir.iterdir()):
+        if not item.is_dir() or not (item / "SKILL.md").exists():
+            continue
+        link_cnt, fail_cnt, skip_cnt = _link_symlink_item(item, target_dir / item.name, force)
+        linked += link_cnt
+        failed += fail_cnt
+        skipped += skip_cnt
+
+    return linked, failed, skipped
+
+
+def _report_installation_result(agent: str, linked: int, failed: int, skipped: int) -> None:
+    if failed:
+        click.secho(
+            f"\n{CROSS} Completed with errors: {linked} linked, {failed} failed, {skipped} skipped.",
+            fg="red",
+        )
+        sys.exit(1)
+
+    click.secho(
+        f"\n{TICK} Successfully installed for {agent}! ({linked} linked, {skipped} skipped)",
+        fg="green",
+    )
+
+
+def _install_plugin_or_skills(agent: str, force: bool) -> None:
+    target_dir_str = AGENT_DIRS.get(agent)
+    if not target_dir_str:
+        click.secho(f"{CROSS} Unknown agent: {agent}", fg="red", err=True)
+        sys.exit(1)
+
+    plugin_dir = _get_plugin_dir()
+    skills_dir = _get_skills_dir()
+
+    if not skills_dir.exists() or not any(skills_dir.iterdir()):
+        click.secho(f"{CROSS} No skills found to install.", fg="red", err=True)
+        sys.exit(1)
+
+    target_dir = Path(target_dir_str).expanduser()
+
+    if agent == "antigravity":
+        linked, failed, skipped = _install_antigravity_plugin(plugin_dir, skills_dir, target_dir, force)
+        _report_installation_result(agent, linked, failed, skipped)
+        return
+
+    linked, failed, skipped = _install_flat_skills(agent, skills_dir, target_dir, force)
+    _report_installation_result(agent, linked, failed, skipped)
+
+
+@main.group("plugins", invoke_without_command=True)
+@click.pass_context
+def cmd_plugins(ctx: click.Context) -> None:
+    """Manage agentic plugins provided by odoo-mcp."""
+    if ctx.invoked_subcommand is None:
+        ctx.invoke(cmd_plugins_list)
+
+
+def _list_plugins_and_skills() -> None:
+    skills_dir = _get_skills_dir()
+    if not skills_dir.exists():
+        click.secho("No skills/plugins found in the package.", fg="yellow")
+        return
+
+    click.echo("Available skills in odoo-mcp plugin:")
+    for item in sorted(skills_dir.iterdir()):
+        if item.is_dir() and (item / "SKILL.md").exists():
+            click.echo(f"  - {item.name}")
+
+
+@cmd_plugins.command("list")
+def cmd_plugins_list() -> None:
+    """List available plugins and skills bundled with odoo-mcp."""
+    _list_plugins_and_skills()
+
+
+@cmd_plugins.command("install")
+@click.argument("agent", type=click.Choice(list(AGENT_DIRS.keys())))
+@click.option("--force", is_flag=True, help="Overwrite existing symlinks")
+def cmd_plugins_install(agent: str, force: bool) -> None:
+    """Install plugin and skills to the specified agentic IDE via symbolic link."""
+    _install_plugin_or_skills(agent, force)
+
+
 @main.group("skills", invoke_without_command=True)
 @click.pass_context
 def cmd_skills(ctx: click.Context) -> None:
-    """Manage agentic skills provided by odoo-mcp.
-
-    If no subcommand is provided, this defaults to listing all available skills.
-    Use 'odoo-mcp skills install <agent>' to link skills into your preferred IDE.
-    """
+    """Manage agentic skills provided by odoo-mcp (alias for plugins)."""
     if ctx.invoked_subcommand is None:
         ctx.invoke(cmd_skills_list)
 
@@ -673,15 +812,7 @@ def cmd_skills(ctx: click.Context) -> None:
 @cmd_skills.command("list")
 def cmd_skills_list() -> None:
     """List available skills bundled with odoo-mcp."""
-    skills_dir = Path(__file__).parent / "skills"
-    if not skills_dir.exists():
-        click.secho("No skills found in the package.", fg="yellow")
-        return
-
-    click.echo("Available skills in odoo-mcp:")
-    for item in sorted(skills_dir.iterdir()):
-        if item.is_dir() and (item / "SKILL.md").exists():
-            click.echo(f"  - {item.name}")
+    _list_plugins_and_skills()
 
 
 @cmd_skills.command("install")
@@ -689,57 +820,7 @@ def cmd_skills_list() -> None:
 @click.option("--force", is_flag=True, help="Overwrite existing symlinks")
 def cmd_skills_install(agent: str, force: bool) -> None:
     """Install skills to the specified agentic IDE via symbolic link."""
-    target_dir_str = AGENT_DIRS.get(agent)
-    if not target_dir_str:
-        click.secho(f"{CROSS} Unknown agent: {agent}", fg="red", err=True)
-        sys.exit(1)
-
-    target_dir = Path(target_dir_str).expanduser()
-    skills_dir = Path(__file__).parent / "skills"
-
-    if not skills_dir.exists() or not any(skills_dir.iterdir()):
-        click.secho(f"{CROSS} No skills found to install.", fg="red", err=True)
-        sys.exit(1)
-
-    # Ensure target directory exists
-    target_dir.mkdir(parents=True, exist_ok=True)
-
-    click.echo(f"Installing skills for {agent} into {target_dir}...")
-
-    linked = 0
-    failed = 0
-    skipped = 0
-    for item in sorted(skills_dir.iterdir()):
-        if not item.is_dir() or not (item / "SKILL.md").exists():
-            continue
-
-        dest = target_dir / item.name
-
-        if (dest.exists() or dest.is_symlink()) and not force:
-            click.secho(f"  - Skipping {item.name}: already exists. Use --force to overwrite.", fg="yellow")
-            skipped += 1
-            continue
-
-        if dest.exists() or dest.is_symlink():
-            dest.unlink()
-
-        try:
-            dest.symlink_to(item.absolute())
-            click.secho(f"  {TICK} Linked {item.name}", fg="green")
-            linked += 1
-        except Exception as e:
-            click.secho(f"  {CROSS} Failed to link {item.name}: {e}", fg="red", err=True)
-            failed += 1
-
-    if failed:
-        click.secho(
-            f"\n{CROSS} Completed with errors: {linked} linked, {failed} failed, {skipped} skipped.",
-            fg="red",
-        )
-        sys.exit(1)
-    else:
-        msg = f"\n{TICK} Skills successfully installed for {agent}! ({linked} linked, {skipped} skipped)"
-        click.secho(msg, fg="green")
+    _install_plugin_or_skills(agent, force)
 
 
 # ---------------------------------------------------------------------------

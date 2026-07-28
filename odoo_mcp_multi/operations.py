@@ -864,7 +864,9 @@ def _load_skill_resource(filename: str) -> str:
     try:
         from importlib.resources import files
 
-        resource_path = files("odoo_mcp_multi").joinpath("skills", "odoo-financial-reports", normalized)
+        resource_path = files("odoo_mcp_multi").joinpath(
+            "plugins", "odoo-mcp", "skills", "odoo-financial-reports", normalized
+        )
         return resource_path.read_text(encoding="utf-8")
     except Exception as exc:
         raise ValueError(f"Could not load resource {filename}: {exc}") from exc

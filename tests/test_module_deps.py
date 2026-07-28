@@ -16,7 +16,13 @@ from pathlib import Path
 # not as a top-level package import. This allows the skill to be fully
 # self-contained and runnable from any Python environment.
 _scripts_dir = str(
-    Path(__file__).resolve().parent.parent / "odoo_mcp_multi" / "skills" / "odoo-module-deps" / "scripts"
+    Path(__file__).resolve().parent.parent
+    / "odoo_mcp_multi"
+    / "plugins"
+    / "odoo-mcp"
+    / "skills"
+    / "odoo-module-deps"
+    / "scripts"
 )
 sys.path.insert(0, _scripts_dir)
 

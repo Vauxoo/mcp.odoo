@@ -273,8 +273,22 @@ def test_cli_search_read_help():
 
 
 # ---------------------------------------------------------------------------
-# skills
+# plugins & skills
 # ---------------------------------------------------------------------------
+
+
+def test_cli_plugins_help():
+    result = runner.invoke(main, ["plugins", "--help"])
+    assert result.exit_code == 0
+    assert "list" in result.output
+    assert "install" in result.output
+
+
+def test_cli_plugins_list():
+    result = runner.invoke(main, ["plugins", "list"])
+    assert result.exit_code == 0
+    assert "Available skills in odoo-mcp plugin:" in result.output
+    assert "odoo-mcp-cli" in result.output
 
 
 def test_cli_skills_help():
@@ -287,15 +301,16 @@ def test_cli_skills_help():
 def test_cli_skills_list():
     result = runner.invoke(main, ["skills", "list"])
     assert result.exit_code == 0
-    assert "Available skills in odoo-mcp:" in result.output
+    assert "Available skills in odoo-mcp plugin:" in result.output
     assert "odoo-mcp-cli" in result.output
 
 
 @patch("pathlib.Path.symlink_to")
-def test_cli_skills_install(mock_symlink):
+def test_cli_plugins_install(mock_symlink):
     for agent in ("antigravity", "gemini", "kimi", "hermes"):
-        result = runner.invoke(main, ["skills", "install", agent, "--force"])
+        result = runner.invoke(main, ["plugins", "install", agent, "--force"])
         assert result.exit_code == 0
-        assert f"Skills successfully installed for {agent}!" in result.output
+        assert f"Successfully installed for {agent}!" in result.output
     assert mock_symlink.called
+
 

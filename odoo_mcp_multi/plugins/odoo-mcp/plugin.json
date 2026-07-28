@@ -1,0 +1,17 @@
+{
+  "name": "odoo-mcp",
+  "version": "0.12.0",
+  "description": "MCP server and agentic tools/skills for Odoo integration",
+  "author": {
+    "name": "Nhomar Hernandez",
+    "email": "info@vauxoo.com"
+  },
+  "repository": "https://git.vauxoo.com/nhomar/mcp.odoo",
+  "license": "MIT",
+  "keywords": [
+    "odoo",
+    "mcp",
+    "agentic",
+    "skills"
+  ]
+}
