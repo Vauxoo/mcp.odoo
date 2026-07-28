@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 
 from odoo_mcp_multi import __version__, cli, config, server, utils
@@ -17,14 +18,19 @@ def test_version():
     assert __version__ == "0.12.0"
 
 
-def test_plugin_json_version():
-    """Verify that plugin.json version matches package __version__."""
-    plugin_json_path = (
-        Path(__file__).parent.parent
-        / "odoo_mcp_multi"
-        / "plugins"
-        / "odoo-mcp"
-        / "plugin.json"
-    )
-    data = json.loads(plugin_json_path.read_text(encoding="utf-8"))
+PLUGIN_DIR = Path(__file__).parent.parent / "odoo_mcp_multi" / "plugins" / "odoo-mcp"
+
+
+def test_antigravity_manifest_is_schema_compliant():
+    """The Antigravity plugin.json allows only $schema, name and description."""
+    data = json.loads((PLUGIN_DIR / "plugin.json").read_text(encoding="utf-8"))
+    assert set(data) <= {"$schema", "name", "description"}
+    assert data["name"] == PLUGIN_DIR.name
+    assert re.fullmatch(r"[a-zA-Z0-9-_]+", data["name"])
+
+
+def test_claude_plugin_manifest_version():
+    """The Claude Code plugin manifest tracks the package __version__."""
+    data = json.loads((PLUGIN_DIR / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
     assert data["version"] == __version__
+    assert data["name"] == PLUGIN_DIR.name

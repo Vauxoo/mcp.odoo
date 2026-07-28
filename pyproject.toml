@@ -106,7 +106,7 @@ search = "assert __version__ == \"{current_version}\""
 replace = "assert __version__ == \"{new_version}\""
 
 [[tool.bumpversion.files]]
-filename = "odoo_mcp_multi/plugins/odoo-mcp/plugin.json"
+filename = "odoo_mcp_multi/plugins/odoo-mcp/.claude-plugin/plugin.json"
 search = "\"version\": \"{current_version}\""
 replace = "\"version\": \"{new_version}\""
 
