@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed `odoo-mcp skills install antigravity` and `gemini` target paths to align with modern Antigravity plugin (`~/.gemini/config/plugins/odoo-mcp/skills`) and Gemini skills (`~/.gemini/config/skills`) directory structure.
+- Removed hardcoded absolute file path in `odoo-financial-reports/SKILL.md` to restore skill portability across environments.
+- Pinned `mcp[cli]>=1.0.0,<2.0.0` dependency to prevent breaking changes in PyPI releases of `mcp 2.0.0` from breaking CI builds.
+
+### Added
+
+- Added support for `kimi` (`~/.kimi/skills`) and `hermes` (`~/.hermes/skills`) agent managers to `odoo-mcp skills install <agent>`.
+
 ## [0.11.0] - 2026-07-26
 
 ### Fixed
