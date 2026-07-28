@@ -154,7 +154,7 @@ odoo-mcp search-read -m res.partner \
 | `--model` | `-m` | *(required)* | Model name |
 | `--domain` | `-d` | `[]` | Odoo domain filter |
 | `--fields` | `-f` | all | Comma-separated field names |
-| `--limit` | `-l` | `100` | Max records |
+| `--limit` | `-l` | `25` | Max records (default: 25) |
 | `--offset` | | `0` | Records to skip (pagination) |
 | `--order` | | `""` | Sort order |
 | `--format` | `-F` | `json` | Output format: `json`, `compact`, `table`, `html`, `csv` |
@@ -324,7 +324,7 @@ The `--format` / `-F` flag changes how output is written to stdout:
   human-readable display or redirection to a file.
 - **Pagination metadata** for non-JSON formats appears as a `#` comment
   header line at the top of the output (e.g.,
-  `# total=1500 limit=100 offset=0 has_more=true next_offset=100`).
+  `# total=1500 limit=25 offset=0 has_more=true next_offset=25`).
 
 The `--format` flag is available on these commands:
 

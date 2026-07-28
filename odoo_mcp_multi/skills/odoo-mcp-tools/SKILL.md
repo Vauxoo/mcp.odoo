@@ -70,12 +70,14 @@ list_available_profiles()
 |-----------|------|---------|-------------|
 | `model` | string | *(required)* | Model name (e.g., `res.partner`) |
 | `domain` | string | `[]` | Search domain |
-| `fields` | string | `""` | Comma-separated field names |
-| `limit` | int | `100` | Max records to return |
+| `fields` | string | `""` | Comma-separated field names (explicit fields recommended) |
+| `limit` | int | `25` | Max records to return (default: 25) |
 | `offset` | int | `0` | Records to skip (pagination) |
 | `order` | string | `""` | Sort order (e.g., `name asc`) |
 | `format` | string | `json` | Response format (see below) |
 | `profile` | string | *(default)* | Target profile name |
+
+> **Token Efficiency Tip:** Results remain in context for the entire session. Always pass explicit `fields` (omitting `fields` returns all fields and adds an efficiency hint). Prefer `format='compact'` or `'csv'` for large reads to cut token usage by ~60%.
 
 #### Response formats
 
@@ -97,10 +99,10 @@ All formats include the same **pagination envelope** (`total`, `limit`, `offset`
 {
   "records": [{"id": 1, "name": "Alice"}],
   "total": 1500,
-  "limit": 100,
+  "limit": 25,
   "offset": 0,
   "has_more": true,
-  "next_offset": 100,
+  "next_offset": 25,
   "format": "json"
 }
 ```
@@ -142,11 +144,11 @@ Always check `has_more` — if `true`, call again with `next_offset`:
 
 ```python
 # Page 1
-result = search_read(model="res.partner", fields="name", limit=100, offset=0)
-# result["has_more"] == true, result["next_offset"] == 100
+result = search_read(model="res.partner", fields="name", limit=25, offset=0)
+# result["has_more"] == true, result["next_offset"] == 25
 
 # Page 2
-result = search_read(model="res.partner", fields="name", limit=100, offset=100)
+result = search_read(model="res.partner", fields="name", limit=25, offset=25)
 # Continue until has_more == false
 ```
 
