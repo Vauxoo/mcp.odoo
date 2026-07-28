@@ -25,7 +25,7 @@ Ensure you inspect the target server version before executing financial report c
 
 ## Reference Catalog
 
-Refer to the [financial_reports_options.md](file:///Users/nhomar/Source/odoo-mcp/odoo_mcp_multi/skills/odoo-financial-reports/financial_reports_options.md) catalog for:
+Refer to the [financial_reports_options.md](financial_reports_options.md) catalog for:
 
 - Mapping of all standard report names to their official Odoo XML IDs.
 - Schema definitions for common report options (dates, journals, draft entries, etc.).
