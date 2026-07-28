@@ -583,7 +583,7 @@ def test_cli_skills_install_no_skills_dir(mock_path_cls):
     mock_target.expanduser.return_value = mock_target
     mock_path_cls.side_effect = lambda x: mock_target if x.startswith("~") else mock_path_instance
 
-    result = runner.invoke(main, ["skills", "install", "gemini"])
+    result = runner.invoke(main, ["skills", "install", "agy"])
     assert result.exit_code == 1
 
 

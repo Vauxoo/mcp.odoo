@@ -649,13 +649,16 @@ def cmd_list_fields(model, fmt, profile) -> None:
 # ---------------------------------------------------------------------------
 
 # "agents" is the cross-agent standard location (agentskills.io), read
-# natively by Codex, Gemini CLI, OpenCode, Kimi and Hermes.
+# natively by Codex, AGY, OpenCode, Kimi and Hermes. "agy" installs
+# standalone skills into the Antigravity global skills directory
+# (recognized by AGY, AGY CLI and AGY IDE), while "antigravity"
+# installs the full plugin (manifest + skills).
 AGENT_DIRS = {
     "agents": "~/.agents/skills",
     "antigravity": "~/.gemini/config/plugins/odoo-mcp",
+    "agy": "~/.gemini/config/skills",
     "claude": "~/.claude/skills",
     "codex": "~/.agents/skills",
-    "gemini": "~/.gemini/skills",
     "opencode": "~/.config/opencode/skills",
     "kimi": "~/.kimi/skills",
     "hermes": "~/.hermes/skills",
