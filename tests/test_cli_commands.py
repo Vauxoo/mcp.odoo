@@ -10,7 +10,7 @@ from unittest.mock import patch
 import pytest
 from click.testing import CliRunner
 
-from odoo_mcp_multi.cli import _install_plugin_or_skills, main
+from odoo_mcp_multi.cli import _get_skills_dir, _install_plugin_or_skills, _validate_skill, main
 
 runner = CliRunner()
 
@@ -417,3 +417,29 @@ def test_cli_plugins_uninstall_nothing_installed(tmp_path, monkeypatch):
     result = runner.invoke(main, ["plugins", "uninstall", "claude"])
     assert result.exit_code == 0
     assert "Nothing to uninstall" in result.output
+
+
+def test_bundled_skills_meet_cross_agent_contract():
+    """Every packaged skill satisfies the strictest published frontmatter rules."""
+    skills_dir = _get_skills_dir()
+    for item in sorted(skills_dir.iterdir()):
+        if not item.is_dir() or not (item / "SKILL.md").exists():
+            continue
+        assert _validate_skill(item) == [], f"{item.name} violates the skill contract"
+
+
+def test_cli_plugins_install_warns_on_contract_violations(tmp_path, monkeypatch):
+    """Non-compliant frontmatter produces warnings but does not block install."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    bad_skills = tmp_path / "bundled-skills"
+    bad_skill = bad_skills / "Bad_Skill"
+    bad_skill.mkdir(parents=True)
+    (bad_skill / "SKILL.md").write_text('---\nname: "other-name"\n---\nBody\n')
+
+    with patch("odoo_mcp_multi.cli._get_skills_dir", return_value=bad_skills):
+        result = runner.invoke(main, ["plugins", "install", "claude"])
+
+    assert result.exit_code == 0
+    assert "differs from directory name" in result.output
+    assert "missing 'description'" in result.output
+    assert "Successfully installed" in result.output

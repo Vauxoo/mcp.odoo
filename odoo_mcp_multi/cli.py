@@ -8,6 +8,7 @@ the MCP tool interface. Both interfaces share logic via operations.py.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -673,6 +674,59 @@ def _get_skills_dir() -> Path:
     return _get_plugin_dir() / "skills"
 
 
+# Strictest published cross-agent constraints: OpenCode requires the
+# frontmatter name to equal the directory name and match this pattern;
+# OpenCode and Kimi cap description at 1024 chars.
+SKILL_NAME_RE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
+SKILL_DESCRIPTION_MAX = 1024
+
+
+def _read_frontmatter(skill_md: Path) -> dict:
+    """Parse the flat key/value frontmatter block of a SKILL.md file."""
+    lines = skill_md.read_text(encoding="utf-8").splitlines()
+    if not lines or lines[0].strip() != "---":
+        return {}
+    data = {}
+    for line in lines[1:]:
+        if line.strip() == "---":
+            break
+        key, sep, value = line.partition(":")
+        if sep:
+            data[key.strip()] = value.strip().strip("\"'")
+    return data
+
+
+def _validate_skill(item: Path) -> list[str]:
+    """Return contract warnings for a skill directory's SKILL.md frontmatter."""
+    frontmatter = _read_frontmatter(item / "SKILL.md")
+    warnings = []
+
+    name = frontmatter.get("name", "")
+    if not name:
+        warnings.append("missing 'name' in frontmatter")
+    elif name != item.name:
+        warnings.append(f"frontmatter name '{name}' differs from directory name '{item.name}'")
+    elif not SKILL_NAME_RE.fullmatch(name):
+        warnings.append(f"name '{name}' violates the ^[a-z0-9]+(-[a-z0-9]+)*$ pattern")
+
+    description = frontmatter.get("description", "")
+    if not description:
+        warnings.append("missing 'description' in frontmatter")
+    elif len(description) > SKILL_DESCRIPTION_MAX:
+        warnings.append(f"description exceeds {SKILL_DESCRIPTION_MAX} chars ({len(description)})")
+
+    return warnings
+
+
+def _warn_skill_contract_violations(skills_dir: Path) -> None:
+    """Print frontmatter contract warnings without blocking the install."""
+    for item in sorted(skills_dir.iterdir()):
+        if not item.is_dir() or not (item / "SKILL.md").exists():
+            continue
+        for warning in _validate_skill(item):
+            click.secho(f"  ! {item.name}: {warning}", fg="yellow")
+
+
 def _remove_existing(dest: Path) -> None:
     """Remove a previously installed symlink, file, or copied directory."""
     if dest.is_symlink() or dest.is_file():
@@ -787,6 +841,8 @@ def _install_plugin_or_skills(agent: str, force: bool, symlink: bool = False) ->
     if not skills_dir.exists() or not any(skills_dir.iterdir()):
         click.secho(f"{CROSS} No skills found to install.", fg="red", err=True)
         sys.exit(1)
+
+    _warn_skill_contract_violations(skills_dir)
 
     target_dir = Path(target_dir_str).expanduser()
 
