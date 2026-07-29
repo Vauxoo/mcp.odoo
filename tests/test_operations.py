@@ -16,6 +16,7 @@ from odoo_mcp_multi.operations import (
     op_list_fields,
     op_list_models,
     op_list_profiles,
+    op_search_count,
     op_search_read,
     op_write,
 )
@@ -42,6 +43,29 @@ def test_op_list_profiles(mock_list):
 # ---------------------------------------------------------------------------
 # op_search_read
 # ---------------------------------------------------------------------------
+
+
+@patch("odoo_mcp_multi.operations._get_client")
+def test_op_search_count_basic(mock_get_client):
+    mock_client = MagicMock()
+    mock_client.last_warning = None
+    mock_get_client.return_value = mock_client
+    mock_client.execute_kw.return_value = 42
+
+    result = op_search_count(model="res.partner", domain="[('is_company','=',True)]", profile="test")
+
+    assert result == {"success": True, "model": "res.partner", "count": 42}
+    mock_client.execute_kw.assert_called_once_with("res.partner", "search_count", [[("is_company", "=", True)]], {})
+
+
+@patch("odoo_mcp_multi.operations._get_client")
+def test_op_search_count_error(mock_get_client):
+    mock_get_client.side_effect = ValueError("No Odoo profile configured.")
+
+    result = op_search_count(model="res.partner")
+
+    assert result["success"] is False
+    assert "search_count on 'res.partner' failed" in result["error"]
 
 
 @patch("odoo_mcp_multi.operations._get_client")

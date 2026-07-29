@@ -1,6 +1,6 @@
 # MCP Tools Reference
 
-Complete reference for the 12 MCP tools provided by `odoo-mcp-multi`.
+Complete reference for the 13 MCP tools provided by `odoo-mcp-multi`.
 
 !!! tip "When to use this"
     Use the MCP tools when interacting with Odoo via an AI client
@@ -69,14 +69,20 @@ search_read(
 
 ---
 
-## Counting records (`execute_kw` + `search_count`)
+## `search_count`
 
-`search_count` is not a standalone MCP tool — invoke the ORM method through
-`execute_kw` to count records matching a domain without fetching data.
-Returns ~100 bytes instead of potentially hundreds of KB.
+Count records matching a domain without fetching data. Returns ~100 bytes
+instead of potentially hundreds of KB — use it to size a result set before
+a wide `search_read`.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `model` | string | *(required)* | Model name |
+| `domain` | string | `[]` | Search domain |
+| `profile` | string | *(default)* | Target profile |
 
 ```python
-execute_kw(model="account.move", method="search_count", args="[[('state', '=', 'posted')]]")
+search_count(model="account.move", domain="[('state', '=', 'posted')]")
 ```
 
 ---

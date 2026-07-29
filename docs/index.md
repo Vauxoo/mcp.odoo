@@ -16,7 +16,7 @@ secure credential storage, 86%+ test coverage, and full CLI parity.
 - **Multi-profile management**: Store credentials for multiple environments (`prod`, `staging`, `dev`).
 - **Secure by default**: Credentials stored in `~/.config/odoo-mcp/` with `600` permissions.
 - **Multi-protocol**: JSON-RPC (8.0+), JSON2 (19.0+), XML-RPC (legacy) — auto-detected.
-- **12 MCP tools**: `search_read`, `write`, `unlink`, `create`, `export_records`, `import_records`,
+- **13 MCP tools**: `search_read`, `search_count`, `write`, `unlink`, `create`, `export_records`, `import_records`,
   `execute_kw`, `list_models`, `list_fields`, `list_available_profiles`, `get_version`, `get_financial_report`.
 - **Full CLI parity**: Every MCP tool is also a CLI command — same shared logic (DRY).
 - **Pagination envelope**: `search_read` and `export_records` return `total`, `has_more`,

@@ -138,6 +138,15 @@ odoo-mcp run -p prod
 
 ## Odoo Data Operations
 
+### `search-count` — Count Records
+
+Count records matching a domain without fetching data (~100 bytes) —
+size a result set before a wide `search-read`.
+
+```bash
+odoo-mcp search-count -m res.partner -d "[('is_company', '=', True)]" -p prod
+```
+
 ### `search-read` — Query Records
 
 ```bash

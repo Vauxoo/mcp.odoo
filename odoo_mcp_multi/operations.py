@@ -364,6 +364,35 @@ def op_search_read(
     return _with_warning({"records": records, **envelope}, client)
 
 
+def op_search_count(
+    model: str,
+    domain: str = "[]",
+    profile: Optional[str] = None,
+) -> dict:
+    """Count records matching a domain without fetching any data.
+
+    Token-efficient sizing probe (~100 bytes): use it before a wide
+    search_read to decide on limit/pagination.
+
+    Args:
+        model: Model name (e.g., 'res.partner')
+        domain: Search domain as string
+        profile: Profile name to use
+
+    Returns:
+        Dict with model and count,
+        or an error dict with success=False for agent consumption.
+    """
+    try:
+        client = _get_client(profile)
+        parsed_domain = parse_domain(domain)
+        count = client.execute_kw(model, "search_count", [parsed_domain], {})
+    except Exception as exc:
+        return {"success": False, "error": f"search_count on '{model}' failed: {exc}"}
+
+    return _with_warning({"success": True, "model": model, "count": count}, client)
+
+
 def op_write(
     model: str,
     ids: str,

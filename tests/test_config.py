@@ -632,6 +632,7 @@ def test_operation_enum_completeness():
 
     expected = {
         "search_read",
+        "search_count",
         "write",
         "unlink",
         "create",

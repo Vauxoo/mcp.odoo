@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field, SecretStr, model_validator
 # excluded — they are non-destructive and always allowed.
 class Operation(str, Enum):
     SEARCH_READ = "search_read"
+    SEARCH_COUNT = "search_count"
     WRITE = "write"
     UNLINK = "unlink"
     CREATE = "create"

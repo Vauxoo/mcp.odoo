@@ -39,7 +39,7 @@ through `jq`, and automate workflows without writing Python.
 - **Multi-profile management** — store credentials for `prod`, `staging`, `dev` (or any name) and switch with `-p`
 - **Auto protocol detection** — XML-RPC (8.0+), JSON-RPC, JSON/2 REST (19.0+) selected automatically per profile
 - **Secure credential storage** — `~/.config/odoo-mcp/profiles.json` with Unix `600` permissions (owner-read-only)
-- **12 MCP tools** — `search_read`, `write`, `unlink`, `create`, `export_records`, `import_records`, `execute_kw`, `list_models`, `list_fields`, `list_available_profiles`, `get_version`, `get_financial_report`
+- **13 MCP tools** — `search_read`, `search_count`, `write`, `unlink`, `create`, `export_records`, `import_records`, `execute_kw`, `list_models`, `list_fields`, `list_available_profiles`, `get_version`, `get_financial_report`
 - **Full CLI parity** — every MCP tool works as a terminal command with JSON output, composable with `jq` and shell scripts
 - **Agentic skills** — ships three installable skills for AI agents (`odoo-mcp plugins install <agent>`)
 - **No Odoo module required** — connects through standard XML-RPC or the native `/json/2` REST API
@@ -267,6 +267,7 @@ Odoo environment dynamically.
 |------|-------------|
 | `list_available_profiles` | Discover configured environments |
 | `search_read` | Query records with 5 output formats (json, compact, table, html, csv) |
+| `search_count` | Count records without fetching data (~100 bytes response) |
 | `write` | Update values on existing records |
 | `unlink` | Delete records by ID |
 | `create` | Create new records in a model |
@@ -277,9 +278,6 @@ Odoo environment dynamically.
 | `list_fields` | Inspect model schema (field names, types, metadata) |
 | `get_version` | Retrieve server version and protocol info |
 | `get_financial_report` | Calculate and format Odoo financial reports (17.0–19.0+) |
-
-> **Tip:** to count records without fetching data (~100 bytes response), call the
-> ORM method through `execute_kw`: `execute_kw(model=..., method="search_count", args="[[domain]]")`.
 
 ## Usage Examples
 

@@ -35,6 +35,7 @@ EXPECTED_TOOLS = sorted(
     [
         "list_available_profiles",
         "search_read",
+        "search_count",
         "write",
         "unlink",
         "create",
@@ -51,9 +52,9 @@ EXPECTED_TOOLS = sorted(
 
 @pytest.mark.asyncio
 async def test_tool_count():
-    """The server must expose exactly 12 tools."""
+    """The server must expose exactly 13 tools."""
     tools = await mcp.list_tools()
-    assert len(tools) == 12
+    assert len(tools) == 13
 
 
 @pytest.mark.asyncio
@@ -108,6 +109,15 @@ async def test_search_read_format_pass_through(mock_op):
     assert data["format"] == "compact"
     assert data["headers"] == ["id"]
     mock_op.assert_called_once_with("res.partner", "[]", "", 25, 0, "", "compact", None)
+
+
+@pytest.mark.asyncio
+@patch("odoo_mcp_multi.server.op_search_count")
+async def test_search_count_pass_through(mock_op):
+    mock_op.return_value = {"success": True, "model": "res.partner", "count": 7}
+    result = await mcp.call_tool("search_count", {"model": "res.partner"})
+    mock_op.assert_called_once_with("res.partner", "[]", None)
+    assert json.loads(result[0][0].text)["count"] == 7
 
 
 @pytest.mark.asyncio

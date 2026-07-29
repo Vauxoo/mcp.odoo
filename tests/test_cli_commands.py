@@ -92,6 +92,23 @@ def test_cli_search_read_error(mock_op):
 
 
 # ---------------------------------------------------------------------------
+# search-count
+# ---------------------------------------------------------------------------
+
+
+@patch("odoo_mcp_multi.cli.op_search_count")
+def test_cli_search_count(mock_op):
+    mock_op.return_value = {"success": True, "model": "res.partner", "count": 42}
+
+    result = runner.invoke(main, ["search-count", "--model", "res.partner", "--domain", "[('a','=',1)]"])
+
+    assert result.exit_code == 0
+    output = json.loads(result.output)
+    assert output["count"] == 42
+    mock_op.assert_called_once_with("res.partner", "[('a','=',1)]", None)
+
+
+# ---------------------------------------------------------------------------
 # write
 # ---------------------------------------------------------------------------
 

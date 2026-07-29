@@ -23,6 +23,7 @@ from odoo_mcp_multi.operations import (
     op_list_fields,
     op_list_models,
     op_list_profiles,
+    op_search_count,
     op_search_read,
     op_unlink,
     op_write,
@@ -71,7 +72,7 @@ mcp = FastMCP(
         "reads; keep 'json' only when you must parse values programmatically.\n"
         "- Keep 'limit' small (default 25) and page with 'next_offset' rather than "
         "requesting large batches up front.\n"
-        "- Use execute_kw 'search_count' to size a result set before a wide read."
+        "- Use the search_count tool to size a result set before a wide read."
     ),
 )
 
@@ -158,6 +159,31 @@ def search_read(
     if denied:
         return denied
     return _json(op_search_read(model, domain, fields, limit, offset, order, format, profile))
+
+
+@mcp.tool()
+def search_count(
+    model: str,
+    domain: Union[str, list] = "[]",
+    profile: Optional[str] = None,
+) -> str:
+    """Count records matching a domain without fetching any data.
+
+    Token-efficient sizing probe (~100 bytes response): call it before a wide
+    search_read to decide on limit/pagination instead of reading blind.
+
+    Args:
+        model: Model name (e.g., 'res.partner', 'sale.order')
+        domain: Search domain as string (e.g., "[('state', '=', 'posted')]") or list
+        profile: Optional name of the Odoo profile to connect to. If not provided, uses the default profile.
+
+    Returns:
+        JSON with the model name and the record count.
+    """
+    denied = _check_permission("search_count", profile)
+    if denied:
+        return denied
+    return _json(op_search_count(model, domain, profile))
 
 
 @mcp.tool()

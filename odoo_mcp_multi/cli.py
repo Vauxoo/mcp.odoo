@@ -42,6 +42,7 @@ from odoo_mcp_multi.operations import (
     op_import_records,
     op_list_fields,
     op_list_models,
+    op_search_count,
     op_search_read,
     op_test_connection,
     op_unlink,
@@ -535,6 +536,15 @@ def cmd_run(profile: str) -> None:
 def cmd_search_read(model, domain, fields, limit, offset, order, fmt, profile) -> None:
     """Search and read records from an Odoo model."""
     _output(op_search_read(model, domain, fields, limit, offset, order, fmt, profile))
+
+
+@main.command("search-count")
+@click.option("--model", "-m", required=True, help="Model name (e.g., 'res.partner')")
+@click.option("--domain", "-d", default="[]", help="Search domain as string (e.g., \"[('name','ilike','John')]\")")
+@click.option("--profile", "-p", default=None, help="Profile name to use")
+def cmd_search_count(model, domain, profile) -> None:
+    """Count records matching a domain without fetching data."""
+    _output(op_search_count(model, domain, profile))
 
 
 @main.command("write")

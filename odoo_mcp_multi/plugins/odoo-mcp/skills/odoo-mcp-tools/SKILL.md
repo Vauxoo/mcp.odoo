@@ -6,7 +6,7 @@ last_validated: 2026-05-09
 
 # Odoo MCP Tools Reference
 
-Complete reference for the 12 MCP tools provided by `odoo-mcp-multi`.
+Complete reference for the 13 MCP tools provided by `odoo-mcp-multi`.
 Use this skill when interacting with any Odoo instance via an MCP client
 (Antigravity, Claude Desktop, Cursor, VS Code).
 
@@ -150,6 +150,23 @@ result = search_read(model="res.partner", fields="name", limit=25, offset=0)
 # Page 2
 result = search_read(model="res.partner", fields="name", limit=25, offset=25)
 # Continue until has_more == false
+```
+
+---
+
+### `search_count` — Count Records
+
+Token-efficient sizing probe (~100 bytes): call it before a wide
+`search_read` to decide on `limit`/pagination instead of reading blind.
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `model` | string | *(required)* | Model name |
+| `domain` | string | `[]` | Search domain |
+| `profile` | string | *(default)* | Target profile name |
+
+```python
+search_count(model="account.move", domain="[('state', '=', 'posted')]")
 ```
 
 ---
