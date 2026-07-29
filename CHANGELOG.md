@@ -5,16 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.12.1] - 2026-07-28
+## [0.13.0] - 2026-07-28
 
 ### Added
 
-- Added `odoo-mcp plugins` command group (with `list` and `install` subcommands) to manage skills alongside the `plugin.json` manifest.
+- Added `odoo-mcp plugins` command group (`list`, `install`, `uninstall`) to manage the bundled skills and the Antigravity `plugin.json` manifest; `skills` remains available as a full alias.
+- Added `plugins uninstall <agent>`: removes the whole plugin directory for `antigravity` and only the odoo-mcp skills for flat agents, preserving foreign skills that share the directory.
+- Added `agents` install target (`~/.agents/skills`), the cross-agent Agent Skills standard directory read natively by Codex, AGY, OpenCode, Kimi and Hermes.
+- Added `.claude-plugin/plugin.json` manifest so the packaged plugin tree also loads as a full Claude Code plugin (`odoo-mcp@skills-dir`).
+- Added skill frontmatter validation on `plugins install`: warnings (non-blocking) against the strictest cross-agent contracts — name must equal the directory name and match `^[a-z0-9]+(-[a-z0-9]+)*$`, description required and capped at 1024 chars; a test keeps the bundled skills contract-clean.
+- Promoted `search_count` to a first-class MCP tool (13 tools total) and `search-count` CLI command, wired into the granular permission model. The docs advertised both while the method was only reachable via `execute_kw`.
 
 ### Changed
 
-- Reorganized bundled agentic skills inside the `odoo_mcp_multi/plugins/odoo-mcp/` Antigravity plugin structure.
-- Updated `odoo-mcp skills install antigravity` and `odoo-mcp plugins install antigravity` to install both the `plugin.json` manifest and the `skills/` directory into `~/.gemini/config/plugins/odoo-mcp`.
+- Reorganized bundled agentic skills inside the `odoo_mcp_multi/plugins/odoo-mcp/` Antigravity plugin structure with a schema-compliant `plugin.json` (only `$schema`, `name`, `description` — the official schema rejects additional properties).
+- `plugins install` now copies files by default — symlinks are not discovered by the Antigravity IDE, require elevated privileges on Windows, and dangle when installed from a temporary git worktree. `--symlink` keeps the previous behavior for development; re-run `install --force` after upgrading to refresh copies.
+- The Antigravity plugin directory name is derived from the packaged plugin directory instead of being hardcoded in the install path.
+- Moved the financial report HTML/CSS templates from the `odoo-financial-reports` skill into `odoo_mcp_multi/templates/` so the server runtime no longer depends on agent-facing skill content.
+
+### Fixed
+
+- Corrected install target paths verified against current agent documentation: `codex` → `~/.agents/skills`, `opencode` → `~/.config/opencode/skills`, and `gemini` replaced by `agy` → `~/.gemini/config/skills` (the Antigravity global skills directory).
+- Plugin install tests now run against a sandboxed HOME; the previous tests created directories inside — and with `--force` could silently delete installed skills from — the developer's real HOME.
+- Install error handling narrowed from bare `Exception` to `OSError` so programming errors surface instead of being counted as failed items.
+- Documentation synchronized with the code: the 12-tool list matches `server.py` (`search_count` documented as an `execute_kw` pattern, `get_financial_report` and `unlink` added where missing), bundled skill counts, new `plugins` CLI reference section, stale skill paths, and the CI auto-release header comment.
+
+### Removed
+
+- Removed the `odoo-module-deps` skill from the bundled plugin: standalone tooling not native to this package (its scripts used neither the MCP server nor the CLI code paths). The bundled skills are now `odoo-mcp-tools`, `odoo-mcp-cli`, and `odoo-financial-reports`.
 
 ## [0.12.0] - 2026-07-28
 
