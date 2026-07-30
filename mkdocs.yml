@@ -53,4 +53,5 @@ nav:
   - Home: index.md
   - MCP Tools: mcp-tools.md
   - CLI Reference: cli.md
+  - Windows Install: windows-install.md
   - Contributing: contributing.md
