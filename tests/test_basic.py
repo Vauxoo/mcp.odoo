@@ -15,7 +15,7 @@ def test_imports():
 
 def test_version():
     """Verify that the package has a version."""
-    assert __version__ == "0.13.0"
+    assert __version__ == "0.14.0"
 
 
 PLUGIN_DIR = Path(__file__).parent.parent / "odoo_mcp_multi" / "plugins" / "odoo-mcp"
