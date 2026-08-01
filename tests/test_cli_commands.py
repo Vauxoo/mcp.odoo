@@ -342,6 +342,57 @@ def test_cli_plugins_install_antigravity_layout(tmp_path, monkeypatch):
         assert (skill / "SKILL.md").exists()
 
 
+def test_cli_plugins_install_agy_is_plugin_alias(tmp_path, monkeypatch):
+    """The agy target installs the same plugin tree as antigravity."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    legacy = tmp_path / ".gemini" / "config" / "skills"
+    legacy.mkdir(parents=True)
+
+    result = runner.invoke(main, ["skills", "install", "agy"])
+    assert result.exit_code == 0
+    assert "Successfully installed for agy!" in result.output
+
+    plugin_root = tmp_path / ".gemini" / "config" / "plugins" / "odoo-mcp"
+    assert (plugin_root / "plugin.json").is_file()
+    assert (plugin_root / "skills" / "odoo-mcp-tools" / "SKILL.md").exists()
+    # Nothing lands in the legacy flat skills directory anymore, and a
+    # clean legacy directory triggers no purge message.
+    assert not (legacy / "odoo-mcp-tools").exists()
+    assert "Removing legacy flat skills" not in result.output
+
+
+def test_cli_plugins_install_purges_legacy_agy_flat_skills(tmp_path, monkeypatch):
+    """Plugin install removes flat copies left by pre-plugin agy installs."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    legacy = tmp_path / ".gemini" / "config" / "skills"
+    stale = legacy / "odoo-mcp-tools"
+    stale.mkdir(parents=True)
+    (stale / "SKILL.md").write_text("---\nname: odoo-mcp-tools\n---\n")
+    foreign = legacy / "someone-elses-skill"
+    foreign.mkdir()
+    (foreign / "SKILL.md").write_text("---\nname: other\n---\n")
+
+    result = runner.invoke(main, ["plugins", "install", "antigravity"])
+    assert result.exit_code == 0
+    assert "Removing legacy flat skills" in result.output
+    assert not stale.exists()
+    assert foreign.exists()
+
+
+def test_cli_plugins_uninstall_agy_removes_plugin_and_legacy(tmp_path, monkeypatch):
+    """Uninstalling agy drops the plugin tree and legacy flat copies."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    assert runner.invoke(main, ["plugins", "install", "agy"]).exit_code == 0
+    legacy_skill = tmp_path / ".gemini" / "config" / "skills" / "odoo-mcp-cli"
+    legacy_skill.mkdir(parents=True)
+    (legacy_skill / "SKILL.md").write_text("---\nname: odoo-mcp-cli\n---\n")
+
+    result = runner.invoke(main, ["plugins", "uninstall", "agy"])
+    assert result.exit_code == 0
+    assert not (tmp_path / ".gemini" / "config" / "plugins" / "odoo-mcp").exists()
+    assert not legacy_skill.exists()
+
+
 def test_cli_plugins_install_idempotent_and_force(tmp_path, monkeypatch):
     """Re-running without --force skips existing items; --force reinstalls them."""
     monkeypatch.setenv("HOME", str(tmp_path))

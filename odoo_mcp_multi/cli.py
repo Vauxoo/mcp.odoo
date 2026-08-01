@@ -660,20 +660,28 @@ def cmd_list_fields(model, fmt, profile) -> None:
 # ---------------------------------------------------------------------------
 
 # "agents" is the cross-agent standard location (agentskills.io), read
-# natively by Codex, AGY, OpenCode, Kimi and Hermes. "agy" installs
-# standalone skills into the Antigravity global skills directory
-# (recognized by AGY, AGY CLI and AGY IDE), while "antigravity"
-# installs the full plugin (manifest + skills).
+# natively by Codex, AGY, OpenCode, Kimi and Hermes. "antigravity" and
+# its alias "agy" install the full plugin (manifest + skills) into the
+# Antigravity plugin directory (recognized by AGY, AGY CLI and AGY IDE).
 AGENT_DIRS = {
     "agents": "~/.agents/skills",
     "antigravity": "~/.gemini/config/plugins",
-    "agy": "~/.gemini/config/skills",
+    "agy": "~/.gemini/config/plugins",
     "claude": "~/.claude/skills",
     "codex": "~/.agents/skills",
     "opencode": "~/.config/opencode/skills",
     "kimi": "~/.kimi/skills",
     "hermes": "~/.hermes/skills",
 }
+
+# Agents whose target is a plugin tree (manifest + skills) instead of a
+# flat skills directory.
+PLUGIN_AGENTS = frozenset({"antigravity", "agy"})
+
+# Where "agy" installed flat skills before it became a plugin alias.
+# Installs and uninstalls purge odoo-mcp copies left there so Antigravity
+# never discovers the same skill twice (flat copy + plugin copy).
+LEGACY_AGY_SKILLS_DIR = "~/.gemini/config/skills"
 
 
 def _get_plugin_dir() -> Path:
@@ -804,6 +812,45 @@ def _install_antigravity_plugin(
     return installed, failed, skipped
 
 
+def _remove_bundled_skills_from(skills_dir: Path, target_dir: Path) -> int:
+    """Remove copies of the bundled skills from a flat skills directory.
+
+    Only directories whose name matches a bundled skill are touched, so
+    skills owned by other packages sharing the directory survive. Returns
+    the number of entries removed.
+    """
+    removed = 0
+    for item in sorted(skills_dir.iterdir()):
+        if not item.is_dir() or not (item / "SKILL.md").exists():
+            continue
+        dest = target_dir / item.name
+        if dest.exists() or dest.is_symlink():
+            _remove_existing(dest)
+            click.secho(f"  {TICK} Removed {dest.name}", fg="green")
+            removed += 1
+    return removed
+
+
+def _cleanup_legacy_agy_skills(skills_dir: Path) -> None:
+    """Purge flat skills that pre-plugin "agy" installs left behind.
+
+    Antigravity discovers both the plugin tree and the global skills
+    directory, so stale flat copies would load every skill twice.
+    """
+    legacy_dir = Path(LEGACY_AGY_SKILLS_DIR).expanduser()
+    if not legacy_dir.is_dir():
+        return
+    stale = [
+        item.name
+        for item in sorted(skills_dir.iterdir())
+        if (legacy_dir / item.name).exists() or (legacy_dir / item.name).is_symlink()
+    ]
+    if not stale:
+        return
+    click.echo(f"Removing legacy flat skills from {legacy_dir}...")
+    _remove_bundled_skills_from(skills_dir, legacy_dir)
+
+
 def _install_flat_skills(
     agent: str, skills_dir: Path, target_dir: Path, force: bool, symlink: bool
 ) -> tuple[int, int, int]:
@@ -856,10 +903,11 @@ def _install_plugin_or_skills(agent: str, force: bool, symlink: bool = False) ->
 
     target_dir = Path(target_dir_str).expanduser()
 
-    if agent == "antigravity":
+    if agent in PLUGIN_AGENTS:
         # The plugin directory name is the single source of the plugin id.
         target_dir = target_dir / plugin_dir.name
         installed, failed, skipped = _install_antigravity_plugin(plugin_dir, skills_dir, target_dir, force, symlink)
+        _cleanup_legacy_agy_skills(skills_dir)
         _report_installation_result(agent, installed, failed, skipped)
         return
 
@@ -921,9 +969,11 @@ def _uninstall_plugin_or_skills(agent: str) -> None:
 
     target_dir = Path(target_dir_str).expanduser()
 
-    # The antigravity target is a plugin directory owned entirely by
-    # odoo-mcp, so it is removed as a whole.
-    if agent == "antigravity":
+    # The antigravity/agy target is a plugin directory owned entirely by
+    # odoo-mcp, so it is removed as a whole, along with any flat skills a
+    # pre-plugin "agy" install left in the legacy skills directory.
+    if agent in PLUGIN_AGENTS:
+        _cleanup_legacy_agy_skills(_get_skills_dir())
         target_dir = target_dir / _get_plugin_dir().name
         if not target_dir.exists() and not target_dir.is_symlink():
             click.echo(f"Nothing to uninstall for {agent} ({target_dir} not found).")
@@ -934,15 +984,7 @@ def _uninstall_plugin_or_skills(agent: str) -> None:
 
     # Flat agents share their skills directory with other packages —
     # remove only the skills bundled with odoo-mcp.
-    removed = 0
-    for item in sorted(_get_skills_dir().iterdir()):
-        if not item.is_dir() or not (item / "SKILL.md").exists():
-            continue
-        dest = target_dir / item.name
-        if dest.exists() or dest.is_symlink():
-            _remove_existing(dest)
-            click.secho(f"  {TICK} Removed {dest.name}", fg="green")
-            removed += 1
+    removed = _remove_bundled_skills_from(_get_skills_dir(), target_dir)
 
     if removed:
         click.secho(f"\n{TICK} Uninstalled {removed} skill(s) for {agent}.", fg="green")

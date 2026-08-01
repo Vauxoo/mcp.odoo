@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- `agy` is now a true alias of `antigravity` in `plugins install`/`uninstall`: both install the full plugin (manifest + skills) into `~/.gemini/config/plugins/odoo-mcp` instead of flat skills into `~/.gemini/config/skills`. Antigravity discovers the plugin tree natively, so the flat copies only duplicated skill discovery.
+- Plugin installs and uninstalls for `antigravity`/`agy` now purge legacy flat skill copies left in `~/.gemini/config/skills` by pre-0.14 `agy` installs, keeping skills owned by other packages untouched.
+
 ## [0.13.0] - 2026-07-28
 
 ### Added
