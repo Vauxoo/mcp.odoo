@@ -50,6 +50,14 @@ Config file paths by client and OS:
 >
 > **Tip:** After installing `odoo-mcp-multi`, run `odoo-mcp skills install <agent>` (e.g., `antigravity`, `claude`, `gemini`) to symlink these skills into your IDE's global skills directory.
 
+## Sandbox Execution Rail
+
+If executing `odoo-mcp` CLI commands inside a sandboxed AI agent environment results in:
+
+- `Fatal Python error: init_import_site` OR `PermissionError: .../pyvenv.cfg`
+
+Refer to `AGENT.md` / `CLAUDE.md` at repository root for least-privilege target path permissions (`~/.local/pipx/venvs/odoo-mcp-multi/` or `~/.local/share/uv/tools/odoo-mcp-multi/`) and zero-retry resolution directives.
+
 ---
 
 ## Tools Reference

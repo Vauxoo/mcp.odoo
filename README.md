@@ -258,6 +258,14 @@ Add the block above to your client's MCP config file. Paths vary by tool and OS:
 
 > **Note:** For Cursor and VS Code the config file is **workspace-scoped** — place it at the root of your project. For a user-level (global) config, check your client's own documentation.
 
+## Sandbox Execution Rail
+
+When running `odoo-mcp` CLI commands inside sandboxed AI agent environments (Antigravity, Claude Code, Cursor, Windsurf, OpenHands, Aider), CPython bootstrap may fail with:
+
+- `Fatal Python error: init_import_site` OR `PermissionError: .../pyvenv.cfg`
+
+This occurs because CPython requires read access to `pyvenv.cfg` outside the workspace boundary. For machine-readable directives that halt token-wasting retry loops and grant least-privilege target paths (`~/.local/pipx/venvs/odoo-mcp-multi/` or `~/.local/share/uv/tools/odoo-mcp-multi/`), see [AGENT.md](AGENT.md).
+
 ## Available MCP Tools
 
 All tools accept an optional `profile` string parameter to select the target
