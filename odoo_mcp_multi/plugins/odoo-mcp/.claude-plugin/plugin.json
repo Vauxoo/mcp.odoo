@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "odoo-mcp",
   "displayName": "Odoo MCP",
-  "version": "0.14.0",
+  "version": "0.14.1",
   "description": "MCP server and agentic tools/skills for Odoo integration",
   "author": {
     "name": "Nhomar Hernandez",
