@@ -41,6 +41,7 @@ through `jq`, and automate workflows without writing Python.
 - **Secure credential storage** — `~/.config/odoo-mcp/profiles.json` with Unix `600` permissions (owner-read-only)
 - **13 MCP tools** — `search_read`, `search_count`, `write`, `unlink`, `create`, `export_records`, `import_records`, `execute_kw`, `list_models`, `list_fields`, `list_available_profiles`, `get_version`, `get_financial_report`
 - **Full CLI parity** — every MCP tool works as a terminal command with JSON output, composable with `jq` and shell scripts
+- **Remote connector mode** — `odoo-mcp serve` exposes the same tools over HTTP with a built-in OAuth 2.1 server; each user signs in with their own Odoo credentials and every call runs under their own access rights ([guide](docs/http-mode.md))
 - **Agentic skills** — ships three installable skills for AI agents (`odoo-mcp plugins install <agent>`)
 - **No Odoo module required** — connects through standard XML-RPC or the native `/json/2` REST API
 
@@ -55,6 +56,7 @@ through `jq`, and automate workflows without writing Python.
 | CLI with identical logic | Full parity (all 12 operations) | No CLI | No CLI |
 | Native `export_data` / `load` | `export_records` / `import_records` | No | No |
 | Agentic skills shipped | 3 installable skills | No | No |
+| Remote HTTP connector | `serve`, OAuth 2.1 with per-user Odoo sign-in | No | No |
 | Odoo 19+ JSON/2 REST support | Automatic with API key | Manual config | No |
 | Package distribution | PyPI (`pip install odoo-mcp-multi`) | PyPI (`pip install odoo-mcp`) | PyPI (`pip install mcp-server-odoo`) |
 

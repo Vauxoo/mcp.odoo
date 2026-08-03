@@ -144,6 +144,29 @@ odoo-mcp run -p prod
 
 ---
 
+### `serve` — Start the MCP Server over HTTP
+
+For remote clients. Users authenticate with their own Odoo credentials on a
+consent page, and every tool call runs as that Odoo user; the host's
+`profiles.json` is not used in this mode.
+
+```bash
+# Local development, no authentication (loopback only)
+odoo-mcp serve --no-auth --port 5010
+
+# Served for real — --public-url is the exact URL users paste into their client
+odoo-mcp serve --port 5010 --public-url https://odoo-mcp.example.com/mcp
+```
+
+Inspect and revoke what it has issued:
+
+```bash
+odoo-mcp http grants
+odoo-mcp http revoke <grant-id>
+```
+
+---
+
 ## Odoo Data Operations
 
 ### `search-count` — Count Records

@@ -1,0 +1,45 @@
+[Unit]
+Description=Odoo MCP Multi — authenticated HTTP transport
+Documentation=https://git.vauxoo.com/nhomar/mcp.odoo/-/blob/main/docs/http-mode.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=%i
+Group=%i
+
+# get_config_dir() resolves through Path.home(), which systemd does not set.
+Environment=HOME=/home/%i
+Environment=PYTHONUNBUFFERED=1
+
+ExecStart=/home/%i/.local/bin/odoo-mcp serve \
+  --host 127.0.0.1 \
+  --port 5010 \
+  --path /mcp \
+  --public-url https://odoo-mcp.example.com/mcp \
+  --state-db /home/%i/.config/odoo-mcp/http-state.db \
+  --secret-key-file /home/%i/.config/odoo-mcp/http-secret.key \
+  --odoo-timeout 60 \
+  --max-concurrency 32 \
+  --log-level INFO
+
+Restart=on-failure
+RestartSec=5s
+
+# The process only ever needs to read its own code and write its own state.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/%i/.config/odoo-mcp
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryMax=1G
+
+[Install]
+WantedBy=multi-user.target
