@@ -19,6 +19,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Per-profile TLS trust, so a corporate proxy no longer forces `--no-verify`: `--ca-bundle <pem>` trusts that CA on every transport (XML-RPC, JSON-RPC, JSON-2) instead of the default store, and `--no-ssl-strict` relaxes only Python 3.13+'s `VERIFY_X509_STRICT` for a CA whose `basicConstraints` is not critical — chain and hostname are still verified. Both are on `add-profile` and `edit-profile` (`--clear-ca-bundle` undoes the first) and stored as `ca_bundle` / `ssl_strict` in `profiles.json`. Profiles that set neither behave exactly as before.
 - Python 3.13 and 3.14 are now declared supported. Every pipeline installs the built wheel on a bare image for each of 3.10–3.14 and runs the whole suite against it — no test is skipped by Python version — then reports the combined line and branch coverage.
 - uv (`uv tool install`), uvx, pipx and pip are documented as equal options, with the extra step uv and pipx need before `odoo-mcp` is on `PATH` and the absolute-path fallback for GUI MCP clients. CI installs the wheel with each of them on Python 3.10 and 3.14, speaks MCP to the server the way a client does and runs `odoo-mcp upgrade`; after every release, and on a schedule, it repeats that against PyPI.
+- Added `odoo-mcp serve`: the same 13 tools over Streamable HTTP, with an embedded OAuth 2.1 authorization server whose consent screen authenticates against Odoo itself. Remote MCP clients connect to a URL, each user signs in with their own Odoo instance and credentials, and every tool call runs as that Odoo user under their own access rights. `odoo-mcp run` and stdio mode are unchanged.
+- Added per-request credential resolution (`odoo_mcp_multi/context.py`): over HTTP the active Odoo profile comes from the authenticated token rather than a process global, so one process serves many users without their credentials crossing. `profiles.json` is not read in HTTP mode, and `list_available_profiles` returns empty so host profile names are not disclosed to remote callers.
+- Added the `odoo-mcp http` command group (`clients`, `grants`, `revoke`, `purge`) to inspect and revoke what the HTTP server has issued. Revoking a grant also deletes the Odoo credentials stored for it.
+- Added an `http` extra (`pip install 'odoo-mcp-multi[http]'`) and a `docs/http-mode.md` guide.
+- Added `op_validate_credentials`, which closes the gap `op_test_connection` leaves for Odoo 19+ API keys: `Json2Client.authenticate()` is a no-op, so the key is now proven with a real read before it is accepted.
+
+### Changed
+
+- MCP tools now run on a worker thread instead of the event loop. FastMCP calls synchronous tools inline, so a slow Odoo RPC blocked every other request in the same process; over HTTP that also stalled the OAuth endpoints, whose clients time out in ten seconds. Also makes long stdio calls interruptible.
+- `server.py` exposes a `build_server()` factory so a second transport can be configured independently. The module-level `mcp` singleton is unchanged for stdio.
 
 ### Fixed
 

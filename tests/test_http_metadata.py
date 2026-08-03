@@ -42,9 +42,25 @@ async def test_bare_protected_resource_path_is_served(client):
     """Clients that probe the path-less well-known location get an answer."""
     response = await client.get("/.well-known/oauth-protected-resource")
     assert response.status_code == 200
-    doc = response.json()
-    assert doc["resource"] == PUBLIC_URL
-    assert doc["authorization_servers"] == ["https://odoo-mcp.me1980.com"]
+    assert response.json()["resource"] == PUBLIC_URL
+
+
+async def test_both_protected_resource_documents_are_identical(client):
+    """Two documents that disagree about the issuer break issuer validation.
+
+    RFC 9207 has clients compare issuers by exact string, so a difference as
+    small as a trailing slash between the two locations is a real defect.
+    """
+    suffixed = await client.get("/.well-known/oauth-protected-resource/mcp")
+    bare = await client.get("/.well-known/oauth-protected-resource")
+    assert suffixed.json() == bare.json()
+
+
+async def test_the_advertised_issuer_matches_the_authorization_server(client):
+    """The issuer in both documents must be the one the AS calls itself."""
+    prm = (await client.get("/.well-known/oauth-protected-resource/mcp")).json()
+    metadata = (await client.get("/.well-known/oauth-authorization-server")).json()
+    assert prm["authorization_servers"][0] == metadata["issuer"]
 
 
 async def test_health_endpoint_is_public(client):

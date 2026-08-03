@@ -53,5 +53,6 @@ nav:
   - Home: index.md
   - MCP Tools: mcp-tools.md
   - CLI Reference: cli.md
+  - HTTP Mode: http-mode.md
   - Windows Install: windows-install.md
   - Contributing: contributing.md

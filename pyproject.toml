@@ -50,8 +50,17 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+http = [
+    # Both already arrive transitively with mcp (uvicorn directly, cryptography
+    # via pyjwt[crypto]); declaring them documents what `serve` imports and
+    # keeps HTTP mode working if those transitive deps ever change.
+    "uvicorn>=0.30",
+    "cryptography>=42",
+]
 dev = [
     "pytest>=7.0.0",
+    "uvicorn>=0.30",
+    "cryptography>=42",
     "pytest-asyncio>=0.23.0",
     "pytest-cov>=4.1.0",
     "pytest-httpx>=0.30.0",

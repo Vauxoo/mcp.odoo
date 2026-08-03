@@ -117,6 +117,69 @@ def test_the_public_hostname_survives_the_rebinding_guard():
     assert "https://odoo-mcp.me1980.com" in security.allowed_origins
 
 
+async def test_a_proxied_host_would_be_rejected_without_the_explicit_policy(http_config, auth_store):
+    """Regression guard for the failure this policy exists to prevent.
+
+    Built against FastMCP's default, an authenticated request arriving with
+    the public Host header — exactly what a reverse proxy sends — is answered
+    with 421 Misdirected Request before it reaches any handler.
+    """
+    import httpx
+
+    from odoo_mcp_multi.http import app as app_module
+    from tests.conftest import PUBLIC_HOST, _Lifespan
+
+    credential_id = auth_store.put_credential(
+        {
+            "name": "oauth:db",
+            "url": "https://odoo.example.com",
+            "database": "db",
+            "user": "someone",
+            "api_key": "k",
+            "protocol": "json2s",
+        },
+        uid=1,
+    )
+    grant_id = auth_store.create_grant(
+        client_id="c",
+        credential_id=credential_id,
+        scopes=["odoo:read", "odoo:write"],
+        resource=http_config.resource_url,
+    )
+    token, _ = auth_store.put_access_token(grant_id, ttl=3600)
+
+    async def initialize(app):
+        async with _Lifespan(app):
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app), base_url=f"https://{PUBLIC_HOST}"
+            ) as scoped:
+                return await scoped.post(
+                    "/mcp",
+                    headers={
+                        "Content-Type": "application/json",
+                        "Accept": "application/json, text/event-stream",
+                        "Authorization": f"Bearer {token}",
+                    },
+                    json={
+                        "jsonrpc": "2.0",
+                        "id": 1,
+                        "method": "initialize",
+                        "params": {
+                            "protocolVersion": "2025-06-18",
+                            "capabilities": {},
+                            "clientInfo": {"name": "t", "version": "1"},
+                        },
+                    },
+                )
+
+    configured = await initialize(app_module.build_http_app(http_config))
+    assert configured.status_code == 200, configured.text
+
+    with patch.object(app_module, "build_transport_security", return_value=None):
+        defaulted = await initialize(app_module.build_http_app(http_config))
+    assert defaulted.status_code == 421, "the default policy must be the one that rejects it"
+
+
 def test_serve_binds_what_it_was_told(runner, state_paths):
     with patch("uvicorn.run") as run:
         result = runner.invoke(

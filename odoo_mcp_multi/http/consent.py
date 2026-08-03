@@ -195,15 +195,20 @@ class ConsentRoutes:
         The SDK only mounts it under the resource path. Some clients probe the
         bare path first, so answering both costs nothing and removes a
         discovery failure mode that surfaces as "couldn't reach the server".
+
+        Built from the SDK's own model so the two documents cannot drift: an
+        issuer that differs by as little as a trailing slash breaks the exact
+        string comparison RFC 9207 requires of clients.
         """
-        return JSONResponse(
-            {
-                "resource": self.config.resource_url,
-                "authorization_servers": [self.config.issuer_url],
-                "scopes_supported": list(DEFAULT_SCOPES),
-                "bearer_methods_supported": ["header"],
-            }
+        from mcp.shared.auth import ProtectedResourceMetadata
+        from pydantic import AnyHttpUrl
+
+        metadata = ProtectedResourceMetadata(
+            resource=AnyHttpUrl(self.config.resource_url),
+            authorization_servers=[AnyHttpUrl(self.config.issuer_url)],
+            scopes_supported=list(DEFAULT_SCOPES),
         )
+        return JSONResponse(metadata.model_dump(exclude_none=True, mode="json"))
 
     # -- GET /health -------------------------------------------------------
 
