@@ -28,6 +28,7 @@ from pydantic import AnyHttpUrl
 from starlette.applications import Starlette
 
 from odoo_mcp_multi import operations
+from odoo_mcp_multi.http.basic_auth import BasicClientAuthMiddleware
 from odoo_mcp_multi.http.consent import ConsentRoutes
 from odoo_mcp_multi.http.crypto import CredentialCipher
 from odoo_mcp_multi.http.provider import OdooOAuthProvider
@@ -106,6 +107,8 @@ def build_http_app(config: HttpServeConfig) -> Starlette:
 
     app = server.streamable_http_app()
     app.add_middleware(ThreadLimitMiddleware, max_concurrency=config.max_concurrency)
+    if config.auth_enabled:
+        app.add_middleware(BasicClientAuthMiddleware)
     return app
 
 
