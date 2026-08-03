@@ -227,6 +227,44 @@ def op_test_connection(
     }
 
 
+def op_list_databases(url: str, timeout: int = 10, verify: bool = True) -> dict:
+    """List the databases an Odoo instance is willing to disclose.
+
+    Best-effort only: instances running with ``list_db = False`` — the
+    production default — return nothing, and that is not an error. Used to
+    offer suggestions on the HTTP consent form, never to gate it.
+
+    Returns:
+        Dict with success and a (possibly empty) 'databases' list.
+    """
+    import httpx
+
+    base = normalize_url(url).rstrip("/")
+    endpoints = (
+        (f"{base}/web/database/list", {"jsonrpc": "2.0", "method": "call", "params": {}}),
+        (
+            f"{base}/jsonrpc",
+            {
+                "jsonrpc": "2.0",
+                "method": "call",
+                "params": {"service": "db", "method": "list", "args": []},
+            },
+        ),
+    )
+
+    for endpoint, payload in endpoints:
+        try:
+            response = httpx.post(endpoint, json=payload, timeout=timeout, verify=verify)
+            data = response.json()
+        except Exception:
+            continue
+        result = data.get("result") if isinstance(data, dict) else None
+        if isinstance(result, list) and all(isinstance(item, str) for item in result):
+            return {"success": True, "databases": result}
+
+    return {"success": True, "databases": []}
+
+
 def op_validate_credentials(
     url: str,
     database: str,

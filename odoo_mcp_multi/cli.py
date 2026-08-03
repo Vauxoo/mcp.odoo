@@ -561,6 +561,214 @@ def cmd_run(profile: str) -> None:
     run_server()
 
 
+@main.command("serve")
+@click.option("--host", default="127.0.0.1", show_default=True, help="Address to bind.")
+@click.option("--port", default=5010, show_default=True, type=int, help="Port to bind.")
+@click.option("--path", default="/mcp", show_default=True, help="Path the MCP endpoint is served on.")
+@click.option(
+    "--public-url",
+    default=None,
+    help="The exact URL users paste into their MCP client, e.g. https://odoo-mcp.example.com/mcp. "
+    "Required unless --no-auth.",
+)
+@click.option("--no-auth", is_flag=True, help="Disable OAuth. Loopback only — for local development.")
+@click.option("--json-response/--sse-response", default=True, show_default=True, help="Response encoding.")
+@click.option("--stateless/--stateful", default=True, show_default=True, help="MCP session handling.")
+@click.option("--state-db", default=None, type=click.Path(), help="Path to the authorization state database.")
+@click.option("--secret-key-file", default=None, type=click.Path(), help="Path to the credential encryption key.")
+@click.option("--access-token-ttl", default=3600, show_default=True, type=int, help="Access token lifetime (s).")
+@click.option("--refresh-token-ttl", default=2592000, show_default=True, type=int, help="Refresh token lifetime (s).")
+@click.option("--odoo-timeout", default=60, show_default=True, type=int, help="Per-call Odoo RPC timeout (s).")
+@click.option("--max-concurrency", default=32, show_default=True, type=int, help="Concurrent Odoo calls.")
+@click.option(
+    "--allowed-odoo-host",
+    "allowed_odoo_hosts",
+    multiple=True,
+    help="Restrict which Odoo hosts the consent form may contact. Repeatable.",
+)
+@click.option(
+    "--log-level",
+    default="INFO",
+    show_default=True,
+    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]),
+)
+def cmd_serve(
+    host: str,
+    port: int,
+    path: str,
+    public_url: str,
+    no_auth: bool,
+    json_response: bool,
+    stateless: bool,
+    state_db: str,
+    secret_key_file: str,
+    access_token_ttl: int,
+    refresh_token_ttl: int,
+    odoo_timeout: int,
+    max_concurrency: int,
+    allowed_odoo_hosts: tuple,
+    log_level: str,
+) -> None:
+    """Serve the MCP tools over authenticated HTTP.
+
+    Exposes the same tools as `run`, but over Streamable HTTP with an embedded
+    OAuth 2.1 authorization server. Users sign in with their own Odoo
+    credentials on a consent page, and every tool call then runs as that Odoo
+    user — the host's profiles.json is not used in this mode.
+    """
+    from pathlib import Path
+
+    from odoo_mcp_multi.http.settings import ConfigError, HttpServeConfig
+
+    try:
+        import uvicorn
+    except ImportError:
+        click.secho(
+            f"{CROSS} HTTP mode needs uvicorn. Install it with: pip install 'odoo-mcp-multi[http]'",
+            fg="red",
+            err=True,
+        )
+        sys.exit(1)
+
+    try:
+        config = HttpServeConfig(
+            host=host,
+            port=port,
+            path=path,
+            public_url=public_url,
+            auth_enabled=not no_auth,
+            json_response=json_response,
+            stateless=stateless,
+            state_db=Path(state_db) if state_db else None,
+            secret_key_file=Path(secret_key_file) if secret_key_file else None,
+            access_token_ttl=access_token_ttl,
+            refresh_token_ttl=refresh_token_ttl,
+            odoo_timeout=odoo_timeout,
+            max_concurrency=max_concurrency,
+            allowed_odoo_hosts=tuple(allowed_odoo_hosts),
+            log_level=log_level,
+        )
+        config.validate_runtime()
+    except ConfigError as exc:
+        click.secho(f"{CROSS} {exc}", fg="red", err=True)
+        sys.exit(2)
+
+    from odoo_mcp_multi.http.app import build_http_app
+
+    if not config.auth_enabled:
+        click.secho(
+            "WARNING: authentication is disabled. Anyone who can reach "
+            f"http://{config.host}:{config.port}{config.path} can use every tool.",
+            fg="red",
+            bold=True,
+            err=True,
+        )
+
+    app = build_http_app(config)
+
+    click.echo(f"Serving MCP on http://{config.host}:{config.port}{config.path}", err=True)
+    if config.auth_enabled:
+        click.echo(f"  Public URL:  {config.resource_url}", err=True)
+        click.echo(f"  Issuer:      {config.issuer_url}", err=True)
+        click.echo(f"  Consent:     {config.login_url}", err=True)
+        click.echo(f"  State DB:    {config.state_db}", err=True)
+    if config.allowed_odoo_hosts:
+        click.echo(f"  Odoo hosts:  {', '.join(config.allowed_odoo_hosts)}", err=True)
+
+    uvicorn.run(app, host=config.host, port=config.port, log_level=config.log_level.lower())
+
+
+# ---------------------------------------------------------------------------
+# HTTP mode operations (inspect and revoke what `serve` has issued)
+# ---------------------------------------------------------------------------
+
+
+def _open_store(state_db: str, secret_key_file: str):
+    """Open the authorization store the same way `serve` would."""
+    from pathlib import Path
+
+    from odoo_mcp_multi.http.crypto import CredentialCipher
+    from odoo_mcp_multi.http.settings import HttpServeConfig
+    from odoo_mcp_multi.http.store import AuthStore
+
+    config = HttpServeConfig(
+        auth_enabled=False,
+        state_db=Path(state_db) if state_db else None,
+        secret_key_file=Path(secret_key_file) if secret_key_file else None,
+    )
+    return AuthStore(config.state_db, CredentialCipher.from_file(config.secret_key_file))
+
+
+def _store_options(func):
+    """Shared --state-db / --secret-key-file options for the http group."""
+    func = click.option("--secret-key-file", default=None, type=click.Path(), help="Encryption key path.")(func)
+    func = click.option("--state-db", default=None, type=click.Path(), help="State database path.")(func)
+    return func
+
+
+@main.group("http")
+def cmd_http() -> None:
+    """Inspect and revoke what the HTTP server has issued."""
+
+
+@cmd_http.command("clients")
+@_store_options
+def cmd_http_clients(state_db: str, secret_key_file: str) -> None:
+    """List OAuth clients that registered with this server."""
+    store = _open_store(state_db, secret_key_file)
+    clients = store.list_clients()
+    if not clients:
+        click.echo("No registered clients.")
+        return
+    for row in clients:
+        click.echo(f"{row['client_id']}  {row['client_name'] or '(unnamed)'}")
+
+
+@cmd_http.command("grants")
+@_store_options
+def cmd_http_grants(state_db: str, secret_key_file: str) -> None:
+    """List active grants and the Odoo accounts behind them."""
+    store = _open_store(state_db, secret_key_file)
+    grants = store.list_grants()
+    if not grants:
+        click.echo("No active grants.")
+        return
+    for row in grants:
+        click.echo(
+            f"{row['grant_id']}  {row['odoo_login']}@{row['odoo_db']}  {row['odoo_url']}  "
+            f"tokens={row['access_tokens']}"
+        )
+
+
+@cmd_http.command("revoke")
+@click.argument("grant_id", required=False)
+@click.option("--all", "revoke_all", is_flag=True, help="Revoke every grant.")
+@_store_options
+def cmd_http_revoke(grant_id: str, revoke_all: bool, state_db: str, secret_key_file: str) -> None:
+    """Revoke a grant, deleting its tokens and stored Odoo credentials."""
+    store = _open_store(state_db, secret_key_file)
+    if revoke_all:
+        targets = [row["grant_id"] for row in store.list_grants()]
+    elif grant_id:
+        targets = [grant_id]
+    else:
+        click.secho(f"{CROSS} Pass a GRANT_ID or --all.", fg="red", err=True)
+        sys.exit(1)
+
+    revoked = sum(1 for target in targets if store.revoke_grant(target))
+    click.secho(f"{TICK} Revoked {revoked} grant(s).", fg="green")
+
+
+@cmd_http.command("purge")
+@_store_options
+def cmd_http_purge(state_db: str, secret_key_file: str) -> None:
+    """Delete expired transactions, codes and tokens."""
+    store = _open_store(state_db, secret_key_file)
+    counts = store.purge_expired()
+    for table, count in counts.items():
+        click.echo(f"{table}: {count} removed")
+
+
 # ---------------------------------------------------------------------------
 # Odoo data operation commands (mirroring MCP tools)
 # ---------------------------------------------------------------------------

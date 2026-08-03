@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>{{ title }} — {{ server_name }}</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --ground: #faf9fb; --surface: #fff; --ink: #1b1720; --muted: #6e6678;
+    --line: #ddd6e4; --err: #9e2f2f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #141118; --surface: #1c1823; --ink: #ede9f1; --muted: #948ba1;
+      --line: #322c3d; --err: #e08a8a;
+    }
+  }
+  body {
+    margin: 0; padding: 3rem 1rem; background: var(--ground); color: var(--ink);
+    font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 32rem; margin: 0 auto; }
+  h1 { font-size: 1.4rem; margin: 0 0 .5rem; color: var(--err); }
+  p { margin: 0 0 1rem; }
+  .card {
+    background: var(--surface); border: 1px solid var(--line);
+    border-left: 3px solid var(--err); border-radius: 0 4px 4px 0; padding: 1.25rem;
+  }
+  .next { color: var(--muted); font-size: .9rem; }
+  footer { margin-top: 2rem; font-size: .8rem; color: var(--muted); text-align: center; }
+</style>
+</head>
+<body>
+<main>
+  <h1>{{ title }}</h1>
+  <div class="card">
+    <p>{{ message }}</p>
+    <p class="next">{{ next_step }}</p>
+  </div>
+  <footer>{{ server_name }}</footer>
+</main>
+</body>
+</html>

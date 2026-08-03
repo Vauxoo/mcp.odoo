@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Connect your Odoo — {{ server_name }}</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --ground: #faf9fb; --surface: #fff; --ink: #1b1720; --muted: #6e6678;
+    --line: #ddd6e4; --accent: #7a3e8f; --accent-ink: #5c2c6d;
+    --err: #9e2f2f; --err-bg: #f8e9e9; --ok: #2f6b4f;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #141118; --surface: #1c1823; --ink: #ede9f1; --muted: #948ba1;
+      --line: #322c3d; --accent: #c79bd8; --accent-ink: #ddbfea;
+      --err: #e08a8a; --err-bg: #2e1c1c; --ok: #7fc0a0;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 2rem 1rem 4rem; background: var(--ground); color: var(--ink);
+    font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 34rem; margin: 0 auto; }
+  h1 { font-size: 1.5rem; line-height: 1.2; margin: 0 0 .5rem; }
+  .lede { color: var(--muted); margin: 0 0 1.5rem; }
+  .card {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 6px;
+    padding: 1.5rem;
+  }
+  .who {
+    font-size: .9rem; border-left: 3px solid var(--accent); background: var(--surface);
+    padding: .75rem 1rem; margin: 0 0 1.5rem; border-radius: 0 4px 4px 0;
+    border-top: 1px solid var(--line); border-right: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+  }
+  .who b { color: var(--accent-ink); }
+  label { display: block; font-weight: 600; font-size: .85rem; margin: 1rem 0 .3rem; }
+  label:first-of-type { margin-top: 0; }
+  input[type=text], input[type=password], select {
+    width: 100%; padding: .55rem .7rem; font: inherit; font-size: .95rem;
+    background: var(--ground); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 4px;
+  }
+  input:focus, select:focus, button:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 1px;
+  }
+  .hint { font-size: .8rem; color: var(--muted); margin: .35rem 0 0; }
+  fieldset { border: 0; padding: 0; margin: 1rem 0 0; }
+  legend { font-weight: 600; font-size: .85rem; padding: 0; margin-bottom: .3rem; }
+  .radios { display: flex; gap: 1rem; flex-wrap: wrap; }
+  .radios label { font-weight: 400; margin: 0; display: flex; align-items: center; gap: .35rem; }
+  button {
+    margin-top: 1.5rem; width: 100%; padding: .7rem 1rem; font: inherit; font-weight: 600;
+    color: #fff; background: var(--accent); border: 0; border-radius: 4px; cursor: pointer;
+  }
+  button:hover { background: var(--accent-ink); }
+  .error {
+    background: var(--err-bg); border: 1px solid var(--err); color: var(--err);
+    border-radius: 4px; padding: .75rem 1rem; margin: 0 0 1.25rem; font-size: .9rem;
+    overflow-wrap: anywhere;
+  }
+  .scopes { font-size: .85rem; color: var(--muted); margin: 1.25rem 0 0; }
+  .scopes code { background: var(--ground); border: 1px solid var(--line);
+    border-radius: 3px; padding: .05em .35em; font-size: .95em; }
+  footer { margin-top: 2rem; font-size: .8rem; color: var(--muted); text-align: center; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Connect your Odoo</h1>
+  <p class="lede">Sign in with your own Odoo credentials. Everything this connector does
+  afterwards runs as you, under your own access rights.</p>
+
+  <p class="who">
+    <b>{{ client_name }}</b> is asking to connect on your behalf.
+    {%- if client_uri %} <br><span class="hint">{{ client_uri }}</span>{% endif %}
+  </p>
+
+  {% if error %}<p class="error" role="alert">{{ error }}</p>{% endif %}
+
+  <form method="post" action="{{ action }}" class="card" autocomplete="off">
+    <input type="hidden" name="txn" value="{{ txn }}">
+
+    <label for="odoo_url">Odoo URL</label>
+    <input type="text" id="odoo_url" name="odoo_url" required inputmode="url"
+           placeholder="https://mycompany.odoo.com" value="{{ form.odoo_url or '' }}">
+    {% if allowed_hosts %}
+    <p class="hint">This server only connects to: {{ allowed_hosts|join(', ') }}</p>
+    {% endif %}
+
+    <label for="database">Database</label>
+    <input type="text" id="database" name="database" required
+           placeholder="mycompany" value="{{ form.database or '' }}" list="db-list">
+    <datalist id="db-list">
+      {% for db in databases %}<option value="{{ db }}"></option>{% endfor %}
+    </datalist>
+    <p class="hint">Most production instances hide their database list, so you will
+    usually need to type this.</p>
+
+    <label for="login">Odoo login</label>
+    <input type="text" id="login" name="login" required
+           placeholder="you@example.com" value="{{ form.login or '' }}">
+
+    <fieldset>
+      <legend>Credential type</legend>
+      <div class="radios">
+        <label><input type="radio" name="secret_kind" value="api_key"
+          {% if form.secret_kind != 'password' %}checked{% endif %}> API key (recommended)</label>
+        <label><input type="radio" name="secret_kind" value="password"
+          {% if form.secret_kind == 'password' %}checked{% endif %}> Password</label>
+      </div>
+      <p class="hint">An API key can be revoked on its own from your Odoo preferences,
+      without changing your password. Odoo 19 and later require one.</p>
+    </fieldset>
+
+    <label for="secret">API key or password</label>
+    <input type="password" id="secret" name="secret" required autocomplete="new-password">
+
+    <label for="protocol">Protocol</label>
+    <select id="protocol" name="protocol">
+      <option value="auto" {% if form.protocol in (None, '', 'auto') %}selected{% endif %}>Detect automatically</option>
+      <option value="json2s" {% if form.protocol == 'json2s' %}selected{% endif %}>JSON-2 (Odoo 19+)</option>
+      <option value="jsonrpcs" {% if form.protocol == 'jsonrpcs' %}selected{% endif %}>JSON-RPC</option>
+      <option value="xmlrpcs" {% if form.protocol == 'xmlrpcs' %}selected{% endif %}>XML-RPC</option>
+    </select>
+
+    <button type="submit">Verify and connect</button>
+
+    <p class="scopes">Granting: {% for s in scopes %}<code>{{ s }}</code>{% if not loop.last %}, {% endif %}{% endfor %}.
+    Your credentials are encrypted on this server and are erased when you disconnect the connector.</p>
+  </form>
+
+  <footer>{{ server_name }}</footer>
+</main>
+</body>
+</html>
