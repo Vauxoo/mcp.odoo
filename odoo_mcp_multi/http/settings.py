@@ -34,8 +34,10 @@ DEFAULT_MAX_CONCURRENCY = 32
 
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1", "[::1]"})
 
-# Where the hosted Claude surfaces send the user back after consent.
-CLAUDE_REDIRECT_URI = "https://claude.ai/api/mcp/auth_callback"
+# Where the hosted Claude surfaces send the user back after consent, and the
+# origin those requests carry.
+CLAUDE_ORIGIN = "https://claude.ai"
+CLAUDE_REDIRECT_URI = f"{CLAUDE_ORIGIN}/api/mcp/auth_callback"
 
 
 class ConfigError(ValueError):

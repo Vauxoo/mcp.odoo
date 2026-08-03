@@ -31,7 +31,7 @@ from odoo_mcp_multi import operations
 from odoo_mcp_multi.http.consent import ConsentRoutes
 from odoo_mcp_multi.http.crypto import CredentialCipher
 from odoo_mcp_multi.http.provider import OdooOAuthProvider
-from odoo_mcp_multi.http.settings import CLAUDE_REDIRECT_URI, DEFAULT_SCOPES, HttpServeConfig
+from odoo_mcp_multi.http.settings import CLAUDE_ORIGIN, DEFAULT_SCOPES, HttpServeConfig
 from odoo_mcp_multi.http.store import AuthStore
 from odoo_mcp_multi.server import build_server
 
@@ -56,7 +56,7 @@ def build_transport_security(config: HttpServeConfig) -> TransportSecuritySettin
     return TransportSecuritySettings(
         enable_dns_rebinding_protection=True,
         allowed_hosts=[config.netloc, f"{config.host}:{config.port}", "127.0.0.1:*", "localhost:*"],
-        allowed_origins=[config.issuer_url, "https://claude.ai", CLAUDE_REDIRECT_URI.rsplit("/api", 1)[0]],
+        allowed_origins=[config.issuer_url, CLAUDE_ORIGIN],
     )
 
 

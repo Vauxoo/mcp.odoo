@@ -20,6 +20,7 @@ Two details of the SDK shape this module:
 from __future__ import annotations
 
 import json
+import time
 from typing import Any, Optional
 from urllib.parse import urlparse
 
@@ -31,12 +32,18 @@ from mcp.server.auth.provider import (
     RefreshToken,
     RegistrationError,
     TokenError,
+    construct_redirect_uri,
 )
 from mcp.shared.auth import InvalidRedirectUriError, OAuthClientInformationFull, OAuthToken
 from pydantic import AnyUrl
 
 from odoo_mcp_multi.config import OdooProfile
-from odoo_mcp_multi.http.settings import DEFAULT_AUTH_CODE_TTL, DEFAULT_SCOPES, HttpServeConfig
+from odoo_mcp_multi.http.settings import (
+    DEFAULT_AUTH_CODE_TTL,
+    DEFAULT_SCOPES,
+    DEFAULT_TXN_TTL,
+    HttpServeConfig,
+)
 from odoo_mcp_multi.http.store import AuthStore
 
 # A consent form that talks to an arbitrary Odoo is also a password oracle if
@@ -143,7 +150,7 @@ class OdooOAuthProvider:
 
         payload = json.loads(params.model_dump_json())
         payload["scopes"] = scopes
-        txn_id = self.store.put_txn(client.client_id, json.dumps(payload), ttl=_txn_ttl())
+        txn_id = self.store.put_txn(client.client_id, json.dumps(payload), ttl=DEFAULT_TXN_TTL)
         return f"{self.config.login_url}?txn={txn_id}"
 
     async def load_authorization_code(
@@ -267,8 +274,6 @@ class OdooOAuthProvider:
         Returns the redirect URI, with ``code`` and ``state`` attached, that
         sends the user back to their MCP client.
         """
-        from mcp.server.auth.provider import construct_redirect_uri
-
         params = json.loads(txn["params_json"])
         # to_dict() unwraps the SecretStr fields; model_dump would persist the
         # masked placeholder and silently lose the credential.
@@ -295,7 +300,7 @@ class OdooOAuthProvider:
         return OAuthToken(
             access_token=access_token,
             token_type="Bearer",
-            expires_in=int(expires_at - _now()),
+            expires_in=int(expires_at - time.time()),
             scope=" ".join(scopes),
             refresh_token=refresh_token,
         )
@@ -314,18 +319,6 @@ def _row_to_code(row: dict[str, Any]) -> OdooAuthorizationCode:
         resource=row["resource"],
         credential_id=row["credential_id"],
     )
-
-
-def _txn_ttl() -> int:
-    from odoo_mcp_multi.http.settings import DEFAULT_TXN_TTL
-
-    return DEFAULT_TXN_TTL
-
-
-def _now() -> float:
-    import time
-
-    return time.time()
 
 
 __all__ = [
