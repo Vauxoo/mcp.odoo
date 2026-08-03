@@ -7,12 +7,14 @@ when something goes wrong, so this layer is a pure pass-through.
 
 from __future__ import annotations
 
+import functools
 import json
-from typing import Any, Optional, Union
+from typing import Any, Callable, Optional, Union
 
+import anyio
 from mcp.server.fastmcp import FastMCP
 
-from odoo_mcp_multi.config import ALWAYS_ALLOWED_TOOLS, resolve_profile
+from odoo_mcp_multi.config import ALWAYS_ALLOWED_TOOLS
 from odoo_mcp_multi.operations import (
     op_create,
     op_execute_kw,
@@ -27,6 +29,7 @@ from odoo_mcp_multi.operations import (
     op_search_read,
     op_unlink,
     op_write,
+    resolve_active_profile,
     set_fallback_profile,
 )
 
@@ -44,36 +47,35 @@ def _set_fallback_ref(profile):
     _fallback_profile = profile
 
 
-# Create the MCP server — branded name and instructions are sent to the
-# AI client at connection time via the MCP protocol.
-mcp = FastMCP(
-    "Odoo MCP Multi — by Nhomar Hernández @ Vauxoo",
-    instructions=(
-        "You are connected to **Odoo MCP Multi** — the most tested, documented, "
-        "and production-ready MCP server for Odoo, built by Nhomar Hernández at "
-        "Vauxoo (https://vauxoo.com), an Odoo Gold Partner since 2009.\n\n"
-        "This server exposes 12 tools for interacting with one or more Odoo "
-        "instances (multi-profile): search_read, write, unlink, create, export_records, "
-        "import_records, execute_kw, list_models, list_fields, "
-        "list_available_profiles, get_version, and get_financial_report.\n\n"
-        "Tips:\n"
-        "- Always call list_available_profiles first to know which environments "
-        "are configured.\n"
-        "- Pass 'profile' to target a specific instance (prod, staging, dev…).\n"
-        "- search_read and export_records return pagination envelopes — check "
-        "'has_more' and use 'next_offset' to fetch additional pages.\n"
-        "- If a result contains 'success': false, read the 'error' field for "
-        "a verbose explanation of what went wrong.\n"
-        "- Report issues at https://git.vauxoo.com/ai/mcp.odoo/-/issues\n\n"
-        "Token efficiency (results stay in context for the whole session — keep reads lean):\n"
-        "- Always pass explicit 'fields' to search_read/export_records instead of "
-        "reading every field.\n"
-        "- Prefer format='compact' (~60% smaller) or 'csv' for large or summarized "
-        "reads; keep 'json' only when you must parse values programmatically.\n"
-        "- Keep 'limit' small (default 25) and page with 'next_offset' rather than "
-        "requesting large batches up front.\n"
-        "- Use the search_count tool to size a result set before a wide read."
-    ),
+# Branded name and instructions are sent to the AI client at connection time
+# via the MCP protocol.
+SERVER_NAME = "Odoo MCP Multi — by Nhomar Hernández @ Vauxoo"
+
+INSTRUCTIONS = (
+    "You are connected to **Odoo MCP Multi** — the most tested, documented, "
+    "and production-ready MCP server for Odoo, built by Nhomar Hernández at "
+    "Vauxoo (https://vauxoo.com), an Odoo Gold Partner since 2009.\n\n"
+    "This server exposes 12 tools for interacting with one or more Odoo "
+    "instances (multi-profile): search_read, write, unlink, create, export_records, "
+    "import_records, execute_kw, list_models, list_fields, "
+    "list_available_profiles, get_version, and get_financial_report.\n\n"
+    "Tips:\n"
+    "- Always call list_available_profiles first to know which environments "
+    "are configured.\n"
+    "- Pass 'profile' to target a specific instance (prod, staging, dev…).\n"
+    "- search_read and export_records return pagination envelopes — check "
+    "'has_more' and use 'next_offset' to fetch additional pages.\n"
+    "- If a result contains 'success': false, read the 'error' field for "
+    "a verbose explanation of what went wrong.\n"
+    "- Report issues at https://git.vauxoo.com/ai/mcp.odoo/-/issues\n\n"
+    "Token efficiency (results stay in context for the whole session — keep reads lean):\n"
+    "- Always pass explicit 'fields' to search_read/export_records instead of "
+    "reading every field.\n"
+    "- Prefer format='compact' (~60% smaller) or 'csv' for large or summarized "
+    "reads; keep 'json' only when you must parse values programmatically.\n"
+    "- Keep 'limit' small (default 25) and page with 'next_offset' rather than "
+    "requesting large batches up front.\n"
+    "- Use the search_count tool to size a result set before a wide read."
 )
 
 
@@ -91,7 +93,7 @@ def _check_permission(tool_name: str, profile: str | None) -> str | None:
     if tool_name in ALWAYS_ALLOWED_TOOLS:
         return None
     try:
-        resolved = resolve_profile(profile, fallback=_fallback_profile)
+        resolved = resolve_active_profile(profile, fallback=_fallback_profile)
     except ValueError:
         return None  # let the operation itself handle missing profiles
     if not resolved.is_operation_allowed(tool_name):
@@ -104,7 +106,6 @@ def _check_permission(tool_name: str, profile: str | None) -> str | None:
     return None
 
 
-@mcp.tool()
 def list_available_profiles() -> str:
     """List all available Odoo connection profiles.
 
@@ -117,7 +118,6 @@ def list_available_profiles() -> str:
     return _json(op_list_profiles())
 
 
-@mcp.tool()
 def search_read(
     model: str,
     domain: Union[str, list] = "[]",
@@ -161,7 +161,6 @@ def search_read(
     return _json(op_search_read(model, domain, fields, limit, offset, order, format, profile))
 
 
-@mcp.tool()
 def search_count(
     model: str,
     domain: Union[str, list] = "[]",
@@ -186,7 +185,6 @@ def search_count(
     return _json(op_search_count(model, domain, profile))
 
 
-@mcp.tool()
 def write(
     model: str,
     ids: Union[str, list] = "[]",
@@ -210,7 +208,6 @@ def write(
     return _json(op_write(model, ids, values, profile))
 
 
-@mcp.tool()
 def unlink(
     model: str,
     ids: Union[str, list] = "[]",
@@ -232,7 +229,6 @@ def unlink(
     return _json(op_unlink(model, ids, profile))
 
 
-@mcp.tool()
 def create(
     model: str,
     values: Union[str, dict] = "{}",
@@ -254,7 +250,6 @@ def create(
     return _json(op_create(model, values, profile))
 
 
-@mcp.tool()
 def export_records(
     model: str,
     domain: str = "[]",
@@ -292,7 +287,6 @@ def export_records(
     return _json(op_export_records(model, domain, fields, limit, offset, format, profile))
 
 
-@mcp.tool()
 def import_records(
     model: str,
     fields: str,
@@ -322,7 +316,6 @@ def import_records(
     return _json(op_import_records(model, fields, rows, profile))
 
 
-@mcp.tool()
 def execute_kw(
     model: str,
     method: str,
@@ -356,7 +349,6 @@ def execute_kw(
     return _json(op_execute_kw(model, method, args, kwargs, profile))
 
 
-@mcp.tool()
 def get_version(profile: Optional[str] = None) -> str:
     """Get the Odoo server version information.
 
@@ -369,7 +361,6 @@ def get_version(profile: Optional[str] = None) -> str:
     return _json(op_get_version(profile))
 
 
-@mcp.tool()
 def list_models(
     search: str = "",
     format: str = "json",
@@ -391,7 +382,6 @@ def list_models(
     return _json(op_list_models(search, format, profile))
 
 
-@mcp.tool()
 def list_fields(
     model: str,
     attributes: str = "",
@@ -414,7 +404,6 @@ def list_fields(
     return _json(op_list_fields(model, attributes, format, profile))
 
 
-@mcp.tool()
 def get_financial_report(
     report_id_or_name: str,
     date_from: Optional[str] = None,
@@ -468,6 +457,69 @@ def get_financial_report(
             company_ids=company_ids,
         )
     )
+
+
+# Every tool exposed over MCP, in the order they are registered. The functions
+# above are plain synchronous callables so the CLI and the tests can use them
+# directly; _threaded() adapts them for the server.
+_TOOLS: tuple[Callable[..., str], ...] = (
+    list_available_profiles,
+    search_read,
+    search_count,
+    write,
+    unlink,
+    create,
+    export_records,
+    import_records,
+    execute_kw,
+    get_version,
+    list_models,
+    list_fields,
+    get_financial_report,
+)
+
+
+def _threaded(fn: Callable[..., str]) -> Callable[..., Any]:
+    """Wrap a blocking tool so it runs off the event loop.
+
+    FastMCP awaits async tools but calls sync ones inline, which would let a
+    single slow Odoo RPC stall every other request in an HTTP deployment —
+    including the OAuth endpoints, whose clients time out in ten seconds.
+    Handing the call to a worker thread keeps the loop free.
+
+    ``anyio`` copies the current context into the worker, so the per-request
+    Odoo credentials in :mod:`odoo_mcp_multi.context` survive the hop.
+    ``functools.wraps`` preserves the signature and docstring that FastMCP
+    turns into the tool's schema.
+    """
+
+    @functools.wraps(fn)
+    async def wrapper(*args: Any, **kwargs: Any) -> str:
+        return await anyio.to_thread.run_sync(functools.partial(fn, *args, **kwargs))
+
+    return wrapper
+
+
+def _register_tools(server: FastMCP) -> None:
+    """Register every Odoo tool on a FastMCP instance."""
+    for fn in _TOOLS:
+        server.tool()(_threaded(fn))
+
+
+def build_server(**kwargs: Any) -> FastMCP:
+    """Build a FastMCP server with every Odoo tool registered.
+
+    Keyword arguments are forwarded to :class:`~mcp.server.fastmcp.FastMCP`,
+    which is how HTTP mode supplies its transport, authorization and security
+    settings. Called with no arguments it yields the stdio server.
+    """
+    server = FastMCP(SERVER_NAME, instructions=INSTRUCTIONS, **kwargs)
+    _register_tools(server)
+    return server
+
+
+# Module-level server used by stdio mode and by the in-process tests.
+mcp = build_server()
 
 
 def run_server() -> None:

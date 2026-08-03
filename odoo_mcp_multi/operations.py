@@ -22,6 +22,7 @@ import jinja2.sandbox
 
 from odoo_mcp_multi.client import create_client
 from odoo_mcp_multi.config import list_profiles, resolve_profile
+from odoo_mcp_multi.context import get_request_profile
 from odoo_mcp_multi.exceptions import OdooMethodNotFoundError
 from odoo_mcp_multi.parsers import normalize_url, parse_domain, parse_fields, parse_ids, parse_json_arg
 from odoo_mcp_multi.version import get_server_version, validate_version_compatibility
@@ -33,6 +34,10 @@ TABLE_TRUNCATE_LEN = 50
 
 # MCP server sets this at startup via set_fallback_profile()
 _fallback_profile: Optional[Any] = None
+
+# HTTP mode sets this at startup via set_default_timeout() so a slow Odoo call
+# cannot hold a worker thread for the stdio default. None = client default.
+_default_timeout: Optional[int] = None
 
 
 def set_fallback_profile(profile: Any) -> None:
@@ -77,11 +82,54 @@ def _cache_set(key: str, data: Any) -> None:
     _metadata_cache[key] = {"data": data, "ts": time()}
 
 
+def set_default_timeout(timeout: Optional[int]) -> None:
+    """Override the RPC timeout used for every client built by this module.
+
+    HTTP mode lowers it so a stalled Odoo call cannot occupy a worker thread
+    for the stdio default of two minutes. ``None`` restores the client default.
+    """
+    global _default_timeout
+    _default_timeout = timeout
+
+
+def resolve_active_profile(profile_name: Optional[str] = None, fallback: Optional[Any] = None):
+    """Resolve which Odoo profile serves the current call.
+
+    Over HTTP the credentials come from the authenticated request, so the
+    host's ``profiles.json`` is bypassed entirely and a caller-supplied
+    ``profile`` name may only refer to the connection it already authorized.
+
+    In stdio mode this is exactly the legacy behaviour: explicit name, then
+    the caller's fallback (or this module's startup profile), then the
+    configured default.
+
+    Args:
+        profile_name: Explicit profile name requested by the caller.
+        fallback: Fallback profile to prefer over this module's own, used by
+            the server layer which keeps its own reference.
+
+    Raises:
+        ValueError: If no profile can be resolved, or if an HTTP caller asks
+            for a profile other than the one bound to its credentials.
+    """
+    request_profile = get_request_profile()
+    if request_profile is not None:
+        if profile_name and profile_name != request_profile.name:
+            raise ValueError(
+                f"Profile '{profile_name}' is not available over HTTP. This connection is bound to the "
+                "Odoo credentials you authorized; omit 'profile' to use them."
+            )
+        return request_profile
+
+    return resolve_profile(profile_name, fallback=fallback if fallback is not None else _fallback_profile)
+
+
 def _get_client(profile_name: Optional[str] = None):
     """Get an Odoo client instance for the specified profile.
 
     Args:
-        profile_name: Name of the profile to use. If None, uses the fallback/default profile.
+        profile_name: Name of the profile to use. If None, uses the request
+            credentials (HTTP mode) or the fallback/default profile (stdio).
 
     Returns:
         Configured Odoo client
@@ -89,7 +137,19 @@ def _get_client(profile_name: Optional[str] = None):
     Raises:
         ValueError: If no profile is found or configured.
     """
-    active_profile = resolve_profile(profile_name, fallback=_fallback_profile)
+    active_profile = resolve_active_profile(profile_name)
+
+    if _default_timeout is not None:
+        return create_client(
+            url=active_profile.url,
+            database=active_profile.database,
+            user=active_profile.user,
+            password=active_profile.password or "",
+            api_key=active_profile.api_key or "",
+            protocol=active_profile.protocol,
+            verify=active_profile.verify,
+            timeout=_default_timeout,
+        )
 
     return create_client(
         url=active_profile.url,
@@ -167,12 +227,85 @@ def op_test_connection(
     }
 
 
+def op_validate_credentials(
+    url: str,
+    database: str,
+    user: str = "",
+    password: str = "",
+    api_key: str = "",
+    protocol: Optional[str] = None,
+    timeout: int = 30,
+    verify: bool = True,
+) -> dict:
+    """Validate a set of Odoo credentials and report the identity behind them.
+
+    Builds on :func:`op_test_connection` and closes the gap it leaves for
+    Odoo 19+ API keys: ``Json2Client.authenticate()`` is a no-op, so a bad key
+    would otherwise pass. When no password is supplied we issue a real read
+    against ``res.users`` — it both proves the bearer token works and yields
+    the login to show on the consent screen.
+
+    Returns:
+        Dict with success, uid, login, server_version and the *resolved*
+        protocol (never 'auto'), or {success: False, error: "..."}.
+    """
+    result = op_test_connection(
+        url=url,
+        database=database,
+        user=user,
+        password=password,
+        api_key=api_key,
+        protocol=protocol,
+        timeout=timeout,
+        verify=verify,
+    )
+    if not result.get("success"):
+        return result
+
+    login = user
+    uid = result.get("uid")
+
+    if not password and api_key:
+        try:
+            client = create_client(
+                url=url,
+                database=database,
+                user=user,
+                password=password,
+                api_key=api_key,
+                protocol=result.get("protocol") or protocol,
+                timeout=timeout,
+                verify=verify,
+            )
+            rows = client.execute_kw("res.users", "search_read", [[], ["id", "login"]], {"limit": 1})
+        except Exception as exc:
+            return {"success": False, "error": f"API key rejected by Odoo: {exc}"}
+        if isinstance(rows, list) and rows:
+            uid = rows[0].get("id", uid)
+            login = rows[0].get("login") or login
+
+    return {
+        "success": True,
+        "uid": uid,
+        "login": login,
+        "server_version": result.get("server_version", "unknown"),
+        "protocol": result.get("protocol", "auto"),
+    }
+
+
 def op_list_profiles() -> list[dict]:
     """List all available Odoo connection profiles (safe, no passwords).
+
+    Over HTTP the host's profiles belong to the operator, not to the remote
+    caller, so listing them would leak infrastructure names. In that mode the
+    connection already carries its own credentials and the list is empty.
 
     Returns:
         List of dicts with name, url, database, is_default.
     """
+    if get_request_profile() is not None:
+        return []
+
     profiles = list_profiles()
     return [
         {
