@@ -18,7 +18,8 @@ def test_version():
     assert __version__ == "0.14.1"
 
 
-PLUGIN_DIR = Path(__file__).parent.parent / "odoo_mcp_multi" / "plugins" / "odoo-mcp"
+REPO_ROOT = Path(__file__).parent.parent
+PLUGIN_DIR = REPO_ROOT / "odoo_mcp_multi" / "plugins" / "odoo-mcp"
 
 
 def test_antigravity_manifest_is_schema_compliant():
@@ -29,8 +30,24 @@ def test_antigravity_manifest_is_schema_compliant():
     assert re.fullmatch(r"[a-zA-Z0-9-_]+", data["name"])
 
 
-def test_claude_plugin_manifest_version():
-    """The Claude Code plugin manifest tracks the package __version__."""
-    data = json.loads((PLUGIN_DIR / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
+def test_claude_plugin_manifest():
+    """The root Claude Code manifest tracks __version__ and wires skills + MCP.
+
+    The manifest lives at the repo root because the ai/marketplace catalog
+    only discovers .claude-plugin/plugin.json there, and the generated
+    entry installs the whole repo as the plugin root.
+    """
+    data = json.loads((REPO_ROOT / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
     assert data["version"] == __version__
     assert data["name"] == PLUGIN_DIR.name
+
+    # The skills override must point at the packaged skills so the pip
+    # layout and the plugin layout stay a single source of truth.
+    skills_dir = REPO_ROOT / data["skills"]
+    assert skills_dir.resolve() == (PLUGIN_DIR / "skills").resolve()
+    bundled = [p.name for p in skills_dir.iterdir() if (p / "SKILL.md").exists()]
+    assert len(bundled) >= 3
+
+    # Installing the plugin also registers the MCP server via the
+    # pip-installed CLI on PATH.
+    assert data["mcpServers"]["odoo"] == {"command": "odoo-mcp", "args": ["run"]}

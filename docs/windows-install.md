@@ -223,15 +223,25 @@ Restart the AI client after saving the file.
 ## Step 7 — Install the Agent Skills
 
 The bundled skills teach the AI client how to drive Odoo (reports, record
-creation). Install them for the client the operator uses — for example Claude:
+creation). Install them for the client the operator uses — for example
+Antigravity:
 
 ```powershell
-odoo-mcp plugins install claude
+odoo-mcp plugins install antigravity
 ```
 
-Supported targets: `claude`, `antigravity`, `agy`, `codex`, `opencode`,
-`kimi`, `hermes`, `agents`. With **Option B**, run
-`py -m odoo_mcp_multi plugins install claude` instead.
+Supported targets: `antigravity`, `agy`, `codex`, `opencode`, `kimi`,
+`hermes`, `agents`. With **Option B**, run
+`py -m odoo_mcp_multi plugins install antigravity` instead.
+
+For **Claude Code** do not copy skills — install the plugin from the
+Vauxoo AI marketplace instead (it bundles the skills and registers the
+MCP server):
+
+```text
+/plugin marketplace add https://git.vauxoo.com/ai/marketplace.git
+/plugin install odoo-mcp@vauxoo-ai
+```
 
 ## Step 8 — Verify
 

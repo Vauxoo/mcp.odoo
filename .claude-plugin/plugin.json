@@ -8,13 +8,21 @@
     "name": "Nhomar Hernandez",
     "email": "info@vauxoo.com"
   },
-  "homepage": "https://git.vauxoo.com/nhomar/mcp.odoo",
-  "repository": "https://git.vauxoo.com/nhomar/mcp.odoo",
+  "homepage": "https://git.vauxoo.com/ai/mcp.odoo",
+  "repository": "https://git.vauxoo.com/ai/mcp.odoo",
   "license": "MIT",
   "keywords": [
     "odoo",
     "mcp",
     "agentic",
     "skills"
-  ]
+  ],
+  "category": "odoo",
+  "skills": "./odoo_mcp_multi/plugins/odoo-mcp/skills/",
+  "mcpServers": {
+    "odoo": {
+      "command": "odoo-mcp",
+      "args": ["run"]
+    }
+  }
 }

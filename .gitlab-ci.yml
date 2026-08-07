@@ -40,6 +40,19 @@ lint-markdown:
     - if: $CI_COMMIT_TAG
 
 
+# Validates the root .claude-plugin/plugin.json (Claude Code plugin
+# consumed by the ai/marketplace catalog) with the official CLI.
+validate-plugin:
+  image: node:22-slim
+  stage: lint
+  script:
+    - npm install -g @anthropic-ai/claude-code
+    - claude plugin validate .
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+
 test:
   extends: .python-template
   stage: test
@@ -190,6 +203,26 @@ publish:gitlab:
     - TWINE_PASSWORD=${CI_JOB_TOKEN} TWINE_USERNAME=gitlab-ci-token python -m twine upload --verbose --repository-url ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/pypi dist/*
   rules:
     - if: $CI_COMMIT_TAG
+
+# ---------------------------------------------------------------------------
+# Notify the ai/marketplace catalog so it regenerates its index (see
+# ci/trigger-from-plugin.md in that repo). SOURCE_REPO/SOURCE_TAG feed its
+# release announcement job. The rules require CATALOG_TRIGGER_TOKEN — a
+# group variable inherited once this repo lives in the `ai` group — so the
+# job simply does not exist before the transfer.
+# ---------------------------------------------------------------------------
+notify-catalog:
+  stage: deploy
+  image: curlimages/curl:latest
+  needs: []
+  script:
+    - curl -sS --fail -X POST -F token=$CATALOG_TRIGGER_TOKEN -F ref=main
+      -F "variables[SOURCE_REPO]=$CI_PROJECT_PATH"
+      -F "variables[SOURCE_TAG]=$CI_COMMIT_TAG"
+      https://git.vauxoo.com/api/v4/projects/$CATALOG_PROJECT_ID/trigger/pipeline
+  rules:
+    - if: $CATALOG_TRIGGER_TOKEN && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CATALOG_TRIGGER_TOKEN && $CI_COMMIT_TAG
 
 # ---------------------------------------------------------------------------
 # Mirror: push main branch to GitHub via SSH deploy key.

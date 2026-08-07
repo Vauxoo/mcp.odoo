@@ -678,6 +678,12 @@ AGENT_DIRS = {
 # flat skills directory.
 PLUGIN_AGENTS = frozenset({"antigravity", "agy"})
 
+# Claude Code installs odoo-mcp as a standard plugin discovered by the
+# Vauxoo AI marketplace; the "claude" target only migrates away from the
+# deprecated flat copies (see _migrate_claude_to_plugin).
+CLAUDE_MARKETPLACE_URL = "https://git.vauxoo.com/ai/marketplace.git"
+CLAUDE_MARKETPLACE_NAME = "vauxoo-ai"
+
 # Where "agy" installed flat skills before it became a plugin alias.
 # Installs and uninstalls purge odoo-mcp copies left there so Antigravity
 # never discovers the same skill twice (flat copy + plugin copy).
@@ -885,6 +891,50 @@ def _report_installation_result(agent: str, installed: int, failed: int, skipped
     )
 
 
+def _migrate_claude_to_plugin(skills_dir: Path, target_dir: Path) -> None:
+    """Guide Claude Code users from flat skill copies to the marketplace plugin.
+
+    Claude Code consumes odoo-mcp as a standard plugin (root
+    .claude-plugin/plugin.json) discovered by the Vauxoo AI marketplace,
+    so this target no longer copies anything: it offers to clean up a
+    previous flat install (which would duplicate the plugin's skills)
+    and prints the plugin install commands.
+    """
+    existing = []
+    if target_dir.is_dir():
+        existing = [
+            item.name
+            for item in sorted(skills_dir.iterdir())
+            if item.is_dir()
+            and (item / "SKILL.md").exists()
+            and ((target_dir / item.name).exists() or (target_dir / item.name).is_symlink())
+        ]
+
+    if existing:
+        click.secho(
+            f"Found {len(existing)} flat skill(s) from a previous install in {target_dir}:",
+            fg="yellow",
+        )
+        for name in existing:
+            click.echo(f"  - {name}")
+        if click.confirm("Remove the deprecated flat skills installed by odoo-mcp?", default=False):
+            removed = _remove_bundled_skills_from(skills_dir, target_dir)
+            click.secho(f"{TICK} Removed {removed} flat skill(s).", fg="green")
+        else:
+            click.secho(
+                "  ! Keeping them: they will duplicate the plugin's skills once it is installed.",
+                fg="yellow",
+            )
+
+    click.echo("Claude Code installs odoo-mcp as a plugin from the Vauxoo AI marketplace:")
+    click.secho(f"  /plugin marketplace add {CLAUDE_MARKETPLACE_URL}", fg="cyan")
+    click.secho(f"  /plugin install odoo-mcp@{CLAUDE_MARKETPLACE_NAME}", fg="cyan")
+    click.echo(
+        f"Stable channel: /plugin marketplace add {CLAUDE_MARKETPLACE_URL}#stable, "
+        f"then /plugin install odoo-mcp@{CLAUDE_MARKETPLACE_NAME}-stable"
+    )
+
+
 def _install_plugin_or_skills(agent: str, force: bool, symlink: bool = False) -> None:
     """Shared driver for plugins/skills install across all supported agents."""
     target_dir_str = AGENT_DIRS.get(agent)
@@ -899,9 +949,13 @@ def _install_plugin_or_skills(agent: str, force: bool, symlink: bool = False) ->
         click.secho(f"{CROSS} No skills found to install.", fg="red", err=True)
         sys.exit(1)
 
-    _warn_skill_contract_violations(skills_dir)
-
     target_dir = Path(target_dir_str).expanduser()
+
+    if agent == "claude":
+        _migrate_claude_to_plugin(skills_dir, target_dir)
+        return
+
+    _warn_skill_contract_violations(skills_dir)
 
     if agent in PLUGIN_AGENTS:
         # The plugin directory name is the single source of the plugin id.
@@ -956,6 +1010,11 @@ def cmd_plugins_install(agent: str, force: bool, symlink: bool) -> None:
     the Antigravity IDE, and survives package relocation. Use --symlink
     to link into the package source while developing; re-run with
     --force after upgrading to refresh copied files.
+
+    The "claude" target does not copy files anymore: Claude Code
+    installs odoo-mcp as a plugin from the Vauxoo AI marketplace, so it
+    only offers to remove a previous flat install and prints the
+    /plugin commands.
     """
     _install_plugin_or_skills(agent, force, symlink)
 

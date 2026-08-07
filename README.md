@@ -96,9 +96,24 @@ Once added, remind me to restart my AI client so I can use the 11 Odoo tools ava
 
 ```text
 Please install the agentic skills bundled with the `odoo-mcp` package.
-Run the command `odoo-mcp plugins install <agent_name>` where `<agent_name>` is your own identity (e.g., `antigravity`, `agy`, `agents`, `claude`, `codex`, `opencode`, `kimi`, or `hermes`).
+Run the command `odoo-mcp plugins install <agent_name>` where `<agent_name>` is your own identity (e.g., `antigravity`, `agy`, `agents`, `codex`, `opencode`, `kimi`, or `hermes`).
 This will copy the skills into my global skills directory so you can use them in future tasks.
 ```
+
+### 3b. Claude Code: install as a plugin
+
+Claude Code consumes `odoo-mcp` as a standard plugin from the Vauxoo AI
+marketplace — skills plus the `odoo` MCP server in one install (the MCP
+server runs the pip-installed `odoo-mcp` CLI, so install the package
+first):
+
+```text
+/plugin marketplace add https://git.vauxoo.com/ai/marketplace.git
+/plugin install odoo-mcp@vauxoo-ai
+```
+
+If you previously ran `odoo-mcp plugins install claude`, run it again:
+it now offers to remove the old flat copies and prints these commands.
 
 ## Installation
 

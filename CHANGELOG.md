@@ -7,8 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Claude Code now installs `odoo-mcp` as a standard plugin from the Vauxoo AI marketplace (`/plugin marketplace add https://git.vauxoo.com/ai/marketplace.git`, then `/plugin install odoo-mcp@vauxoo-ai`). The manifest moved to the repo root (`.claude-plugin/plugin.json`) — the only location the `ai/marketplace` catalog auto-discovers — and reaches the packaged skills through a `skills` path override, so the pip layout is untouched and remains the single source of truth.
+- The Claude Code plugin registers the `odoo` MCP server (`odoo-mcp run`), so one plugin install delivers skills plus MCP tools; the pip package on `PATH` is the documented prerequisite.
+- CI: `validate-plugin` job (official `claude plugin validate`) and `notify-catalog` job that triggers the marketplace catalog regeneration on default-branch pushes and release tags (activates via inherited group variables once the repo lives in the `ai` group).
+
 ### Changed
 
+- `plugins install claude` no longer copies flat skills into `~/.claude/skills`: it now offers to remove a previous flat install (which would duplicate the plugin's skills) and prints the marketplace commands. `plugins uninstall claude` still cleans up flat copies.
 - `agy` is now a true alias of `antigravity` in `plugins install`/`uninstall`: both install the full plugin (manifest + skills) into `~/.gemini/config/plugins/odoo-mcp` instead of flat skills into `~/.gemini/config/skills`. Antigravity discovers the plugin tree natively, so the flat copies only duplicated skill discovery.
 - Plugin installs and uninstalls for `antigravity`/`agy` now purge legacy flat skill copies left in `~/.gemini/config/skills` by pre-0.14 `agy` installs, keeping skills owned by other packages untouched.
 

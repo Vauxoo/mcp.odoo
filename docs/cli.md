@@ -189,6 +189,33 @@ canonical group; `skills` is a full alias.
 odoo-mcp plugins list
 ```
 
+### Claude Code (plugin — recommended)
+
+Claude Code does not use flat skill copies: it installs `odoo-mcp` as a
+standard plugin from the Vauxoo AI marketplace, which auto-discovers this
+repository. Inside Claude Code run:
+
+```text
+/plugin marketplace add https://git.vauxoo.com/ai/marketplace.git
+/plugin install odoo-mcp@vauxoo-ai
+```
+
+For the stable channel (latest release tag instead of `main`):
+
+```text
+/plugin marketplace add https://git.vauxoo.com/ai/marketplace.git#stable
+/plugin install odoo-mcp@vauxoo-ai-stable
+```
+
+The plugin brings the skills **and** registers the `odoo` MCP server by
+running `odoo-mcp run`, so the package must be installed and on `PATH`
+(`pipx install odoo-mcp-multi`). Without it the skills still load; only
+the MCP server shows as failed in `/mcp`.
+
+`odoo-mcp plugins install claude` no longer copies files: it offers to
+remove a flat install left by earlier versions (which would duplicate the
+plugin's skills) and prints the commands above.
+
 ### `plugins install`
 
 Copies the bundled skills (and, for `antigravity`/`agy`, the
@@ -201,10 +228,10 @@ skills).
 ```bash
 odoo-mcp plugins install antigravity          # full plugin: manifest + skills
 odoo-mcp plugins install agy                  # alias of antigravity (same plugin)
-odoo-mcp plugins install claude               # flat skills for Claude Code
 odoo-mcp plugins install agents               # ~/.agents/skills (cross-agent standard)
-odoo-mcp plugins install claude --force       # refresh after an upgrade
-odoo-mcp plugins install claude --symlink     # dev mode
+odoo-mcp plugins install codex --force        # refresh after an upgrade
+odoo-mcp plugins install codex --symlink      # dev mode
+odoo-mcp plugins install claude               # migration helper: see section above
 ```
 
 Supported agents: `antigravity`, `agy`, `agents`, `claude`, `codex`,

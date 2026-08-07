@@ -411,19 +411,57 @@ def test_cli_plugins_install_idempotent_and_force(tmp_path, monkeypatch):
 def test_cli_skills_install_flat_agent(tmp_path, monkeypatch):
     """Flat agents get bare skill directories without the plugin manifest."""
     monkeypatch.setenv("HOME", str(tmp_path))
-    result = runner.invoke(main, ["skills", "install", "claude"])
+    result = runner.invoke(main, ["skills", "install", "codex"])
     assert result.exit_code == 0
-    target = tmp_path / ".claude" / "skills"
+    target = tmp_path / ".agents" / "skills"
     assert (target / "odoo-mcp-tools" / "SKILL.md").exists()
     assert not (target / "plugin.json").exists()
+
+
+def test_cli_skills_install_claude_migrates_flat_install(tmp_path, monkeypatch):
+    """The claude target removes flat copies on confirmation and prints the plugin commands."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    flat = tmp_path / ".claude" / "skills" / "odoo-mcp-tools"
+    flat.mkdir(parents=True)
+    (flat / "SKILL.md").write_text("---\nname: odoo-mcp-tools\n---\n")
+
+    result = runner.invoke(main, ["skills", "install", "claude"], input="y\n")
+    assert result.exit_code == 0
+    assert not flat.exists()
+    assert "/plugin marketplace add https://git.vauxoo.com/ai/marketplace.git" in result.output
+    assert "/plugin install odoo-mcp@vauxoo-ai" in result.output
+
+
+def test_cli_skills_install_claude_keeps_flat_install_when_declined(tmp_path, monkeypatch):
+    """Declining the cleanup keeps the flat copies and warns about duplicates."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    flat = tmp_path / ".claude" / "skills" / "odoo-mcp-tools"
+    flat.mkdir(parents=True)
+    (flat / "SKILL.md").write_text("---\nname: odoo-mcp-tools\n---\n")
+
+    result = runner.invoke(main, ["skills", "install", "claude"], input="n\n")
+    assert result.exit_code == 0
+    assert flat.exists()
+    assert "duplicate" in result.output
+    assert "/plugin install odoo-mcp@vauxoo-ai" in result.output
+
+
+def test_cli_skills_install_claude_clean_home_prints_commands_only(tmp_path, monkeypatch):
+    """Without a previous flat install the claude target only prints the commands."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    result = runner.invoke(main, ["skills", "install", "claude"])
+    assert result.exit_code == 0
+    assert not (tmp_path / ".claude" / "skills").exists()
+    assert "Remove the deprecated flat skills" not in result.output
+    assert "/plugin install odoo-mcp@vauxoo-ai" in result.output
 
 
 def test_cli_plugins_install_symlink_mode(tmp_path, monkeypatch):
     """--symlink links into the package source instead of copying."""
     monkeypatch.setenv("HOME", str(tmp_path))
-    result = runner.invoke(main, ["plugins", "install", "claude", "--symlink"])
+    result = runner.invoke(main, ["plugins", "install", "codex", "--symlink"])
     assert result.exit_code == 0
-    target = tmp_path / ".claude" / "skills"
+    target = tmp_path / ".agents" / "skills"
     assert (target / "odoo-mcp-tools").is_symlink()
     assert (target / "odoo-mcp-tools" / "SKILL.md").exists()
 
@@ -432,7 +470,7 @@ def test_cli_plugins_install_reports_failures(tmp_path, monkeypatch):
     """Install failures are reported per item and the command exits non-zero."""
     monkeypatch.setenv("HOME", str(tmp_path))
     with patch("odoo_mcp_multi.cli.shutil.copytree", side_effect=OSError("permission denied")):
-        result = runner.invoke(main, ["plugins", "install", "claude"])
+        result = runner.invoke(main, ["plugins", "install", "codex"])
     assert result.exit_code == 1
     assert "Completed with errors" in result.output
 
@@ -441,7 +479,7 @@ def test_cli_plugins_install_without_skills_dir(tmp_path, monkeypatch):
     """A missing packaged skills directory aborts the install with an error."""
     monkeypatch.setenv("HOME", str(tmp_path))
     with patch("odoo_mcp_multi.cli._get_skills_dir", return_value=tmp_path / "missing"):
-        result = runner.invoke(main, ["plugins", "install", "claude"])
+        result = runner.invoke(main, ["plugins", "install", "codex"])
     assert result.exit_code == 1
     assert "No skills found" in result.output
 
@@ -467,13 +505,13 @@ def test_cli_plugins_uninstall_antigravity(tmp_path, monkeypatch):
 def test_cli_plugins_uninstall_flat_agent_only_own_skills(tmp_path, monkeypatch):
     """Flat uninstall removes only odoo-mcp skills, keeping unrelated ones."""
     monkeypatch.setenv("HOME", str(tmp_path))
-    assert runner.invoke(main, ["plugins", "install", "claude"]).exit_code == 0
-    target = tmp_path / ".claude" / "skills"
+    assert runner.invoke(main, ["plugins", "install", "codex"]).exit_code == 0
+    target = tmp_path / ".agents" / "skills"
     foreign = target / "someone-elses-skill"
     foreign.mkdir()
     (foreign / "SKILL.md").write_text("---\nname: other\n---\n")
 
-    result = runner.invoke(main, ["plugins", "uninstall", "claude"])
+    result = runner.invoke(main, ["plugins", "uninstall", "codex"])
     assert result.exit_code == 0
     assert not (target / "odoo-mcp-tools").exists()
     assert foreign.exists()
@@ -505,7 +543,7 @@ def test_cli_plugins_install_warns_on_contract_violations(tmp_path, monkeypatch)
     (bad_skill / "SKILL.md").write_text('---\nname: "other-name"\n---\nBody\n')
 
     with patch("odoo_mcp_multi.cli._get_skills_dir", return_value=bad_skills):
-        result = runner.invoke(main, ["plugins", "install", "claude"])
+        result = runner.invoke(main, ["plugins", "install", "codex"])
 
     assert result.exit_code == 0
     assert "differs from directory name" in result.output
