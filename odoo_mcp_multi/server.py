@@ -64,7 +64,7 @@ mcp = FastMCP(
         "'has_more' and use 'next_offset' to fetch additional pages.\n"
         "- If a result contains 'success': false, read the 'error' field for "
         "a verbose explanation of what went wrong.\n"
-        "- Report issues at https://git.vauxoo.com/nhomar/mcp.odoo/-/issues\n\n"
+        "- Report issues at https://git.vauxoo.com/ai/mcp.odoo/-/issues\n\n"
         "Token efficiency (results stay in context for the whole session — keep reads lean):\n"
         "- Always pass explicit 'fields' to search_read/export_records instead of "
         "reading every field.\n"

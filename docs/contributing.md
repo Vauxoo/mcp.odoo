@@ -3,7 +3,7 @@
 ## Development Setup
 
 ```bash
-git clone https://git.vauxoo.com/nhomar/mcp.odoo.git
+git clone https://git.vauxoo.com/ai/mcp.odoo.git
 cd mcp.odoo
 pip install -e ".[dev]"
 ```

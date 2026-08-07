@@ -63,10 +63,10 @@ dev = [
 odoo-mcp = "odoo_mcp_multi.cli:main"
 
 [project.urls]
-Homepage = "https://git.vauxoo.com/nhomar/mcp.odoo"
-Repository = "https://git.vauxoo.com/nhomar/mcp.odoo"
-Documentation = "https://git.vauxoo.com/nhomar/mcp.odoo/-/blob/main/README.md"
-"Issue Tracker" = "https://git.vauxoo.com/nhomar/mcp.odoo/-/issues"
+Homepage = "https://git.vauxoo.com/ai/mcp.odoo"
+Repository = "https://git.vauxoo.com/ai/mcp.odoo"
+Documentation = "https://git.vauxoo.com/ai/mcp.odoo/-/blob/main/README.md"
+"Issue Tracker" = "https://git.vauxoo.com/ai/mcp.odoo/-/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["odoo_mcp_multi"]

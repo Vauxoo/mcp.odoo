@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The repository moved from `git.vauxoo.com/nhomar/mcp.odoo` to `git.vauxoo.com/ai/mcp.odoo`: the `ai` group is the only namespace the Vauxoo AI marketplace catalog scans, and living there lets CI inherit the catalog trigger variables. GitLab redirects the old URLs, but every self-reference (packaging metadata, docs, badges, MCP server instructions) now points at the canonical home so clones and issue links do not depend on redirects. Update your local remotes with `git remote set-url origin git@git.vauxoo.com:ai/mcp.odoo.git`.
 - `plugins install claude` no longer copies flat skills into `~/.claude/skills`: it now offers to remove a previous flat install (which would duplicate the plugin's skills) and prints the marketplace commands. `plugins uninstall claude` still cleans up flat copies.
 - `agy` is now a true alias of `antigravity` in `plugins install`/`uninstall`: both install the full plugin (manifest + skills) into `~/.gemini/config/plugins/odoo-mcp` instead of flat skills into `~/.gemini/config/skills`. Antigravity discovers the plugin tree natively, so the flat copies only duplicated skill discovery.
 - Plugin installs and uninstalls for `antigravity`/`agy` now purge legacy flat skill copies left in `~/.gemini/config/skills` by pre-0.14 `agy` installs, keeping skills owned by other packages untouched.

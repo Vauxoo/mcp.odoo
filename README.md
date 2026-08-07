@@ -1,14 +1,14 @@
 # odoo-mcp-multi
 
 <p align="center">
-  <img src="https://git.vauxoo.com/nhomar/mcp.odoo/-/raw/main/docs/banner.png" alt="Odoo MCP — Talk to Odoo like Jarvis" width="100%">
+  <img src="https://git.vauxoo.com/ai/mcp.odoo/-/raw/main/docs/banner.png" alt="Odoo MCP — Talk to Odoo like Jarvis" width="100%">
 </p>
 
 [![PyPI version](https://img.shields.io/pypi/v/odoo-mcp-multi.svg)](https://pypi.org/project/odoo-mcp-multi/)
 [![Python](https://img.shields.io/pypi/pyversions/odoo-mcp-multi.svg)](https://pypi.org/project/odoo-mcp-multi/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![pipeline status](https://git.vauxoo.com/nhomar/mcp.odoo/badges/main/pipeline.svg)](https://git.vauxoo.com/nhomar/mcp.odoo/-/pipelines)
-[![coverage](https://git.vauxoo.com/nhomar/mcp.odoo/badges/main/coverage.svg)](https://git.vauxoo.com/nhomar/mcp.odoo/-/commits/main)
+[![pipeline status](https://git.vauxoo.com/ai/mcp.odoo/badges/main/pipeline.svg)](https://git.vauxoo.com/ai/mcp.odoo/-/pipelines)
+[![coverage](https://git.vauxoo.com/ai/mcp.odoo/badges/main/coverage.svg)](https://git.vauxoo.com/ai/mcp.odoo/-/commits/main)
 
 MCP server and CLI that connects AI clients (Antigravity, Claude Desktop, Cursor,
 VS Code) to one or more Odoo instances. It exposes 12 tools for searching,
@@ -356,12 +356,12 @@ import_records(model="res.partner", fields="id,name,phone", rows='[{"id": "base.
 
 <p align="center">
   <a href="https://vauxoo.com">
-    <img src="https://git.vauxoo.com/nhomar/mcp.odoo/-/raw/main/docs/vauxoo.png"
+    <img src="https://git.vauxoo.com/ai/mcp.odoo/-/raw/main/docs/vauxoo.png"
          alt="Vauxoo" height="24" style="vertical-align:middle">
   </a>
   &nbsp;
   Maintained by <a href="https://nhomar.com"><strong>Nhomar Hernández</strong></a>
   at <a href="https://vauxoo.com"><strong>Vauxoo</strong></a> — Odoo Gold Partner.
   &nbsp;·&nbsp;
-  <a href="https://git.vauxoo.com/nhomar/mcp.odoo/-/issues">Report an Issue</a>
+  <a href="https://git.vauxoo.com/ai/mcp.odoo/-/issues">Report an Issue</a>
 </p>
