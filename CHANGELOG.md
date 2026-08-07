@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+odoo-mcp joined the Vauxoo AI marketplace (news from v0.15.0): one `/plugin install odoo-mcp@vauxoo-ai` brings its 3 skills plus the `odoo` MCP server, and every release now announces itself with real notes.
+
+Try: instala el plugin odoo-mcp desde el marketplace vauxoo-ai
+
 ### Fixed
 
 - Releases now maintain this file automatically: `bump-my-version` stamps the `[Unreleased]` section into a dated version section at release time, and a new `release-notes` CI job publishes that section as the GitLab Release description — the source the Vauxoo AI marketplace announcer reads. Until now no automation touched the changelog (versions shipped with everything stuck under Unreleased) and tags carried no Release object, so announcements degraded to a generic "Nueva versión publicada." with a dead release link.
