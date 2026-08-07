@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.15.1] - 2026-08-07
+
 odoo-mcp joined the Vauxoo AI marketplace (news from v0.15.0): one `/plugin install odoo-mcp@vauxoo-ai` brings its 3 skills plus the `odoo` MCP server, and every release now announces itself with real notes.
 
 Try: instala el plugin odoo-mcp desde el marketplace vauxoo-ai
