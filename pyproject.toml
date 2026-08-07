@@ -110,6 +110,16 @@ filename = ".claude-plugin/plugin.json"
 search = "\"version\": \"{current_version}\""
 replace = "\"version\": \"{new_version}\""
 
+# Stamps the Keep a Changelog "Unreleased" section at release time: whatever
+# accumulated there becomes the new version's section (with today's date) and
+# a fresh empty Unreleased header is left on top. The release-notes CI job
+# then publishes that section as the GitLab Release description, which the
+# ai/marketplace announcer broadcasts to Telegram.
+[[tool.bumpversion.files]]
+filename = "CHANGELOG.md"
+search = "## [Unreleased]"
+replace = "## [Unreleased]\n\n## [{new_version}] - {now:%Y-%m-%d}"
+
 [tool.pytest.ini_options]
 minversion = "7.0"
 addopts = "-ra -q --cov=odoo_mcp_multi --cov-report=term-missing --cov-report=xml --cov-context=test --ignore=tests/integration"

@@ -23,3 +23,18 @@ If he says "sin release", push normally — no marker needed.
 - The marker can appear anywhere in any commit of the push.
 - It also works inside the MR title if GitLab squashes commits.
 - `[skip release]` no longer exists — omitting the marker IS the skip.
+
+## Changelog & announcement (automated since 0.16.0)
+
+- Keep notes under `## [Unreleased]` in `CHANGELOG.md` as you merge. At
+  release time `bump-my-version` renames that section to
+  `## [X.Y.Z] - <date>` and leaves a fresh empty `[Unreleased]` on top —
+  never stamp versions by hand.
+- The `release-notes` CI job publishes the stamped section as the GitLab
+  Release description; the `ai/marketplace` announcer broadcasts its first
+  plain paragraph to Telegram (bullets are skipped). So when cutting a
+  release, open the Unreleased section with 1–3 human lines — the tweet-style
+  "why this matters" — before the `###` subsections. An optional `Try:` line
+  becomes the suggested prompt in the announcement.
+- Do not delete the `## [Unreleased]` header: the bump fails without it
+  (guarded by `test_changelog_release_contract`).

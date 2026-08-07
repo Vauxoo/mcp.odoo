@@ -167,6 +167,30 @@ auto-release:
     - lint
     - test
 
+# ---------------------------------------------------------------------------
+# Publish the tag's CHANGELOG section as the GitLab Release description.
+# The ai/marketplace announcer reads exactly this description (Releases API)
+# to broadcast the news to Telegram — without it, announcements fall back to
+# a generic placeholder and a dead /-/releases link. bump-my-version stamps
+# the section (see [tool.bumpversion.files] for CHANGELOG.md), so the tag's
+# checkout always contains it.
+# ---------------------------------------------------------------------------
+release-notes:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  needs: []
+  script:
+    - VERSION="${CI_COMMIT_TAG#v}"
+    - awk -v ver="[${VERSION}]" 'index($0, "## " ver) == 1 {f=1; next} f && /^## \[/ {exit} f' CHANGELOG.md > release_notes.md
+    - if [ ! -s release_notes.md ]; then echo "See CHANGELOG.md for details." > release_notes.md; fi
+    - cat release_notes.md
+  release:
+    tag_name: $CI_COMMIT_TAG
+    name: $CI_COMMIT_TAG
+    description: release_notes.md
+  rules:
+    - if: $CI_COMMIT_TAG
+
 pages:
   extends: .python-template
   stage: deploy

@@ -22,6 +22,20 @@ REPO_ROOT = Path(__file__).parent.parent
 PLUGIN_DIR = REPO_ROOT / "odoo_mcp_multi" / "plugins" / "odoo-mcp"
 
 
+def test_changelog_release_contract():
+    """CHANGELOG must keep the headers the release automation depends on.
+
+    bump-my-version rewrites the literal "## [Unreleased]" header at release
+    time (see [tool.bumpversion.files] in pyproject.toml) and the
+    release-notes CI job extracts the "## [<version>]" section as the GitLab
+    Release description — losing either header silently breaks the next
+    release or its announcement.
+    """
+    changelog = (REPO_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert "## [Unreleased]" in changelog
+    assert f"## [{__version__}]" in changelog
+
+
 def test_antigravity_manifest_is_schema_compliant():
     """The Antigravity plugin.json allows only $schema, name and description."""
     data = json.loads((PLUGIN_DIR / "plugin.json").read_text(encoding="utf-8"))

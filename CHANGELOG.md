@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Releases now maintain this file automatically: `bump-my-version` stamps the `[Unreleased]` section into a dated version section at release time, and a new `release-notes` CI job publishes that section as the GitLab Release description — the source the Vauxoo AI marketplace announcer reads. Until now no automation touched the changelog (versions shipped with everything stuck under Unreleased) and tags carried no Release object, so announcements degraded to a generic "Nueva versión publicada." with a dead release link.
+
+## [0.15.0] - 2026-08-06
+
+odoo-mcp joined the Vauxoo AI marketplace: a single `/plugin install odoo-mcp@vauxoo-ai` in Claude Code now delivers the three bundled skills plus the `odoo` MCP server, and the repository moved to the `ai` group where the catalog discovers it on its own.
+
 ### Added
 
 - Claude Code now installs `odoo-mcp` as a standard plugin from the Vauxoo AI marketplace (`/plugin marketplace add https://git.vauxoo.com/ai/marketplace.git`, then `/plugin install odoo-mcp@vauxoo-ai`). The manifest moved to the repo root (`.claude-plugin/plugin.json`) — the only location the `ai/marketplace` catalog auto-discovers — and reaches the packaged skills through a `skills` path override, so the pip layout is untouched and remains the single source of truth.
