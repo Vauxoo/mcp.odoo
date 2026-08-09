@@ -78,3 +78,7 @@ site/
 
 # Integration test secrets — never commit real credentials
 tests/integration/.env.local.test
+
+# JUnit reports written by the ecosystem QA scripts when run inside this repo
+ecosystem_audit_*.xml
+semantic_evals_report.xml
