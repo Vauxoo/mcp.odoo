@@ -1,6 +1,6 @@
 ---
 name: "odoo-mcp-tools"
-description: "Use this skill to query, create, update, delete, export, or import records in any Odoo instance via MCP tools. Triggers on: 'search records', 'create record', 'update partner', 'delete record', 'unlink record', 'export data', 'import records', 'execute method', 'list models', 'list fields', 'get version', 'list profiles', 'odoo mcp tools'."
+description: "Use this skill when you need to query, create, update, delete, export, or import records in any Odoo instance via MCP tools. Triggers on: 'search records', 'create record', 'update partner', 'delete record', 'unlink record', 'export data', 'import records', 'execute method', 'list models', 'list fields', 'get version', 'list profiles', 'odoo mcp tools'."
 last_validated: 2026-05-09
 ---
 

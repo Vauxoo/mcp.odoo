@@ -1,6 +1,6 @@
 ---
 name: "odoo-financial-reports"
-description: "Use this skill to fetch, calculate, analyze, and format Odoo financial reports (Balance Sheet, Profit & Loss, Trial Balance, Partner Ledger, General Ledger, Cash Flow, DIOT) via Odoo MCP. Triggers on: 'financial report', 'balance sheet', 'profit and loss', 'trial balance', 'partner ledger', 'general ledger', 'accounting report', 'financial statement', 'p&l', 'diot'."
+description: "Use this skill when you need to fetch, calculate, analyze, or format Odoo financial reports (Balance Sheet, Profit & Loss, Trial Balance, Partner Ledger, General Ledger, Cash Flow, DIOT) via Odoo MCP. Triggers on: 'financial report', 'balance sheet', 'profit and loss', 'trial balance', 'partner ledger', 'general ledger', 'accounting report', 'financial statement', 'p&l', 'diot'."
 last_validated: 2026-06-12
 ---
 

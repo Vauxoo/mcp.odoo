@@ -1,6 +1,6 @@
 ---
 name: "odoo-mcp-cli"
-description: "Use this skill to manage Odoo profiles and run data operations directly from the terminal using the odoo-mcp CLI. Triggers on: 'add profile', 'list profiles', 'test connection', 'search records cli', 'export records', 'import records cli', 'run mcp server', 'odoo-mcp command', 'delete records cli', 'unlink records'."
+description: "Use this skill when you need to manage Odoo profiles or run data operations directly from the terminal using the odoo-mcp CLI. Triggers on: 'add profile', 'list profiles', 'test connection', 'search records cli', 'export records', 'import records cli', 'run mcp server', 'odoo-mcp command', 'delete records cli', 'unlink records'."
 last_validated: 2026-05-09
 ---
 

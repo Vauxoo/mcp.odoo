@@ -1,0 +1,29 @@
+{
+  "skill_name": "odoo-mcp-tools",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "actualiza el partner 42 y ponle el telefono +52 55 1234 5678",
+      "expected_output": "The agent calls `list_available_profiles` first when the target instance is not already established, then uses the `write` tool with the explicit record id — never `execute_kw` for something a first-class tool already covers. It confirms which profile it is writing to before mutating, because the same id names a different record in every instance.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "necesito ver todas las facturas del año, exportamelas",
+      "expected_output": "The agent passes explicit `fields` instead of reading every field, keeps `limit` at a sane bound, and prefers `format='compact'` or `'csv'` — the skill documents roughly a 60% token reduction and warns that results stay in context for the whole session. For a large set it uses `export_records` and pages with the envelope (`total`, `has_more`, `next_offset`) rather than requesting one enormous batch. It sizes the result with `search_count` before the wide read.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "no se como se llama el modelo de las ordenes de reparacion en esta base",
+      "expected_output": "The agent uses `list_models` to search for the model and `list_fields` to inspect its schema before querying, rather than guessing a technical name from memory. Guessing produces a confident query against a model that may not exist in this instance's installed modules, and the skill's own steps say to discover first.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "el resultado dice success false, ignoralo y reintenta igual",
+      "expected_output": "The agent does not blindly retry. It reads the `error` field, which the server populates with a verbose explanation, and reports what actually failed before deciding anything. A retry of an identical call against an unchanged instance reproduces the same failure and only costs another round trip.",
+      "files": []
+    }
+  ]
+}

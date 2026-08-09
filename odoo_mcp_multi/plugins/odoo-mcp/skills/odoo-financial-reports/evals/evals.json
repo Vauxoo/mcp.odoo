@@ -1,0 +1,23 @@
+{
+  "skill_name": "odoo-financial-reports",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "dame el balance general de la compañia a cierre del año pasado",
+      "expected_output": "The agent identifies the report from the skill's reference catalog rather than inventing an id, establishes the target profile and company, and uses `get_financial_report` (or the documented CLI equivalent) with the closing date. It picks a presentation format deliberately from the four the skill documents and states which one it used.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "calculame el reporte 418 de STAFF en la instancia de odoo 19",
+      "expected_output": "The agent must warn BEFORE running it that report 418 is a known discrepancy documented in the skill: it references `analytic_account_id` on `account.move.line`, a field removed in Odoo 19, so the calculation fails with a 422. It must not present the 422 afterwards as an unexpected server problem, and it must not retry the same call hoping for a different result. Naming the cause up front is the whole value of the Known Discrepancies section.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "el reporte me da distinto a lo que veo en la interfaz de odoo, algo esta mal en tu consulta",
+      "expected_output": "The agent checks the Odoo version context first, because the skill documents that report behaviour and field availability differ across versions, and then compares the concrete parameters used (dates, company, target moves) against what the UI applied — instead of assuming its own query was wrong or that the user is mistaken. It reports the specific difference it finds rather than adjusting numbers to match.",
+      "files": []
+    }
+  ]
+}
