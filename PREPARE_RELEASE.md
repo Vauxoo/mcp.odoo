@@ -1,10 +1,12 @@
 # Release Preparation Guide
 
-This guide describes the release process for `odoo-mcp-multi`. Releases are **automated by CI** on every merge to main — you should rarely need to release manually.
+This guide describes the release process for `odoo-mcp-multi`. Releases are automated by CI, but they are **opt-in**: merging to `main` does not release anything unless a commit in the push carries an explicit marker.
+
+`odoo_mcp_multi` is a **Package-first Executor** in the Vauxoo agent ecosystem (see `ARCHITECTURE.md` in `ai/lama-su-architect`). Its release identity belongs to the published PyPI package, not to the repository, which is why the version lives in `pyproject.toml` and is propagated into `.claude-plugin/plugin.json` by `[[tool.bumpversion.files]]`. Every other hub in the ecosystem is forbidden to carry that key; here it is correct, and it is what defines the class.
 
 ## Automated Release (Default)
 
-When a Merge Request is merged to `main`, the CI pipeline automatically:
+When a Merge Request is merged to `main` **and one of its commits carries a bump marker**, the CI pipeline:
 
 1. Runs `lint` and `test`
 2. Determines the bump level (see table below)
@@ -19,26 +21,36 @@ The CI is **commit-format agnostic** — it does NOT read `[FIX]`, `[ADD]`, or a
 
 | Marker | Bump | Example |
 |--------|------|---------|
-| *(none)* | **patch** (default) | `0.3.0 → 0.3.1` |
+| *(none)* | **none** | No version bump, no publish |
+| `[patch]` | **patch** | `0.3.0 → 0.3.1` |
 | `[minor]` | **minor** | `0.3.1 → 0.4.0` |
 | `[major]` | **major** | `0.4.0 → 1.0.0` |
-| `[skip release]` | **none** | No version bump, no publish |
 
-The CI reads **all commit messages since the last tag**. If any commit contains `[major]`, it wins. Otherwise, `[minor]` wins. Otherwise, it defaults to `patch`.
+The CI reads the commit subjects of **the commits that arrived in this push**, not every commit since the last tag. If any carries `[major]` it wins, then `[minor]`, then `[patch]`. With no marker the job prints `No [patch|minor|major] found in push commits. Skipping release.` and exits 0.
+
+> **Corrected 2026-08-09.** This table used to say that *(none)* meant an
+> automatic patch release, and it documented a `[skip release]` marker in three
+> places. Neither was ever true of this repository's CI: `.gitlab-ci.yml` states
+> `Release is OPT-IN: without [patch|minor|major] we do nothing`, and the string
+> `[skip release]` appears nowhere in it. `.agents/rules/release_workflow.md`
+> described the real behaviour all along, so the two documents contradicted each
+> other and the wrong one was the more prominent. A release guide that is
+> confidently wrong is worse than none: it teaches a habit the machine does not
+> honour.
 
 ### Usage Examples
 
 ```bash
-# Normal fix — auto patch release
-git commit -m "[FIX] cli: Correct argument parsing for export-records"
+# Fix worth releasing — the marker is what releases it
+git commit -m "[FIX] cli: Correct argument parsing for export-records [patch]"
 
-# New feature — explicitly mark minor
+# New feature
 git commit -m "[ADD] server: Add bulk delete tool [minor]"
 
-# Docs-only change — skip release
-git commit -m "[IMP] docs: Update installation guide [skip release]"
+# Docs-only change — no marker, so nothing is released
+git commit -m "[IMP] docs: Update installation guide"
 
-# Breaking change — explicitly mark major
+# Breaking change
 git commit -m "[REF] config: Change profile format to YAML [major]"
 ```
 

@@ -105,6 +105,24 @@ filename = "tests/test_basic.py"
 search = "assert __version__ == \"{current_version}\""
 replace = "assert __version__ == \"{new_version}\""
 
+# THIS BLOCK IS THE CLASS MARKER — do not remove it to "comply" with the rule
+# that every other hub follows.
+#
+# Across the Vauxoo agent ecosystem, a `version` key in
+# `.claude-plugin/plugin.json` is a defect: the marketplace catalog does not
+# copy it, so Claude Code reads the repository's own manifest and a declared
+# version makes installs track version bumps instead of pushes. Here it is
+# correct, because this repository is a Package-first Executor: the published
+# package owns the version, and the plugin is one face of that package.
+#
+# The ecosystem's tooling detects the class by MEASURING, not by consulting a
+# list of exempt repositories — and this block is one of the four clauses it
+# measures. Delete it and two things break at once: the release stops
+# propagating the version into the manifest, and the repository is reclassified
+# as an ordinary Executor that is violating the rule. A fourth clause requires
+# the two versions to AGREE on every run, so a drift between `current_version`
+# above and the manifest below is reported as a P1, not tolerated as an
+# exemption.
 [[tool.bumpversion.files]]
 filename = ".claude-plugin/plugin.json"
 search = "\"version\": \"{current_version}\""
