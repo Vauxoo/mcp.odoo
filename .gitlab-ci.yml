@@ -3,6 +3,7 @@ stages:
   - test
   - release
   - deploy
+  - notify
 
 variables:
   PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
@@ -270,3 +271,19 @@ mirror-to-github:
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
   needs: []
+
+# Tell the marketplace catalog to re-index this plugin. Both variables are
+# required: ai/marketplace's announce_telegram.py reads SOURCE_REPO and
+# SOURCE_TAG, and when either is missing it prints "nothing to announce" and
+# exits 0 — a silent no-op behind a green job.
+notify_catalog:
+  stage: notify
+  image: curlimages/curl:latest
+  script:
+    - curl -sS --fail -X POST -F token=$CATALOG_TRIGGER_TOKEN -F ref=main
+      -F "variables[SOURCE_REPO]=$CI_PROJECT_PATH"
+      -F "variables[SOURCE_TAG]=$CI_COMMIT_TAG"
+      https://git.vauxoo.com/api/v4/projects/$CATALOG_PROJECT_ID/trigger/pipeline
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
