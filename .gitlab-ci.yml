@@ -1,3 +1,10 @@
+workflow:
+  auto_cancel:
+    on_new_commit: interruptible
+
+default:
+  interruptible: true
+
 stages:
   - lint
   - test
@@ -89,6 +96,7 @@ test:
 # write_repository scope). Set in Settings → CI/CD → Variables.
 # ---------------------------------------------------------------------------
 auto-release:
+  interruptible: false
   extends: .python-template
   stage: release
   before_script:
@@ -177,6 +185,7 @@ auto-release:
 # checkout always contains it.
 # ---------------------------------------------------------------------------
 release-notes:
+  interruptible: false
   stage: release
   image: registry.gitlab.com/gitlab-org/release-cli:latest
   needs: []
@@ -193,6 +202,7 @@ release-notes:
     - if: $CI_COMMIT_TAG
 
 pages:
+  interruptible: false
   extends: .python-template
   stage: deploy
   needs:
@@ -237,6 +247,7 @@ publish:gitlab:
 # job simply does not exist before the transfer.
 # ---------------------------------------------------------------------------
 notify-catalog:
+  interruptible: false
   stage: deploy
   image: curlimages/curl:latest
   needs: []
@@ -255,6 +266,7 @@ notify-catalog:
 # containing the private Ed25519 key registered as a deploy key on GitHub.
 # ---------------------------------------------------------------------------
 mirror-to-github:
+  interruptible: false
   stage: deploy
   image: alpine:3.20
   variables:
@@ -277,6 +289,7 @@ mirror-to-github:
 # SOURCE_TAG, and when either is missing it prints "nothing to announce" and
 # exits 0 — a silent no-op behind a green job.
 notify_catalog:
+  interruptible: false
   stage: notify
   image: curlimages/curl:latest
   script:
