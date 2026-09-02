@@ -82,3 +82,6 @@ tests/integration/.env.local.test
 # JUnit reports written by the ecosystem QA scripts when run inside this repo
 ecosystem_audit_*.xml
 semantic_evals_report.xml
+
+# Claude Code worktrees
+.claude/worktrees/
