@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+The three bundled skills now ship with evals and the "Use this skill when" phrasing Claude Code matches on, and every release notifies the Vauxoo AI marketplace catalog the moment it is tagged.
+
+Try: lista los profiles de odoo disponibles y busca los ultimos 5 partners creados
+
+### Added
+
+- Evals for `odoo-mcp-tools`, `odoo-mcp-cli` and `odoo-financial-reports`, written against what each skill documents rather than as boilerplate: never put a password on a command line, count before `unlink`, resolve the sandbox rail immediately instead of probing, discover model and field names instead of guessing them, keep reads bounded, and warn about report 418 on Odoo 19 before running it. The ecosystem audit had been resolving the skills directory as `<repo>/skills`, which does not exist here, so it reported a false PASS for as long as the skills existed.
+- `notify_catalog` CI job: a release tag now triggers the `ai/marketplace` catalog regeneration with `SOURCE_REPO` and `SOURCE_TAG`, so the index refreshes and the Telegram announcement fires the same day. Until now the index only refreshed on the marketplace's daily schedule and no release of this package had ever been announced.
+
+### Changed
+
+- Skill descriptions open with "Use this skill when" instead of "Use this skill to", the phrasing the ecosystem standard requires for the harness to match them.
+- CI: a new commit on a branch cancels the pipeline it supersedes, including jobs already running (`auto_cancel: interruptible`). The release, GitHub mirror, catalog notification, pages and release-notes jobs opt out so a mid-flight release is never interrupted.
+
+### Fixed
+
+- `PREPARE_RELEASE.md` documented a release model this CI never had: an automatic patch release on unmarked merges and a `[skip release]` marker. Releases are opt-in via `[patch]`/`[minor]`/`[major]` in a push commit, and the guide, `AGENT.md` and the bumpversion block now say so and explain why this repository, as a Package-first Executor, carries a `version` key in `.claude-plugin/plugin.json`.
+- JUnit reports written by the QA scripts (`ecosystem_audit_*.xml`) are ignored; one had been committed by accident.
+
 ## [0.15.1] - 2026-08-07
 
 odoo-mcp joined the Vauxoo AI marketplace (news from v0.15.0): one `/plugin install odoo-mcp@vauxoo-ai` brings its 3 skills plus the `odoo` MCP server, and every release now announces itself with real notes.
