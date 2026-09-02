@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-09-02
+
 The three bundled skills now ship with evals and the "Use this skill when" phrasing Claude Code matches on, and every release notifies the Vauxoo AI marketplace catalog the moment it is tagged.
 
 Try: lista los profiles de odoo disponibles y busca los ultimos 5 partners creados
