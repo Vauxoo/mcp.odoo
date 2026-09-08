@@ -79,7 +79,10 @@ class OdooProfile(BaseModel):
     protocol: str = Field(default="auto", description="RPC protocol: auto, jsonrpcs, json2s, xmlrpcs")
     verify: bool = Field(
         default=True,
-        description="Verify SSL certificates. When set to False, SSL verification is bypassed.",
+        description=(
+            "Verify SSL certificates. Setting it to False is the only way to talk to a server whose "
+            "certificate does not validate: a verification failure is never downgraded automatically."
+        ),
     )
     permissions: Optional[ProfilePermissions] = Field(
         default=None,

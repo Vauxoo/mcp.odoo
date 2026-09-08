@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- A TLS certificate verification failure no longer downgrades the connection. Since 0.9.0 the XML-RPC, JSON-RPC and JSON-2 clients caught the error, set `self.verify = False` and replayed the same request, so an on-path attacker collected the password (or the `Authorization: bearer` API key) just by presenting a certificate that fails to validate, and every later call on that client stayed unverified. The three transports now propagate `OdooSSLVerificationError`. **This refuses connections that used to work**: the explicit opt-in is unchanged, so trust the CA (`SSL_CERT_FILE`) or run `odoo-mcp edit-profile <name> --no-verify`. `docs/windows-install.md` walks through the corporate-proxy case.
+- `is_ssl_verification_error()` no longer loops forever on an exception chain that links back to itself.
+
 ## [0.16.0] - 2026-09-02
 
 The three bundled skills now ship with evals and the "Use this skill when" phrasing Claude Code matches on, and every release notifies the Vauxoo AI marketplace catalog the moment it is tagged.

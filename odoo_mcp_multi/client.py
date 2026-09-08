@@ -31,11 +31,25 @@ from odoo_mcp_multi.version import Protocol, detect_protocol, get_server_version
 
 _logger = logging.getLogger(__name__)
 
+INSECURE_OPT_IN_HINT = (
+    "Trust the CA (point SSL_CERT_FILE at its bundle), or accept an unverified connection explicitly "
+    "with `odoo-mcp edit-profile <name> --no-verify`."
+)
+
+
+def ssl_verification_error(exc: Exception) -> OdooSSLVerificationError:
+    """Build the fail-closed error every transport raises on certificate verification failure."""
+    return OdooSSLVerificationError(f"SSL certificate validation failed: {exc}. {INSECURE_OPT_IN_HINT}")
+
 
 def is_ssl_verification_error(exc: Exception) -> bool:
     """Check if an exception is caused by an SSL certificate verification failure."""
     curr: Optional[BaseException] = exc
-    while curr is not None:
+    # An exception raised twice inside its own handler chains back to itself, and walking such a
+    # cycle never terminates. Track what has been visited so a malformed chain returns instead.
+    seen: set[int] = set()
+    while curr is not None and id(curr) not in seen:
+        seen.add(id(curr))
         if isinstance(curr, ssl.SSLCertVerificationError):
             return True
         name = curr.__class__.__name__
@@ -347,7 +361,7 @@ class JsonRpcClient(BaseOdooClient):
             raise OdooConnectionError(f"Connection timed out after {self.timeout}s: {e}") from e
         except httpx.RequestError as e:
             if is_ssl_verification_error(e):
-                raise OdooSSLVerificationError(f"SSL certificate validation failed: {e}") from e
+                raise ssl_verification_error(e) from e
             raise OdooConnectionError(f"Connection error: {e}") from e
 
     def _call(self, service: str, method: str, args: list) -> Any:
@@ -373,19 +387,7 @@ class JsonRpcClient(BaseOdooClient):
         }
 
         url = f"{self.url}{self._endpoint}"
-        if self.verify:
-            try:
-                response = self._post(url, payload)
-            except OdooSSLVerificationError as e:
-                # SSL validation failure warrants fallback to unverified SSL configuration.
-                # Setting self.verify = False alters the connection configuration globally for
-                # this client, saving the warning status.
-                _logger.warning("SSL verification failed for %s. Falling back to unverified SSL.", self.url)
-                self.verify = False
-                self.last_warning = f"SSL verification warning: {e}"
-                response = self._post(url, payload)
-        else:
-            response = self._post(url, payload)
+        response = self._post(url, payload)
 
         try:
             result = response.json()
@@ -707,7 +709,7 @@ class Json2Client(BaseOdooClient):
             raise OdooExecutionError(f"Request timed out: {e}") from e
         except httpx.RequestError as e:
             if is_ssl_verification_error(e):
-                raise OdooSSLVerificationError(f"SSL certificate validation failed: {e}") from e
+                raise ssl_verification_error(e) from e
             raise OdooConnectionError(f"Connection error: {e}") from e
 
     def execute_kw(
@@ -726,19 +728,7 @@ class Json2Client(BaseOdooClient):
         url = f"{self.url}/json/2/{model}/{method}"
         body = self._build_body(model, method, args or [], kwargs or {})
 
-        if self.verify:
-            try:
-                response = self._post(url, body)
-            except OdooSSLVerificationError as e:
-                # SSL validation failure warrants fallback to unverified SSL configuration.
-                # Setting self.verify = False alters the connection configuration globally for
-                # this client, saving the warning status.
-                _logger.warning("SSL verification failed for %s. Falling back to unverified SSL.", self.url)
-                self.verify = False
-                self.last_warning = f"SSL verification warning: {e}"
-                response = self._post(url, body)
-        else:
-            response = self._post(url, body)
+        response = self._post(url, body)
 
         if response.status_code == 401:
             try:
@@ -804,7 +794,7 @@ class XmlRpcClient(BaseOdooClient):
             raise OdooAuthenticationError(f"Authentication fault: {e.faultString}") from e
         except Exception as e:
             if is_ssl_verification_error(e):
-                raise OdooSSLVerificationError(f"SSL certificate validation failed: {e}") from e
+                raise ssl_verification_error(e) from e
             raise OdooConnectionError(f"Connection error: {e}") from e
 
     def authenticate(self) -> int:
@@ -812,19 +802,7 @@ class XmlRpcClient(BaseOdooClient):
         if self._uid is not None:
             return self._uid
 
-        if self.verify:
-            try:
-                uid = self._authenticate_raw()
-            except OdooSSLVerificationError as e:
-                # SSL validation failure warrants fallback to unverified SSL configuration.
-                # Setting self.verify = False alters the connection configuration globally for
-                # this client, saving the warning status.
-                _logger.warning("SSL verification failed for %s. Falling back to unverified SSL.", self.url)
-                self.verify = False
-                self.last_warning = f"SSL verification warning: {e}"
-                uid = self._authenticate_raw()
-        else:
-            uid = self._authenticate_raw()
+        uid = self._authenticate_raw()
 
         if not uid:
             raise OdooAuthenticationError(
@@ -853,7 +831,7 @@ class XmlRpcClient(BaseOdooClient):
             raise OdooExecutionError(f"Execution fault: {e.faultString}") from e
         except Exception as e:
             if is_ssl_verification_error(e):
-                raise OdooSSLVerificationError(f"SSL certificate validation failed: {e}") from e
+                raise ssl_verification_error(e) from e
             raise OdooExecutionError(f"Execution error: {e}") from e
 
     def execute_kw(self, model: str, method: str, args: Optional[list] = None, kwargs: Optional[dict] = None) -> Any:
@@ -862,19 +840,7 @@ class XmlRpcClient(BaseOdooClient):
         args = args or []
         kwargs = kwargs or {}
 
-        if self.verify:
-            try:
-                return self._execute_kw_raw(uid, model, method, args, kwargs)
-            except OdooSSLVerificationError as e:
-                # SSL validation failure warrants fallback to unverified SSL configuration.
-                # Setting self.verify = False alters the connection configuration globally for
-                # this client, saving the warning status.
-                _logger.warning("SSL verification failed for %s. Falling back to unverified SSL.", self.url)
-                self.verify = False
-                self.last_warning = f"SSL verification warning: {e}"
-                return self._execute_kw_raw(uid, model, method, args, kwargs)
-        else:
-            return self._execute_kw_raw(uid, model, method, args, kwargs)
+        return self._execute_kw_raw(uid, model, method, args, kwargs)
 
 
 def create_client(

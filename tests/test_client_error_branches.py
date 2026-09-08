@@ -290,7 +290,7 @@ def test_xmlrpc_authenticate_generic_error_maps_to_connection_error():
         client._authenticate_raw()
 
 
-def test_xmlrpc_authenticate_skips_ssl_fallback_when_unverified():
+def test_xmlrpc_authenticate_with_verification_disabled():
     client = _xmlrpc_client(verify=False)
     with patch.object(client, "_authenticate_raw", return_value=7):
         assert client.authenticate() == 7
@@ -334,7 +334,7 @@ def test_xmlrpc_execute_generic_error():
         client._execute_kw_raw(1, "res.partner", "read", [[1]], {})
 
 
-def test_xmlrpc_execute_kw_skips_ssl_fallback_when_unverified():
+def test_xmlrpc_execute_kw_with_verification_disabled():
     client = _xmlrpc_client(verify=False)
     client._uid = 1
     with patch.object(client, "_execute_kw_raw", return_value="ok"):

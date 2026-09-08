@@ -266,6 +266,36 @@ partners to confirm the end-to-end path works.
 | `odoo-mcp.exe ... blocked by Device Guard` | Smart App Control blocks the unsigned shim | Option A or Option B (Step 4) |
 | `odoo-mcp` still not found after install | New `PATH` not loaded | Close and reopen PowerShell |
 | Client shows the server but it never connects | Wrong `command` in config | Match Step 6 to the option you chose |
+| `SSL certificate validation failed` | The certificate does not validate: a corporate TLS proxy re-signing traffic, or an X.509 the server serves wrong | See the section below — the Windows trust store alone is not enough |
+
+## `SSL certificate validation failed`
+
+The connection is refused, never downgraded, so this has to be resolved rather than waited out.
+
+Installing the CA in the Windows certificate store is **not enough**. Only the XML-RPC transport
+reads that store; JSON-RPC and JSON-2 go through `httpx`, which verifies against the `certifi`
+bundle instead — and `detect_protocol` picks one of those two for any Odoo 8.0 or newer. Point
+both at the CA by exporting it as PEM and setting `SSL_CERT_FILE` in the environment of whatever
+launches `odoo-mcp` (the `env` block of the MCP client config from Step 6, so the AI client sees
+it too):
+
+```powershell
+setx SSL_CERT_FILE "%USERPROFILE%\certs\corporate-ca.pem"
+```
+
+Two failures do not go away this way:
+
+- **The CA is unavailable** (nobody will hand it over).
+- **`Basic Constraints of CA cert not marked critical`.** The certificate violates RFC 5280 and
+  Python 3.13+ rejects it by default (`VERIFY_X509_STRICT`), even with that CA trusted — which is
+  why it works in a browser and fails here. Reissuing the CA is the real fix.
+
+In both cases the remaining option is to accept an unverified connection knowingly, on a network
+you have reason to trust. Confirm it with the team first, then:
+
+```powershell
+odoo-mcp edit-profile <name> --no-verify
+```
 
 ## Uninstall / Cleanup
 

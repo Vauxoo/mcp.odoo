@@ -1,11 +1,13 @@
-"""Tests for SSL verification options, X.509 exception checking, and self-healing fallback retry logic."""
+"""Tests for SSL verification: X.509 exception checking and fail-closed behaviour on every transport."""
 
 from __future__ import annotations
 
 import ssl
+import threading
 from unittest.mock import MagicMock, patch
 
 import httpx
+import pytest
 
 from odoo_mcp_multi.client import (
     Json2Client,
@@ -14,7 +16,26 @@ from odoo_mcp_multi.client import (
     is_ssl_verification_error,
 )
 from odoo_mcp_multi.config import OdooProfile
+from odoo_mcp_multi.exceptions import OdooSSLVerificationError
 from odoo_mcp_multi.operations import _with_warning
+
+
+def _ssl_connect_error(url: str) -> httpx.ConnectError:
+    """Build the httpx error a server with an untrusted certificate raises."""
+    return httpx.ConnectError(
+        "SSL certificate verification failed",
+        request=httpx.Request("POST", url),
+    )
+
+
+def _raise_fresh_ssl_error(*_args, **_kwargs):
+    """Raise a new SSL exception per call.
+
+    Reusing one instance is what makes a retry chain it to itself (``__context__`` back to the
+    error that wrapped it), and walking that cycle hangs instead of failing. A fresh instance
+    keeps a regression here a failed assertion rather than a CI timeout.
+    """
+    raise Exception("SSL: CERTIFICATE_VERIFY_FAILED")
 
 
 def test_is_ssl_verification_error_direct():
@@ -36,8 +57,28 @@ def test_is_ssl_verification_error_direct():
     assert is_ssl_verification_error(ValueError("Invalid argument")) is False
 
 
-def test_json2_client_ssl_fallback(httpx_mock):
-    """Json2Client automatically retries with verify=False on SSL validation error."""
+def test_is_ssl_verification_error_survives_a_cyclic_chain():
+    """A chain that loops back on itself terminates instead of spinning forever.
+
+    Raising one exception instance twice, the second time inside the handler that already wrapped
+    it, links ``__context__`` back to the wrapper whose ``__cause__`` is that same instance. The
+    walk is run in a thread so a regression is a failed assertion, not a hung suite.
+    """
+    err = Exception("SSL: CERTIFICATE_VERIFY_FAILED")
+    wrapper = OdooSSLVerificationError("wrapped")
+    err.__context__ = wrapper
+    wrapper.__cause__ = err
+
+    result: list[bool] = []
+    walker = threading.Thread(target=lambda: result.append(is_ssl_verification_error(err)), daemon=True)
+    walker.start()
+    walker.join(timeout=5)
+
+    assert result == [True], "is_ssl_verification_error did not terminate on a cyclic exception chain"
+
+
+def test_json2_client_ssl_fails_closed(httpx_mock):
+    """Json2Client propagates the TLS error instead of retrying without verification."""
     client = Json2Client(
         url="https://ssl-error.example.com",
         database="db",
@@ -45,32 +86,21 @@ def test_json2_client_ssl_fallback(httpx_mock):
         verify=True,
     )
 
-    # First attempt raises SSL ConnectError, second attempt succeeds
-    httpx_mock.add_exception(
-        httpx.ConnectError(
-            "SSL certificate verification failed",
-            request=httpx.Request("POST", "https://ssl-error.example.com"),
-        ),
-        url="https://ssl-error.example.com/json/2/res.partner/search_read",
-    )
-    httpx_mock.add_response(
-        method="POST",
-        url="https://ssl-error.example.com/json/2/res.partner/search_read",
-        json={"result": [{"id": 1, "name": "Partner"}]},
-    )
+    url = "https://ssl-error.example.com/json/2/res.partner/search_read"
+    httpx_mock.add_exception(_ssl_connect_error(url), url=url)
 
-    # Execute
-    res = client.execute_kw("res.partner", "search_read", args=[[]], kwargs={})
+    with pytest.raises(OdooSSLVerificationError) as excinfo:
+        client.execute_kw("res.partner", "search_read", args=[[]], kwargs={})
 
-    # Assertions
-    assert res == {"result": [{"id": 1, "name": "Partner"}]}
-    assert client.verify is False
-    assert client.last_warning is not None
-    assert "SSL verification" in client.last_warning
+    assert client.verify is True
+    # A single attempt: no silent retry over an unverified connection.
+    assert len(httpx_mock.get_requests()) == 1
+    assert client.last_warning is None
+    assert "--no-verify" in str(excinfo.value)
 
 
-def test_json_rpc_client_ssl_fallback(httpx_mock):
-    """JsonRpcClient automatically retries with verify=False on SSL validation error."""
+def test_json_rpc_client_ssl_fails_closed(httpx_mock):
+    """JsonRpcClient propagates the TLS error instead of retrying without verification."""
     client = JsonRpcClient(
         url="https://ssl-error.example.com",
         database="db",
@@ -79,33 +109,21 @@ def test_json_rpc_client_ssl_fallback(httpx_mock):
         verify=True,
     )
 
-    # First attempt raises SSL ConnectError, second attempt succeeds
-    httpx_mock.add_exception(
-        httpx.ConnectError(
-            "SSL certificate verification failed",
-            request=httpx.Request("POST", "https://ssl-error.example.com"),
-        ),
-        url="https://ssl-error.example.com/jsonrpc",
-    )
-    httpx_mock.add_response(
-        method="POST",
-        url="https://ssl-error.example.com/jsonrpc",
-        json={"result": 42},  # uid
-    )
+    url = "https://ssl-error.example.com/jsonrpc"
+    httpx_mock.add_exception(_ssl_connect_error(url), url=url)
 
-    # Mock common.authenticate
-    uid = client.authenticate()
+    with pytest.raises(OdooSSLVerificationError) as excinfo:
+        client.authenticate()
 
-    # Assertions
-    assert uid == 42
-    assert client.verify is False
-    assert client.last_warning is not None
-    assert "SSL verification" in client.last_warning
+    assert client.verify is True
+    assert len(httpx_mock.get_requests()) == 1
+    assert client.last_warning is None
+    assert "--no-verify" in str(excinfo.value)
 
 
 @patch("xmlrpc.client.ServerProxy")
-def test_xml_rpc_client_ssl_fallback(mock_proxy_class):
-    """XmlRpcClient automatically retries with verify=False on SSL validation error."""
+def test_xml_rpc_client_ssl_fails_closed(mock_proxy_class):
+    """XmlRpcClient.authenticate propagates the TLS error instead of retrying without verification."""
     client = XmlRpcClient(
         url="https://ssl-error.example.com",
         database="db",
@@ -114,34 +132,24 @@ def test_xml_rpc_client_ssl_fallback(mock_proxy_class):
         verify=True,
     )
 
-    # Create mock instances for ServerProxy
-    mock_proxy_fail = MagicMock()
-    # Raise custom exception that simulates an SSL validation error
-    mock_proxy_fail.authenticate.side_effect = Exception("SSL: CERTIFICATE_VERIFY_FAILED")
+    mock_proxy = MagicMock()
+    mock_proxy.authenticate.side_effect = _raise_fresh_ssl_error
+    mock_proxy_class.return_value = mock_proxy
 
-    mock_proxy_success = MagicMock()
-    mock_proxy_success.authenticate.return_value = 100
+    with pytest.raises(OdooSSLVerificationError) as excinfo:
+        client.authenticate()
 
-    # Side effect returns the failing proxy first, then the success proxy on retry
-    mock_proxy_class.side_effect = [mock_proxy_fail, mock_proxy_success]
-
-    # Execute
-    uid = client.authenticate()
-
-    # Assertions
-    assert uid == 100
-    assert client.verify is False
-    assert client.last_warning is not None
-    assert "SSL verification" in client.last_warning
+    assert client.verify is True
+    assert mock_proxy.authenticate.call_count == 1
+    assert client.last_warning is None
+    assert "--no-verify" in str(excinfo.value)
 
 
 @patch("xmlrpc.client.ServerProxy")
-def test_xml_rpc_client_execute_kw_ssl_fallback(mock_proxy_class):
-    """Verify that execute_kw triggers SSL fallback to unverified context when verification fails.
+def test_xml_rpc_client_execute_kw_ssl_fails_closed(mock_proxy_class):
+    """XmlRpcClient.execute_kw propagates the TLS error instead of retrying without verification.
 
-    We set _uid explicitly to bypass authentication calls, isolating the validation logic
-    of execute_kw. We use ServerProxy side_effect to return a failing proxy first to trigger
-    fallback, then a succeeding one to verify the successful recovery path.
+    ``_uid`` is set explicitly to bypass authentication, isolating the execute_kw path.
     """
     client = XmlRpcClient(
         url="https://ssl-error.example.com",
@@ -152,20 +160,77 @@ def test_xml_rpc_client_execute_kw_ssl_fallback(mock_proxy_class):
     )
     client._uid = 100
 
-    mock_proxy_fail = MagicMock()
-    mock_proxy_fail.execute_kw.side_effect = Exception("SSL: CERTIFICATE_VERIFY_FAILED")
+    mock_proxy = MagicMock()
+    mock_proxy.execute_kw.side_effect = _raise_fresh_ssl_error
+    mock_proxy_class.return_value = mock_proxy
 
-    mock_proxy_success = MagicMock()
-    mock_proxy_success.execute_kw.return_value = [{"id": 1, "name": "Partner"}]
+    with pytest.raises(OdooSSLVerificationError) as excinfo:
+        client.execute_kw("res.partner", "search_read", args=[[]], kwargs={})
 
-    mock_proxy_class.side_effect = [mock_proxy_fail, mock_proxy_success]
+    assert client.verify is True
+    assert mock_proxy.execute_kw.call_count == 1
+    assert client.last_warning is None
+    assert "--no-verify" in str(excinfo.value)
+
+
+def test_json2_client_insecure_opt_in_is_honoured(httpx_mock):
+    """An explicit verify=False still reaches the server over an unverified connection."""
+    client = Json2Client(
+        url="https://self-signed.example.com",
+        database="db",
+        api_key="key",
+        verify=False,
+    )
+
+    httpx_mock.add_response(
+        method="POST",
+        url="https://self-signed.example.com/json/2/res.partner/search_read",
+        json={"result": [{"id": 1, "name": "Partner"}]},
+    )
 
     res = client.execute_kw("res.partner", "search_read", args=[[]], kwargs={})
 
-    assert res == [{"id": 1, "name": "Partner"}]
+    assert res == {"result": [{"id": 1, "name": "Partner"}]}
     assert client.verify is False
-    assert client.last_warning is not None
-    assert "SSL verification" in client.last_warning
+
+
+def test_json_rpc_client_insecure_opt_in_is_honoured(httpx_mock):
+    """An explicit verify=False still reaches the server over an unverified connection."""
+    client = JsonRpcClient(
+        url="https://self-signed.example.com",
+        database="db",
+        user="user",
+        password="pwd",
+        verify=False,
+    )
+
+    httpx_mock.add_response(
+        method="POST",
+        url="https://self-signed.example.com/jsonrpc",
+        json={"result": 42},
+    )
+
+    assert client.authenticate() == 42
+    assert client.verify is False
+
+
+@patch("xmlrpc.client.ServerProxy")
+def test_xml_rpc_client_insecure_opt_in_uses_unverified_context(mock_proxy_class):
+    """An explicit verify=False builds the transport with an unverified SSL context."""
+    client = XmlRpcClient(
+        url="https://self-signed.example.com",
+        database="db",
+        user="user",
+        password="pwd",
+        verify=False,
+    )
+
+    mock_proxy = MagicMock()
+    mock_proxy.authenticate.return_value = 100
+    mock_proxy_class.return_value = mock_proxy
+
+    assert client.authenticate() == 100
+    assert client._get_transport().context.verify_mode is ssl.CERT_NONE
 
 
 def test_operations_warning_injection():
