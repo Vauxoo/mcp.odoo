@@ -733,6 +733,20 @@ def test_list_fields_cache_ttl_expired(mock_get_client):
     assert mock_client.execute_kw.call_count == 2
 
 
+def test_cache_get_expired_entry_already_evicted_by_another_thread(monkeypatch):
+    """An expired entry evicted concurrently is a plain cache miss, not a KeyError."""
+    import odoo_mcp_multi.operations as ops
+
+    class EvictedBetweenReadAndDelete(dict):
+        """Returns the entry on read, but another thread already removed it."""
+
+        def get(self, key, default=None):
+            return {"data": "stale", "ts": 0}
+
+    monkeypatch.setattr(ops, "_metadata_cache", EvictedBetweenReadAndDelete())
+    assert ops._cache_get("fields:p:res.partner:") is None
+
+
 @patch("odoo_mcp_multi.operations._get_client")
 def test_list_models_cache_hit(mock_get_client):
     """list_models results are cached per profile+search combination."""

@@ -72,7 +72,7 @@ def _cache_get(key: str) -> Any | None:
     if entry is None:
         return None
     if (time() - entry["ts"]) >= METADATA_CACHE_TTL:
-        del _metadata_cache[key]
+        _metadata_cache.pop(key, None)
         return None
     return entry["data"]
 
