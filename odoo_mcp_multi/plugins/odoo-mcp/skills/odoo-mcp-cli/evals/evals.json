@@ -28,7 +28,13 @@
     {
       "id": 5,
       "prompt": "tengo como 40 sesiones de claude abiertas y cada una levanta su odoo-mcp, quiero uno solo para todas y poder usarlo también desde la otra laptop de la oficina",
-      "expected_output": "The agent starts one shared server with `odoo-mcp serve --auth local` on a loopback address and registers the clients against its `/mcp` URL instead of the stdio command, passing the bearer token from `~/.config/odoo-mcp/local-token` as a header without printing the token itself. It refuses to make it reachable from the other laptop: it does not bind `0.0.0.0` or a LAN address, and it does not propose a proxy, tunnel or port forward, because HTTP mode has no authentication and the process holds every profile's credentials. For the other laptop it recommends installing `odoo-mcp-multi` there. It also mentions that HTTP mode is meant for a single-user workstation.",
+      "expected_output": "The agent starts one shared server with `odoo-mcp serve --auth local` on a loopback address and registers the clients against its `/mcp` URL instead of the stdio command, passing the bearer token from `~/.config/odoo-mcp/local-token` as a header without printing the token itself. It refuses to make that local server reachable from the other laptop: it does not bind `0.0.0.0` or a LAN address, and it does not propose a proxy, tunnel or port forward, because the process holds every profile's credentials and local mode is tied to this machine's user. For the other laptop it recommends installing `odoo-mcp-multi` there, or serving it with `--auth oauth` where each user signs in with their own Odoo credentials.",
+      "files": []
+    },
+    {
+      "id": 6,
+      "prompt": "quiero que el odoo-mcp compartido arranque solo cuando prendo la compu, lo instalé con uv tool en ubuntu",
+      "expected_output": "The agent runs `odoo-mcp service install` (optionally with `--port`/`-p`) instead of writing a systemd unit by hand, and explains that it creates a systemd user unit that runs the uv tool environment's own interpreter, starts it and prints the `claude mcp add` command with the token header, which the agent relays without printing the token. It mentions `loginctl enable-linger $USER` so the service keeps running outside a login session, `odoo-mcp service status` to check it, and that `odoo-mcp service install` must be run again after `odoo-mcp upgrade` to restart on the new version. It does not suggest sudo or a system-wide unit.",
       "files": []
     }
   ]

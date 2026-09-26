@@ -202,6 +202,20 @@ Profiles are read on every call, so `add-profile` and `edit-profile` take
 effect without restarting the server. Restart it after upgrading
 `odoo-mcp-multi`; clients reconnect on their own.
 
+On Linux, run it as a background service instead of a terminal:
+
+```bash
+odoo-mcp service install [--port 5010] [-p prod]   # write, enable, start; prints the client command
+odoo-mcp service status
+odoo-mcp service uninstall
+```
+
+The systemd user unit runs the environment this odoo-mcp was installed in
+(pip, pipx, uv tool), or `uvx --from odoo-mcp-multi==<version>` under uvx.
+Run `service install` again after `odoo-mcp upgrade` to restart it on the
+new version. `--dry-run` prints the unit without changing anything. Not
+available on macOS or Windows yet.
+
 #### `--auth oauth`
 
 For remote clients. Users authenticate with their own Odoo credentials on a

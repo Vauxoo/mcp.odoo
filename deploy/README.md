@@ -82,30 +82,11 @@ has to sign in again.
 ## Local mode on a workstation
 
 `odoo-mcp-http.service` above is for `--auth oauth`. For `--auth local` there
-is no proxy or state database, only a token file; a systemd **user** unit is
-enough:
+is no proxy or state database, only a token file, and a systemd **user** unit
+is enough. `odoo-mcp service install` writes it for the way the package was
+installed (pip, pipx, uv tool or uvx), starts it and prints the client
+command; see [HTTP mode](../docs/http-mode.md#run-it-as-a-service-linux).
 
-```ini
-# ~/.config/systemd/user/odoo-mcp-local.service
-[Unit]
-Description=odoo-mcp shared local MCP server
-
-[Service]
-ExecStart=%h/.local/bin/odoo-mcp serve --auth local --port 5010
-Restart=on-failure
-
-[Install]
-WantedBy=default.target
-```
-
-```bash
-systemctl --user daemon-reload
-systemctl --user enable --now odoo-mcp-local
-```
-
-Register the client with the token the first start created:
-`claude mcp add -s user --transport http odoo http://127.0.0.1:5010/mcp
---header "Authorization: Bearer $(cat ~/.config/odoo-mcp/local-token)"`.
-
-Restart it after upgrading the package: a running server keeps serving the
-version it started with. Clients reconnect on their own after a restart.
+Run `odoo-mcp service install` again after upgrading the package: a running
+server keeps serving the version it started with. Clients reconnect on their
+own after a restart.

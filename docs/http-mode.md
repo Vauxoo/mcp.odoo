@@ -54,7 +54,30 @@ Rules this mode enforces:
 - Tool calls from different sessions really run in parallel. Calls that
   depend on each other must not be sent in the same parallel batch.
 
-To keep it running, see the user unit in [`deploy/`](https://git.vauxoo.com/ai/mcp.odoo/-/tree/main/deploy).
+### Run it as a service (Linux)
+
+```bash
+odoo-mcp service install [--port 5010] [--profile prod]
+odoo-mcp service status
+odoo-mcp service uninstall
+```
+
+`service install` writes a systemd **user** unit
+(`~/.config/systemd/user/odoo-mcp.service`), enables it, starts it, waits
+until the port answers, and prints the `claude mcp add` line with the token
+header. It needs no root. What the unit runs depends on how odoo-mcp-multi
+was installed:
+
+| Installed with | The unit runs |
+|---|---|
+| pip, a venv, pipx, `uv tool` | That environment's interpreter: `<env>/bin/python -m odoo_mcp_multi serve --auth local …` |
+| uvx | `uvx --from odoo-mcp-multi==<installed version> odoo-mcp serve --auth local …`, because uv may prune the cached environment |
+
+Run `service install` again after `odoo-mcp upgrade` (and, under uvx, to
+move to a newer version): it rewrites the unit and restarts the service.
+User services stop at logout unless lingering is on:
+`loginctl enable-linger $USER`. `--dry-run` prints the unit without touching
+anything. macOS and Windows are not supported yet.
 
 ## OAuth mode: a remote connector
 

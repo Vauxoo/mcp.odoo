@@ -229,6 +229,7 @@ odoo-mcp add-profile --name prod19 --url https://odoo19.example.com \
 | `odoo-mcp test -p NAME` | Test live connection |
 | `odoo-mcp run` | Start the MCP server process (stdio, one per client) |
 | `odoo-mcp serve --auth local` | One shared HTTP server for every client on this machine |
+| `odoo-mcp service install` | Run that shared server as a systemd user service (Linux) |
 | `odoo-mcp serve` | Remote HTTP connector with OAuth 2.1 |
 
 ## CLI Operations

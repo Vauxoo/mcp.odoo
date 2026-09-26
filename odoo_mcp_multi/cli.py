@@ -713,6 +713,113 @@ def cmd_serve(
 
 
 # ---------------------------------------------------------------------------
+# service: run `serve --auth local` as a systemd user unit (Linux)
+# ---------------------------------------------------------------------------
+
+
+@main.group("service")
+def cmd_service() -> None:
+    """Run `serve --auth local` as a background service (Linux, systemd user unit)."""
+
+
+@cmd_service.command("install")
+@click.option("--port", default=5010, show_default=True, type=int, help="Port to serve on.")
+@click.option("--host", default="127.0.0.1", show_default=True, help="Loopback address to bind.")
+@click.option("--profile", "-p", default=None, help="Fallback profile (default: default profile).")
+@click.option(
+    "--uvx-from",
+    default=None,
+    help="uvx installs only: package spec the service runs (default: this exact version from PyPI).",
+)
+@click.option("--no-start", is_flag=True, help="Write and enable the unit without starting it.")
+@click.option("--dry-run", is_flag=True, help="Print the unit and change nothing (systemd not required).")
+def cmd_service_install(port: int, host: str, profile: str, uvx_from: str, no_start: bool, dry_run: bool) -> None:
+    """Install (or reinstall and restart) the service.
+
+    What the unit runs depends on how odoo-mcp-multi was installed: the
+    interpreter of a pip, pipx or uv tool environment, or `uvx --from` for
+    uvx, whose cached environment may be pruned at any time. Run it again
+    after `odoo-mcp upgrade` to restart the service on the new version.
+    """
+    from odoo_mcp_multi import service
+    from odoo_mcp_multi.http.settings import ConfigError, HttpServeConfig, load_local_token
+
+    try:
+        service.check_platform()
+        config = HttpServeConfig(host=host, port=port, auth_enabled=False)
+        config.validate_runtime()
+        if profile and get_profile(profile) is None:
+            raise service.ServiceError(f"Profile '{profile}' not found.")
+        context = _detect_install_context()
+        serve_args = ["serve", "--auth", "local", "--host", host, "--port", str(port)]
+        serve_args += ["--profile", profile] if profile else []
+        command = service.exec_start(context, serve_args, uvx_from or f"{PACKAGE_NAME}=={__version__}")
+        unit_text = service.render_unit(command, context)
+        if dry_run:
+            click.echo(unit_text, nl=False)
+            return
+        service.require_systemctl()
+        token_file = config.local_token_file
+        load_local_token(token_file)
+        path = service.install(unit_text, host, port, start=not no_start)
+    except (service.ServiceError, ConfigError) as exc:
+        click.secho(f"{CROSS} {exc}", fg="red", err=True)
+        sys.exit(1)
+
+    url = f"http://{host}:{port}/mcp"
+    state = "enabled (not started)" if no_start else f"running on {url}"
+    click.secho(f"{TICK} {service.UNIT_NAME} installed for a {context} install, {state}", fg="green")
+    click.echo(f"  Unit: {path}")
+    click.echo(f"  Runs: {' '.join(command)}")
+    if context == "editable":
+        click.echo("  This is an editable install: the service runs your checkout as it is on disk.")
+    click.echo("  Register the client:")
+    click.echo(
+        f'    claude mcp add -s user --transport http odoo {url} --header "Authorization: Bearer $(cat {token_file})"'
+    )
+    click.echo("  User services stop at logout; to keep it running: loginctl enable-linger $USER")
+
+
+@cmd_service.command("uninstall")
+def cmd_service_uninstall() -> None:
+    """Stop, disable and remove the service. The local token is kept."""
+    from odoo_mcp_multi import service
+
+    try:
+        service.check_platform()
+        service.require_systemctl()
+        path = service.uninstall()
+    except service.ServiceError as exc:
+        click.secho(f"{CROSS} {exc}", fg="red", err=True)
+        sys.exit(1)
+    if path is None:
+        click.echo(f"{service.UNIT_NAME} is not installed.")
+        return
+    click.secho(f"{TICK} Removed {path}", fg="green")
+
+
+@cmd_service.command("status")
+def cmd_service_status() -> None:
+    """Show the unit and what systemd reports about it."""
+    from odoo_mcp_multi import service
+
+    try:
+        service.check_platform()
+        service.require_systemctl()
+    except service.ServiceError as exc:
+        click.secho(f"{CROSS} {exc}", fg="red", err=True)
+        sys.exit(1)
+    path = service.unit_path()
+    if not path.exists():
+        click.echo(f"{service.UNIT_NAME} is not installed. Run `odoo-mcp service install`.")
+        sys.exit(3)
+    click.echo(f"Unit: {path}")
+    result = service.systemctl("status", "--no-pager", service.UNIT_NAME)
+    click.echo((result.stdout or result.stderr).rstrip())
+    sys.exit(result.returncode)
+
+
+# ---------------------------------------------------------------------------
 # HTTP mode operations (inspect and revoke what `serve` has issued)
 # ---------------------------------------------------------------------------
 
