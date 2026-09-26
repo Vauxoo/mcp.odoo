@@ -133,30 +133,40 @@ async def test_local_mode_serves_the_tools_with_this_machines_profiles(http_serv
     assert [p["name"] for p in json.loads(result.content[0].text)] == ["local-test"]
 
 
-def _ping(server, token=None, **headers) -> httpx.Response:
-    port, real_token = server
-    auth = {"Authorization": f"Bearer {real_token if token is None else token}"} if token != "" else {}
+def _ping(port: int, headers: dict) -> httpx.Response:
     return httpx.post(
         f"http://127.0.0.1:{port}/mcp",
-        headers={"Accept": "application/json, text/event-stream", **auth, **headers},
+        headers={"Accept": "application/json, text/event-stream", **headers},
         json={"jsonrpc": "2.0", "id": 1, "method": "ping"},
     )
 
 
-@pytest.mark.parametrize("token", ["", "wrong"])
-def test_local_mode_requires_the_token(http_server, token):
+def _bearer(token: str) -> dict:
+    return {"Authorization": f"Bearer {token}"}
+
+
+def test_local_mode_answers_a_client_with_the_token(http_server):
+    port, token = http_server
+    assert _ping(port, _bearer(token)).status_code == 200
+
+
+@pytest.mark.parametrize("headers", [{}, _bearer("wrong")], ids=["missing", "wrong"])
+def test_local_mode_requires_the_token(http_server, headers):
     """Another OS user, a forwarded port or a local SSRF arrives without it."""
-    response = _ping(http_server, token=token)
+    port, _ = http_server
+    response = _ping(port, headers)
     assert response.status_code == 401
     assert response.headers["www-authenticate"] == "Bearer"
 
 
 def test_local_mode_rejects_a_foreign_host_header(http_server):
     """Requests whose Host is not loopback are refused (DNS rebinding)."""
-    assert _ping(http_server, Host="attacker.example").status_code == 421
+    port, token = http_server
+    assert _ping(port, {**_bearer(token), "Host": "attacker.example"}).status_code == 421
 
 
 @pytest.mark.parametrize("origin", ["https://attacker.example", "https://claude.ai", "http://localhost:3000"])
 def test_local_mode_rejects_any_browser_origin(http_server, origin):
     """No browser page drives the server, not even one served from localhost."""
-    assert _ping(http_server, Origin=origin).status_code == 403
+    port, token = http_server
+    assert _ping(port, {**_bearer(token), "Origin": origin}).status_code == 403

@@ -11,12 +11,9 @@ from __future__ import annotations
 
 import base64
 import hashlib
-import json
 import secrets
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlparse
-
-import pytest
 
 CLAUDE_REDIRECT = "https://claude.ai/api/mcp/auth_callback"
 
@@ -313,34 +310,22 @@ async def test_revocation_kills_the_session(client):
     assert after.status_code == 401
 
 
-@pytest.mark.parametrize("attempt", range(1, 7))
-async def test_repeated_failures_cancel_the_transaction(client, attempt):
+async def test_repeated_failures_cancel_the_transaction(client):
     """A consent form that can be retried forever is a password oracle."""
     registration = await register(client)
     _, challenge = pkce()
     txn = await authorize(client, registration["client_id"], challenge)
 
-    last = None
     with patch(
         "odoo_mcp_multi.http.consent.op_validate_credentials",
         return_value={"success": False, "error": "bad password"},
     ):
-        for _ in range(attempt):
-            last = await client.post("/odoo/login", data=dict(GOOD_LOGIN, txn=txn))
+        statuses = [(await client.post("/odoo/login", data=dict(GOOD_LOGIN, txn=txn))).status_code for _ in range(6)]
 
-    assert last is not None
-    if attempt < 5:
-        assert last.status_code == 200
-    else:
-        assert last.status_code in (400, 429)
+    # Four retries show the form again, the fifth cancels, and the cancelled transaction is gone.
+    assert statuses == [200, 200, 200, 200, 429, 400]
 
 
 def _result(response):
-    """Extract the JSON-RPC result from an MCP response body."""
-    body = response.text
-    if body.startswith("event:") or body.startswith("data:"):
-        for line in body.splitlines():
-            if line.startswith("data:"):
-                return json.loads(line[5:].strip())["result"]
-        raise AssertionError(f"no data frame in {body!r}")
+    """Extract the JSON-RPC result from an MCP response body (the server answers JSON)."""
     return response.json()["result"]
