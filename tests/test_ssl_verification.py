@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import datetime
+import ipaddress
 import ssl
 import sys
 import threading
@@ -9,6 +11,10 @@ from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 
 from odoo_mcp_multi.client import (
     Json2Client,
@@ -278,14 +284,6 @@ def _issue_chain(tmp_path, ca_constraints_critical: bool = True):
     Everything else VERIFY_X509_STRICT checks (key identifiers, key usage, EKU) is issued
     correctly, so the ``basicConstraints`` criticality is the only thing that can trip it.
     """
-    x509 = pytest.importorskip("cryptography.x509")
-    import datetime
-    import ipaddress
-
-    from cryptography.hazmat.primitives import hashes, serialization
-    from cryptography.hazmat.primitives.asymmetric import ec
-    from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
-
     now = datetime.datetime.now(datetime.timezone.utc)
     ca_key = ec.generate_private_key(ec.SECP256R1())
     ca_name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "odoo-mcp test CA")])
@@ -387,15 +385,48 @@ def test_ca_bundle_trusts_a_private_ca(tls_odoo, client_class):
     assert _authenticate(client_class, url, build_ssl_verify(True, ca_bundle=ca_pem)) == 7
 
 
-@pytest.mark.skipif(sys.version_info < (3, 13), reason="VERIFY_X509_STRICT is on by default from Python 3.13")
+@pytest.fixture
+def strict_by_default(monkeypatch):
+    """Make ``ssl.create_default_context`` set VERIFY_X509_STRICT, as Python 3.13+ does.
+
+    What ssl_strict=False relaxes must be tested on every supported Python, not only on the
+    ones whose default happens to enable it.
+    """
+    create_default_context = ssl.create_default_context
+
+    def create_strict_context(*args, **kwargs):
+        context = create_default_context(*args, **kwargs)
+        context.verify_flags |= ssl.VERIFY_X509_STRICT
+        return context
+
+    monkeypatch.setattr(ssl, "create_default_context", create_strict_context)
+
+
 @pytest.mark.parametrize("tls_odoo", [False], indirect=True)
 @pytest.mark.parametrize("client_class", [JsonRpcClient, XmlRpcClient])
-def test_ssl_strict_off_accepts_non_critical_basic_constraints(tls_odoo, client_class):
+def test_ssl_strict_off_accepts_non_critical_basic_constraints(tls_odoo, client_class, strict_by_default):
     """A trusted CA with non-critical basicConstraints fails under STRICT and verifies once it is relaxed."""
     url, ca_pem = tls_odoo
     with pytest.raises(OdooSSLVerificationError, match="not marked critical"):
         _authenticate(client_class, url, build_ssl_verify(True, ca_bundle=ca_pem))
     assert _authenticate(client_class, url, build_ssl_verify(True, ca_bundle=ca_pem, ssl_strict=False)) == 7
+
+
+@pytest.mark.parametrize("tls_odoo", [False], indirect=True)
+@pytest.mark.parametrize("client_class", [JsonRpcClient, XmlRpcClient])
+def test_ssl_strict_follows_the_python_default(tls_odoo, client_class):
+    """ssl_strict=True means "what this Python does": 3.13+ refuses the CA, older versions accept it.
+
+    Pins the documented difference between versions, so a Python or OpenSSL upgrade that
+    changes it fails here instead of surprising a user.
+    """
+    url, ca_pem = tls_odoo
+    verify = build_ssl_verify(True, ca_bundle=ca_pem)
+    if sys.version_info >= (3, 13):
+        with pytest.raises(OdooSSLVerificationError, match="not marked critical"):
+            _authenticate(client_class, url, verify)
+    else:
+        assert _authenticate(client_class, url, verify) == 7
 
 
 def test_build_ssl_verify_keeps_plain_values_by_default():

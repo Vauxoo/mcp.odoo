@@ -1,4 +1,5 @@
 import json
+import os
 import re
 from pathlib import Path
 
@@ -16,6 +17,17 @@ def test_imports():
 def test_version():
     """Verify that the package has a version."""
     assert __version__ == "0.16.0"
+
+
+def test_suite_runs_against_the_installed_wheel():
+    """CI sets ODOO_MCP_TEST_INSTALLED: the suite must exercise site-packages, not the checkout.
+
+    `python -m pytest` or the default import mode would put the checkout first on sys.path
+    and silently test the source tree instead of what users install.
+    """
+    if not os.environ.get("ODOO_MCP_TEST_INSTALLED"):
+        return
+    assert "site-packages" in Path(config.__file__).parts
 
 
 REPO_ROOT = Path(__file__).parent.parent

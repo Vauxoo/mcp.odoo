@@ -33,6 +33,8 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Internet",
     "Topic :: Office/Business",
@@ -53,6 +55,7 @@ dev = [
     "pytest-asyncio>=0.23.0",
     "pytest-cov>=4.1.0",
     "pytest-httpx>=0.30.0",
+    "cryptography>=41.0.0",
     "python-dotenv>=1.0.0",
     "ruff>=0.1.0",
     "bump-my-version>=0.28.0",
@@ -141,7 +144,7 @@ replace = "## [Unreleased]\n\n## [{new_version}] - {now:%Y-%m-%d}"
 
 [tool.pytest.ini_options]
 minversion = "7.0"
-addopts = "-ra -q --cov=odoo_mcp_multi --cov-report=term-missing --cov-report=xml --cov-context=test --ignore=tests/integration"
+addopts = "-ra -q --cov --cov-report=term-missing --cov-report=xml --cov-context=test --ignore=tests/integration"
 asyncio_mode = "auto"
 testpaths = [
     "tests",
@@ -151,10 +154,20 @@ markers = [
 ]
 
 [tool.coverage.run]
-source = ["odoo_mcp_multi"]
+source_pkgs = ["odoo_mcp_multi"]
 branch = true
+relative_files = true
+
+# CI tests the installed wheel on several Pythons; this maps each
+# site-packages copy back to the source tree so the runs combine.
+[tool.coverage.paths]
+source = [
+    "odoo_mcp_multi/",
+    "*/site-packages/odoo_mcp_multi/",
+]
 
 [tool.coverage.report]
+precision = 2
 exclude_lines = [
     "pragma: no cover",
     "def __repr__",

@@ -60,6 +60,31 @@ def test_cli_list_profiles_human_readable(mock_list):
     assert result.exit_code == 0
     assert "prod" in result.output
     assert "odoo.example.com" in result.output
+    assert "CA:" not in result.output
+    assert "Strict:" not in result.output
+
+
+@patch("odoo_mcp_multi.cli.list_profiles")
+def test_cli_list_profiles_shows_tls_trust_settings(mock_list):
+    """A custom CA or a relaxed strict mode is visible, so no profile weakens TLS unnoticed."""
+    mock_list.return_value = [
+        {
+            "name": "proxy",
+            "url": "https://odoo.example.com",
+            "database": "prod",
+            "user": "admin",
+            "protocol": "auto",
+            "verify": True,
+            "ca_bundle": "/etc/corporate-ca.pem",
+            "ssl_strict": False,
+            "auth": "password",
+            "is_default": False,
+        },
+    ]
+    result = runner.invoke(main, ["list-profiles"])
+    assert result.exit_code == 0
+    assert "CA:       /etc/corporate-ca.pem" in result.output
+    assert "Strict:   False" in result.output
 
 
 @patch("odoo_mcp_multi.cli.list_profiles")

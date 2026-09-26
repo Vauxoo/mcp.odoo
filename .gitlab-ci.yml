@@ -7,6 +7,7 @@ default:
 
 stages:
   - lint
+  - build
   - test
   - release
   - deploy
@@ -61,11 +62,70 @@ validate-plugin:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     - if: $CI_COMMIT_TAG
 
-test:
-  extends: .python-template
-  stage: test
+# ---------------------------------------------------------------------------
+# The suite runs against the wheel users install, on every Python the package
+# declares, each on a bare image: nothing from the checkout is importable, so
+# a file missing from the wheel or an undeclared dependency fails here rather
+# than on a user's machine. `test` then combines the runs, so a branch only one
+# Python takes still counts as covered — and one it never takes shows up.
+# ---------------------------------------------------------------------------
+build:
+  image: python:3.12-slim
+  stage: build
   script:
-    - pytest --cov=odoo_mcp_multi --cov-report=term --cov-report=xml --cov-report=html:htmlcov
+    - pip install build
+    - python -m build --wheel
+  artifacts:
+    paths:
+      - dist/
+    expire_in: 1 day
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+
+test-python:
+  image: python:${PYTHON}-slim
+  stage: test
+  needs:
+    - build
+  parallel:
+    matrix:
+      - PYTHON: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+  variables:
+    COVERAGE_FILE: ".coverage.${PYTHON}"
+    # 3.14's default sys.monitoring core drops the per-test contexts shown in htmlcov.
+    COVERAGE_CORE: ctrace
+  script:
+    - pip install --upgrade pip
+    - pip install "$(ls dist/*.whl)[dev]"
+    # `pytest` rather than `python -m pytest`, and importlib mode: neither puts
+    # the checkout on sys.path, so the tests import the installed wheel —
+    # test_suite_runs_against_the_installed_wheel fails if that ever changes.
+    - ODOO_MCP_TEST_INSTALLED=1 pytest --import-mode=importlib
+  artifacts:
+    paths:
+      - .coverage.${PYTHON}
+    expire_in: 1 day
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+
+test:
+  image: python:3.12-slim
+  stage: test
+  needs:
+    - test-python
+  script:
+    - pip install coverage
+    - python -m coverage combine .coverage.3.*
+    - python -m coverage report
+    - python -m coverage xml
+    - python -m coverage html -d htmlcov
+    - >-
+      python -c "import xml.etree.ElementTree as ET; r = ET.parse('coverage.xml').getroot();
+      print(f\"Lines: {float(r.get('line-rate')) * 100:.2f}%  Branches: {float(r.get('branch-rate')) * 100:.2f}%\")"
   artifacts:
     paths:
       - htmlcov
