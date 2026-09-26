@@ -580,6 +580,7 @@ def cmd_run(profile: str) -> None:
     "local: no authentication, loopback only, tools use this machine's profiles.json.",
 )
 @click.option("--profile", "-p", default=None, help="With --auth local: fallback profile (default: default profile).")
+@click.option("--rotate-token", is_flag=True, help="With --auth local: replace the bearer token before starting.")
 @click.option("--json-response/--sse-response", default=True, show_default=True, help="Response encoding.")
 @click.option("--stateless/--stateful", default=True, show_default=True, help="MCP session handling.")
 @click.option("--state-db", default=None, type=click.Path(), help="Path to the authorization state database.")
@@ -607,6 +608,7 @@ def cmd_serve(
     public_url: str,
     auth: str,
     profile: str,
+    rotate_token: bool,
     json_response: bool,
     stateless: bool,
     state_db: str,
@@ -666,8 +668,8 @@ def cmd_serve(
         click.secho(f"{CROSS} {exc}", fg="red", err=True)
         sys.exit(2)
 
-    if profile and config.auth_enabled:
-        click.secho(f"{CROSS} --profile only applies to --auth local.", fg="red", err=True)
+    if (profile or rotate_token) and config.auth_enabled:
+        click.secho(f"{CROSS} --profile and --rotate-token only apply to --auth local.", fg="red", err=True)
         sys.exit(2)
 
     from odoo_mcp_multi.http.app import build_http_app
@@ -683,15 +685,12 @@ def cmd_serve(
             set_profile(odoo_profile)
             _set_fallback_ref(odoo_profile)
             click.echo(f"Fallback profile: '{odoo_profile.name}'", err=True)
-        click.secho(
-            "WARNING: authentication is disabled. Any process on this machine that can reach "
-            f"http://{config.host}:{config.port}{config.path} can use every profile in profiles.json.",
-            fg="red",
-            bold=True,
-            err=True,
-        )
 
-    app = build_http_app(config)
+    try:
+        app = build_http_app(config, rotate_local_token=rotate_token)
+    except ConfigError as exc:
+        click.secho(f"{CROSS} {exc}", fg="red", err=True)
+        sys.exit(2)
 
     click.echo(f"Serving MCP on http://{config.host}:{config.port}{config.path}", err=True)
     if config.auth_enabled:
@@ -699,6 +698,14 @@ def cmd_serve(
         click.echo(f"  Issuer:      {config.issuer_url}", err=True)
         click.echo(f"  Consent:     {config.login_url}", err=True)
         click.echo(f"  State DB:    {config.state_db}", err=True)
+    else:
+        url = f"http://{config.host}:{config.port}{config.path}"
+        click.echo(f"  Token file:  {config.local_token_file} (every request needs it as a bearer token)", err=True)
+        click.echo(
+            f"  Client:      claude mcp add -s user --transport http odoo {url} "
+            f'--header "Authorization: Bearer $(cat {config.local_token_file})"',
+            err=True,
+        )
     if config.allowed_odoo_hosts:
         click.echo(f"  Odoo hosts:  {', '.join(config.allowed_odoo_hosts)}", err=True)
 

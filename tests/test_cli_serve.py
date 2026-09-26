@@ -95,14 +95,14 @@ def test_local_auth_accepts_the_exact_loopback_names(host):
 
 
 def test_local_auth_only_trusts_loopback_hosts_and_origins():
-    """Without a bearer token, a claude.ai or public Origin must not get through."""
+    """CLI clients send no Origin, so any Origin means a browser page: refuse it."""
     from odoo_mcp_multi.http.app import build_transport_security
 
     security = build_transport_security(HttpServeConfig(host="127.0.0.1", auth_enabled=False))
 
     assert security.enable_dns_rebinding_protection is True
     assert set(security.allowed_hosts) == {"127.0.0.1:*", "localhost:*", "[::1]:*"}
-    assert set(security.allowed_origins) == {"http://127.0.0.1:*", "http://localhost:*", "http://[::1]:*"}
+    assert security.allowed_origins == []
 
 
 def test_no_auth_contradicts_an_https_public_url():
@@ -216,11 +216,53 @@ def test_serve_binds_what_it_was_told(runner, state_paths):
     assert "https://odoo-mcp.me1980.com/mcp" in result.output
 
 
-def test_serve_warns_loudly_without_auth(runner, state_paths):
+@pytest.fixture
+def config_dir(tmp_path, monkeypatch):
+    """Keep the local token out of the real ~/.config/odoo-mcp."""
+    monkeypatch.setattr("odoo_mcp_multi.http.settings._default_config_dir", lambda: tmp_path)
+    return tmp_path
+
+
+def test_serve_local_tells_how_to_register_the_client(runner, state_paths, config_dir):
     with patch("uvicorn.run"), patch("odoo_mcp_multi.cli.get_profile", return_value=None):
         result = runner.invoke(main, ["serve", "--auth", "local", *state_paths])
     assert result.exit_code == 0, result.output
-    assert "authentication is disabled" in result.output
+    token_file = config_dir / "local-token"
+    assert str(token_file) in result.output
+    assert f'--header "Authorization: Bearer $(cat {token_file})"' in result.output
+    assert token_file.read_text().strip() not in result.output, "the token itself must never be printed"
+
+
+def test_serve_local_refuses_a_token_file_others_can_read(runner, state_paths, config_dir):
+    token_file = config_dir / "local-token"
+    token_file.write_text("t\n")
+    token_file.chmod(0o644)
+    with patch("uvicorn.run") as run, patch("odoo_mcp_multi.cli.get_profile", return_value=None):
+        result = runner.invoke(main, ["serve", "--auth", "local", *state_paths])
+    assert result.exit_code == 2
+    assert "chmod 600" in result.output
+    run.assert_not_called()
+
+
+def test_rotate_token_requires_local_auth(runner, state_paths):
+    result = runner.invoke(
+        main, ["serve", "--public-url", "https://h.example.com/mcp", "--rotate-token", *state_paths]
+    )
+    assert result.exit_code == 2
+    assert "--auth local" in result.output
+
+
+def test_local_token_is_created_private_and_reused(tmp_path):
+    from odoo_mcp_multi.http.settings import load_local_token
+
+    path = tmp_path / "local-token"
+    first = load_local_token(path)
+    assert len(first) >= 40
+    assert path.stat().st_mode & 0o777 == 0o600
+    assert load_local_token(path) == first
+    rotated = load_local_token(path, rotate=True)
+    assert rotated != first
+    assert load_local_token(path) == rotated
 
 
 def test_serve_rejects_a_profile_with_oauth(runner, state_paths):

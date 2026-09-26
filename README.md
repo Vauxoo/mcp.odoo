@@ -41,7 +41,7 @@ through `jq`, and automate workflows without writing Python.
 - **Secure credential storage** — `~/.config/odoo-mcp/profiles.json` with Unix `600` permissions (owner-read-only)
 - **13 MCP tools** — `search_read`, `search_count`, `write`, `unlink`, `create`, `export_records`, `import_records`, `execute_kw`, `list_models`, `list_fields`, `list_available_profiles`, `get_version`, `get_financial_report`
 - **Full CLI parity** — every MCP tool works as a terminal command with JSON output, composable with `jq` and shell scripts
-- **One server for every session** — `odoo-mcp serve --auth local` serves every MCP client on a workstation from one process with your `profiles.json`, instead of one ~60 MiB process per session; loopback only, no authentication, so single-user machines only ([guide](docs/http-mode.md#local-mode-one-server-for-every-session-on-this-machine))
+- **One server for every session** — `odoo-mcp serve --auth local` serves every MCP client on a workstation from one process with your `profiles.json`, instead of one ~60 MiB process per session; loopback only, bearer token in a 0600 file next to `profiles.json` ([guide](docs/http-mode.md#local-mode-one-server-for-every-session-on-this-machine))
 - **Remote connector mode** — `odoo-mcp serve` exposes the same tools over HTTP with a built-in OAuth 2.1 server; each user signs in with their own Odoo credentials and every call runs under their own access rights ([guide](docs/http-mode.md))
 - **Agentic skills** — ships three installable skills for AI agents (`odoo-mcp plugins install <agent>`)
 - **No Odoo module required** — connects through standard XML-RPC or the native `/json/2` REST API

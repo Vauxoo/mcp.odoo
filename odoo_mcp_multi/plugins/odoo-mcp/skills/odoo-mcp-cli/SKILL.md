@@ -177,21 +177,25 @@ odoo-mcp serve --port 5010 --public-url https://odoo-mcp.example.com/mcp
 
 All sessions share one process and the same profiles, and tool calls run in
 worker threads so a slow Odoo call from one session does not hold up the
-others. It has **no authentication** and the process holds the credentials of
-every profile, so:
+others. The process holds the credentials of every profile, so it is
+guarded by a bearer token that the first start writes to
+`~/.config/odoo-mcp/local-token` (mode 0600, like `profiles.json`) and that
+every request must present. Never print, paste or log the token itself;
+refer to the file. `--rotate-token` replaces it.
 
 - It only binds loopback; `--host 0.0.0.0` or a LAN address exits with an
   error. Do not work around it with a proxy, tunnel or port forward: that
   exposes every configured Odoo instance to whoever can reach it. To serve
   other machines use `--auth oauth`.
-- Loopback is shared by every OS user of the machine. Use it only on a
-  single-user workstation; on a shared host keep `run` (stdio).
+- It refuses any request with a browser `Origin`, so browser-based tools
+  (MCP Inspector) cannot connect to it.
 
 Register the running server in the client instead of the stdio command,
 for example in Claude Code:
 
 ```bash
-claude mcp add -s user --transport http odoo http://127.0.0.1:5010/mcp
+claude mcp add -s user --transport http odoo http://127.0.0.1:5010/mcp \
+  --header "Authorization: Bearer $(cat ~/.config/odoo-mcp/local-token)"
 ```
 
 Profiles are read on every call, so `add-profile` and `edit-profile` take
@@ -484,10 +488,12 @@ odoo-mcp unlink -m res.partner -i "$IDS" -p prod
 
 ```bash
 odoo-mcp serve --auth local --port 5010
-claude mcp add -s user --transport http odoo http://127.0.0.1:5010/mcp
+claude mcp add -s user --transport http odoo http://127.0.0.1:5010/mcp \
+  --header "Authorization: Bearer $(cat ~/.config/odoo-mcp/local-token)"
 ```
 
 Keep it on loopback. If the user also wants to reach it from another
-machine, explain that `--auth local` has no authentication and exposes every
-profile: install `odoo-mcp-multi` on that machine, or serve it with
-`--auth oauth`, where each user signs in with their own Odoo credentials.
+machine, explain that `--auth local` is bound to loopback and to this OS
+user's token and exposes every profile: install `odoo-mcp-multi` on that
+machine, or serve it with `--auth oauth`, where each user signs in with
+their own Odoo credentials.

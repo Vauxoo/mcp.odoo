@@ -11,6 +11,8 @@ The derivation is a pure function so it can be tested without a socket.
 
 from __future__ import annotations
 
+import os
+import secrets
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -68,6 +70,7 @@ class HttpServeConfig:
     max_concurrency: int = DEFAULT_MAX_CONCURRENCY
     allowed_odoo_hosts: tuple[str, ...] = ()
     log_level: str = "INFO"
+    local_token_file: Optional[Path] = None
 
     # Derived in __post_init__
     issuer_url: str = field(init=False, default="")
@@ -94,6 +97,8 @@ class HttpServeConfig:
             self.state_db = _default_config_dir() / "http-state.db"
         if self.secret_key_file is None:
             self.secret_key_file = _default_config_dir() / "http-secret.key"
+        if self.local_token_file is None:
+            self.local_token_file = _default_config_dir() / "local-token"
 
     def _derive_from_public_url(self) -> None:
         parsed = urlparse(self.public_url or "")
@@ -153,6 +158,29 @@ class HttpServeConfig:
                     "--auth local cannot be combined with an https --public-url: the URL promises a "
                     "publicly reachable server that anyone could then use without credentials."
                 )
+
+
+def load_local_token(path: Path, rotate: bool = False) -> str:
+    """Return the ``--auth local`` bearer token, creating it on first use.
+
+    The file gets the same 0600 mode as ``profiles.json``: whoever can read
+    the profiles can already act with them, and nobody else can present the
+    token. That keeps the local server's reach equal to stdio's, even on a
+    host shared with other OS users or behind an unexpected port forward.
+    """
+    if not rotate and path.exists():
+        if os.name != "nt" and path.stat().st_mode & 0o077:
+            raise ConfigError(f"{path} is readable by other users. Run: chmod 600 {path} (or pass --rotate-token).")
+        token = path.read_text().strip()
+        if token:
+            return token
+    token = secrets.token_urlsafe(32)
+    path.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as fh:
+        fh.write(token + "\n")
+    os.chmod(path, 0o600)
+    return token
 
 
 def _default_config_dir() -> Path:

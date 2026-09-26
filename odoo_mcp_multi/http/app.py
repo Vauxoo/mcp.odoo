@@ -18,6 +18,7 @@ reading the SDK rather than its docs:
 
 from __future__ import annotations
 
+import hmac
 from typing import Optional
 
 import anyio
@@ -32,7 +33,7 @@ from odoo_mcp_multi.http.basic_auth import BasicClientAuthMiddleware
 from odoo_mcp_multi.http.consent import ConsentRoutes
 from odoo_mcp_multi.http.crypto import CredentialCipher
 from odoo_mcp_multi.http.provider import OdooOAuthProvider
-from odoo_mcp_multi.http.settings import CLAUDE_ORIGIN, DEFAULT_SCOPES, HttpServeConfig
+from odoo_mcp_multi.http.settings import CLAUDE_ORIGIN, DEFAULT_SCOPES, HttpServeConfig, load_local_token
 from odoo_mcp_multi.http.store import AuthStore
 from odoo_mcp_multi.server import build_server
 
@@ -55,15 +56,16 @@ def build_auth_settings(config: HttpServeConfig) -> AuthSettings:
 def build_transport_security(config: HttpServeConfig) -> TransportSecuritySettings:
     """Allow the public hostname through the DNS-rebinding guard.
 
-    ``--auth local`` has no bearer token to stop a browser page, so it only
-    accepts loopback Hosts and Origins; claude.ai and the public name are
-    never let through there.
+    ``--auth local`` accepts loopback Hosts only and no Origin at all: its
+    clients are CLI processes, which send none, so any request carrying an
+    Origin comes from a browser page — including one served from another
+    localhost port — and is refused.
     """
     if not config.auth_enabled:
         return TransportSecuritySettings(
             enable_dns_rebinding_protection=True,
             allowed_hosts=["127.0.0.1:*", "localhost:*", "[::1]:*"],
-            allowed_origins=["http://127.0.0.1:*", "http://localhost:*", "http://[::1]:*"],
+            allowed_origins=[],
         )
     return TransportSecuritySettings(
         enable_dns_rebinding_protection=True,
@@ -89,7 +91,7 @@ def build_mcp_server(config: HttpServeConfig, provider: Optional[OdooOAuthProvid
     return build_server(**kwargs)
 
 
-def build_http_app(config: HttpServeConfig) -> Starlette:
+def build_http_app(config: HttpServeConfig, rotate_local_token: bool = False) -> Starlette:
     """Build the ASGI application for one ``odoo-mcp serve`` process."""
     config.validate_runtime()
 
@@ -120,7 +122,32 @@ def build_http_app(config: HttpServeConfig) -> Starlette:
     app.add_middleware(ThreadLimitMiddleware, max_concurrency=config.max_concurrency)
     if config.auth_enabled:
         app.add_middleware(BasicClientAuthMiddleware)
+    else:
+        app.add_middleware(LocalTokenMiddleware, token=load_local_token(config.local_token_file, rotate_local_token))
     return app
+
+
+class LocalTokenMiddleware:
+    """Require the ``--auth local`` bearer token on every HTTP request."""
+
+    def __init__(self, app, token: str) -> None:
+        self.app = app
+        self.expected = f"Bearer {token}".encode()
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] == "http":
+            presented = dict(scope["headers"]).get(b"authorization", b"")
+            if not hmac.compare_digest(presented, self.expected):
+                await send(
+                    {
+                        "type": "http.response.start",
+                        "status": 401,
+                        "headers": [(b"content-type", b"text/plain"), (b"www-authenticate", b"Bearer")],
+                    }
+                )
+                await send({"type": "http.response.body", "body": b"Missing or invalid local token"})
+                return
+        await self.app(scope, receive, send)
 
 
 class ThreadLimitMiddleware:

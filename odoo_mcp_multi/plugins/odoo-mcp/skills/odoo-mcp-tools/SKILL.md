@@ -56,14 +56,16 @@ Config file paths by client and OS:
 With the config above each client session starts its own server. When many
 sessions stay open at once, start one server with
 `odoo-mcp serve --auth local --port 5010` (see the `odoo-mcp-cli` skill for
-its flags and why it only binds loopback) and point every client at it:
+its flags, why it only binds loopback and where its token lives) and point
+every client at it:
 
 ```json
 {
   "mcpServers": {
     "odoo": {
       "type": "http",
-      "url": "http://127.0.0.1:5010/mcp"
+      "url": "http://127.0.0.1:5010/mcp",
+      "headers": {"Authorization": "Bearer <contents of ~/.config/odoo-mcp/local-token>"}
     }
   }
 }
