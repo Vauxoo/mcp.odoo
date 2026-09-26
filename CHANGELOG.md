@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Docs: a macOS LaunchAgent recipe for the shared local server, which clients can use it (Claude Desktop cannot send the token header), Claude Code allow rules, and a "keep one install" check for machines where several copies shadow each other.
+
 ### Fixed
 
 - The systemd unit `odoo-mcp service install` writes now sets `WorkingDirectory` to the install environment: `python -m` imports from the working directory first, so a service started next to a checkout could run that checkout instead of the installed package.

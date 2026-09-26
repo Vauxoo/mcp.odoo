@@ -191,6 +191,22 @@ find `odoo-mcp` or `uvx` after step 1. Put the absolute path in the client's
 > - **Microsoft Store Python**: avoid it — it runs in an app sandbox that can cause
 >   issues with `pipx ensurepath` and file system access.
 
+### Keep one install
+
+Installers do not know about each other: a pipx copy, a `uv tool` copy and an
+old `pip install -e` of a checkout can all be present, and whichever comes
+first on PATH, or whatever path a client config names, is what runs. Check
+before debugging anything else:
+
+```bash
+which -a odoo-mcp          # every copy on PATH (where.exe odoo-mcp on Windows)
+odoo-mcp --version
+```
+
+Keep one, remove the rest with their own uninstall command, and point every
+client config at it. To try a branch without installing it globally:
+`uvx --from /path/to/checkout odoo-mcp --version`.
+
 ### Uninstall
 
 Use the uninstall command from the table above for the installer you used.
@@ -293,6 +309,10 @@ Add the block to your client's MCP config file. Paths vary by tool and OS:
 | **Claude Desktop** | `~/Library/Application Support/Claude/claude_desktop_config.json` | `~/.config/Claude/claude_desktop_config.json` | `%APPDATA%\Claude\claude_desktop_config.json` |
 | **Cursor** | `.cursor/mcp.json` *(project root)* | same | same |
 | **VS Code** | `.vscode/mcp.json` *(project root)* | same | same |
+
+To serve every session on the machine from one process instead, see
+[the shared local server](docs/http-mode.md#local-mode-one-server-for-every-session-on-this-machine)
+(Claude Code and other clients that send HTTP headers; Claude Desktop keeps `run`).
 
 > **Note:** For Cursor and VS Code the config file is **workspace-scoped** — place it at the root of your project. For a user-level (global) config, check your client's own documentation.
 

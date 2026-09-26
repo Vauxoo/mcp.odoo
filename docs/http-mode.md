@@ -77,7 +77,65 @@ Run `service install` again after `odoo-mcp upgrade` (and, under uvx, to
 move to a newer version): it rewrites the unit and restarts the service.
 User services stop at logout unless lingering is on:
 `loginctl enable-linger $USER`. `--dry-run` prints the unit without touching
-anything. macOS and Windows are not supported yet.
+anything. Windows is not supported yet; on macOS use the LaunchAgent below.
+
+### Keep it running on macOS (launchd)
+
+`odoo-mcp service` does not manage launchd yet. Write
+`~/Library/LaunchAgents/com.vauxoo.odoo-mcp.plist` by hand, with the same
+choices the Linux unit makes: the install environment's own interpreter, and
+that environment as the working directory. `python -m` imports from the
+working directory first, so a service started next to a checkout would run
+the checkout instead of what you installed.
+
+```bash
+ENV="$(uv tool dir)/odoo-mcp-multi"    # pipx: "$(pipx environment --value PIPX_LOCAL_VENVS)/odoo-mcp-multi"
+cat > ~/Library/LaunchAgents/com.vauxoo.odoo-mcp.plist <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.vauxoo.odoo-mcp</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>$ENV/bin/python</string><string>-m</string><string>odoo_mcp_multi</string>
+    <string>serve</string><string>--auth</string><string>local</string><string>--port</string><string>5010</string>
+  </array>
+  <key>WorkingDirectory</key><string>$ENV</string>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>StandardOutPath</key><string>$HOME/Library/Logs/odoo-mcp.log</string>
+  <key>StandardErrorPath</key><string>$HOME/Library/Logs/odoo-mcp.log</string>
+</dict>
+</plist>
+PLIST
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.vauxoo.odoo-mcp.plist
+```
+
+After `odoo-mcp upgrade`, restart it:
+`launchctl kickstart -k gui/$(id -u)/com.vauxoo.odoo-mcp`. To remove it:
+`launchctl bootout gui/$(id -u)/com.vauxoo.odoo-mcp` and delete the plist.
+
+### Which clients can use it
+
+| Client | Local HTTP server | Why |
+|---|---|---|
+| Claude Code | yes | `claude mcp add --transport http … --header "Authorization: Bearer …"` |
+| Claude Desktop | no, keep `odoo-mcp run` | its config file only launches commands and cannot send the token header |
+| Any client that sets HTTP headers | yes | same URL and header |
+
+Sessions that were already open when you registered the server do not see
+it: restart them (`claude --resume <id>` keeps the conversation).
+
+In Claude Code, allow the tools once instead of approving every call, in
+`~/.claude/settings.json`:
+
+```json
+{ "permissions": { "allow": ["mcp__odoo__*", "Bash(odoo-mcp:*)"] } }
+```
+
+What a tool may write is still bounded by each profile's `permissions` and
+by Odoo's access rights.
 
 ## OAuth mode: a remote connector
 
