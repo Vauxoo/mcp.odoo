@@ -1,29 +1,63 @@
-# HTTP mode — remote connector
+# HTTP mode
 
-`odoo-mcp run` speaks stdio: the client has to run on the same machine, with
-this package installed and a profile configured by hand.
+`odoo-mcp run` speaks stdio: every MCP client session starts its own
+`odoo-mcp` process. That stays the default, and it is what the plugins use.
 
-`odoo-mcp serve` exposes the same tools over HTTP so a remote MCP client —
-Claude on the web, Claude Code, MCP Inspector — can connect to a URL instead.
-Users sign in with **their own Odoo credentials**, and every tool call runs as
-that Odoo user, under their own access rights.
+`odoo-mcp serve` exposes the same tools over Streamable HTTP from **one**
+process. It has two modes, picked with `--auth`:
+
+| | `--auth local` | `--auth oauth` (default) |
+|---|---|---|
+| Who connects | Your own MCP clients on this machine | Remote users, hosted MCP clients |
+| Identity | This machine's `profiles.json` | Each user's own Odoo login |
+| Authentication | None, loopback only | OAuth 2.1, consent against Odoo |
+| Solves | Memory: one process for every session | Access without installing anything |
+
+## Local mode: one server for every session on this machine
+
+Each stdio session loads its own Python, MCP SDK, pydantic and httpx, about
+50-65 MiB. A workstation with dozens of long-lived sessions ends up with
+dozens of identical idle processes. `--auth local` serves all of them from
+one process whose memory does not grow with the number of sessions.
+
+```bash
+odoo-mcp serve --auth local --port 5010 [--profile prod]
+claude mcp add -s user --transport http odoo http://127.0.0.1:5010/mcp
+```
+
+Keep the server name (`odoo` above) the one your stdio config used, so tool
+names and permission rules do not change. `--profile` sets the fallback
+profile, like `run --profile`.
+
+Rules this mode enforces:
+
+- It binds `127.0.0.1`, `localhost` or `::1` only, compared as exact
+  strings: `0.0.0.0`, `127.1`, `::ffff:127.0.0.1` or `LOCALHOST` refuse to
+  start.
+- Only loopback `Host` and `Origin` headers are accepted, so a web page on
+  another origin (including claude.ai) cannot drive it through your browser.
+  CLI clients send no `Origin` and are accepted.
+- There is no authentication. Any process that runs as a user on this
+  machine can use every profile. On a single-user workstation that is no
+  wider than stdio (the same processes can read `profiles.json`). On a
+  **shared host** it is wider: another OS user cannot read your
+  `profiles.json` (mode 0600) but can reach your loopback port. Use `run`
+  there.
+- Tool calls from different sessions really run in parallel. Calls that
+  depend on each other must not be sent in the same parallel batch.
+
+To keep it running, see the user unit in [`deploy/`](https://git.vauxoo.com/ai/mcp.odoo/-/tree/main/deploy).
+
+## OAuth mode: a remote connector
+
+Remote MCP clients (Claude on the web, Claude Code, MCP Inspector) connect to
+a URL. Users sign in with **their own Odoo credentials**, and every tool call
+runs as that Odoo user, under their own access rights.
 
 `profiles.json` is not used in this mode. It belongs to whoever runs the
 server, not to the people connecting to it.
 
-## Quick start (local, no authentication)
-
-```bash
-pip install 'odoo-mcp-multi[http]'
-odoo-mcp serve --no-auth --host 127.0.0.1 --port 5010
-```
-
-Then point MCP Inspector at `http://127.0.0.1:5010/mcp`.
-
-`--no-auth` refuses to start on anything but a loopback address. It is for
-development, and it prints a warning every time.
-
-## Serving it for real
+### Serving it for real
 
 ```bash
 odoo-mcp serve \
@@ -80,8 +114,9 @@ odoo-mcp http purge            # delete expired codes and tokens
 |---|---|---|
 | `--host` / `--port` | `127.0.0.1` / `5010` | Where to bind. |
 | `--path` | `/mcp` | Path the MCP endpoint is served on. |
-| `--public-url` | — | The exact URL users paste in. Required unless `--no-auth`. |
-| `--no-auth` | off | Disable OAuth. Loopback only. |
+| `--auth` | `oauth` | `oauth` or `local`. See the table at the top. |
+| `--profile` / `-p` | default profile | Fallback profile. `--auth local` only. |
+| `--public-url` | — | The exact URL users paste in. Required with `--auth oauth`. |
 | `--json-response` / `--sse-response` | JSON | Response encoding. |
 | `--stateless` / `--stateful` | stateless | See the note below before changing this. |
 | `--state-db` | `~/.config/odoo-mcp/http-state.db` | Authorization state. |

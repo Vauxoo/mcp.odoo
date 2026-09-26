@@ -569,9 +569,17 @@ def cmd_run(profile: str) -> None:
     "--public-url",
     default=None,
     help="The exact URL users paste into their MCP client, e.g. https://odoo-mcp.example.com/mcp. "
-    "Required unless --no-auth.",
+    "Required with --auth oauth.",
 )
-@click.option("--no-auth", is_flag=True, help="Disable OAuth. Loopback only — for local development.")
+@click.option(
+    "--auth",
+    type=click.Choice(["oauth", "local"]),
+    default="oauth",
+    show_default=True,
+    help="oauth: remote users sign in with their own Odoo credentials. "
+    "local: no authentication, loopback only, tools use this machine's profiles.json.",
+)
+@click.option("--profile", "-p", default=None, help="With --auth local: fallback profile (default: default profile).")
 @click.option("--json-response/--sse-response", default=True, show_default=True, help="Response encoding.")
 @click.option("--stateless/--stateful", default=True, show_default=True, help="MCP session handling.")
 @click.option("--state-db", default=None, type=click.Path(), help="Path to the authorization state database.")
@@ -597,7 +605,8 @@ def cmd_serve(
     port: int,
     path: str,
     public_url: str,
-    no_auth: bool,
+    auth: str,
+    profile: str,
     json_response: bool,
     stateless: bool,
     state_db: str,
@@ -609,12 +618,16 @@ def cmd_serve(
     allowed_odoo_hosts: tuple,
     log_level: str,
 ) -> None:
-    """Serve the MCP tools over authenticated HTTP.
+    """Serve the MCP tools over Streamable HTTP.
 
-    Exposes the same tools as `run`, but over Streamable HTTP with an embedded
-    OAuth 2.1 authorization server. Users sign in with their own Odoo
-    credentials on a consent page, and every tool call then runs as that Odoo
-    user — the host's profiles.json is not used in this mode.
+    With --auth oauth (default) an embedded OAuth 2.1 authorization server
+    asks each user for their own Odoo credentials on a consent page, and every
+    tool call runs as that Odoo user; the host's profiles.json is not used.
+
+    With --auth local one process serves every MCP client on this machine
+    with the local profiles.json, instead of one `run` process per client.
+    It binds loopback only and has no authentication, so use it on
+    single-user workstations; on shared hosts keep `run` (stdio).
     """
     from pathlib import Path
 
@@ -636,7 +649,7 @@ def cmd_serve(
             port=port,
             path=path,
             public_url=public_url,
-            auth_enabled=not no_auth,
+            auth_enabled=auth == "oauth",
             json_response=json_response,
             stateless=stateless,
             state_db=Path(state_db) if state_db else None,
@@ -653,12 +666,26 @@ def cmd_serve(
         click.secho(f"{CROSS} {exc}", fg="red", err=True)
         sys.exit(2)
 
+    if profile and config.auth_enabled:
+        click.secho(f"{CROSS} --profile only applies to --auth local.", fg="red", err=True)
+        sys.exit(2)
+
     from odoo_mcp_multi.http.app import build_http_app
 
     if not config.auth_enabled:
+        from odoo_mcp_multi.server import _set_fallback_ref, set_profile
+
+        odoo_profile = get_profile(profile)
+        if profile and odoo_profile is None:
+            click.secho(f"{CROSS} Profile '{profile}' not found.", fg="red", err=True)
+            sys.exit(1)
+        if odoo_profile:
+            set_profile(odoo_profile)
+            _set_fallback_ref(odoo_profile)
+            click.echo(f"Fallback profile: '{odoo_profile.name}'", err=True)
         click.secho(
-            "WARNING: authentication is disabled. Anyone who can reach "
-            f"http://{config.host}:{config.port}{config.path} can use every tool.",
+            "WARNING: authentication is disabled. Any process on this machine that can reach "
+            f"http://{config.host}:{config.port}{config.path} can use every profile in profiles.json.",
             fg="red",
             bold=True,
             err=True,

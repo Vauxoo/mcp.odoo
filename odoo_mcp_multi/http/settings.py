@@ -83,7 +83,7 @@ class HttpServeConfig:
         else:
             if self.auth_enabled:
                 raise ConfigError(
-                    "--public-url is required when authentication is enabled. Pass the exact URL your "
+                    "--public-url is required with --auth oauth. Pass the exact URL your "
                     "users will paste into their MCP client, e.g. https://odoo-mcp.example.com/mcp"
                 )
             self.netloc = f"{self.host}:{self.port}"
@@ -145,12 +145,12 @@ class HttpServeConfig:
         if not self.auth_enabled:
             if not is_loopback(self.host):
                 raise ConfigError(
-                    f"Refusing to bind {self.host} without authentication. Either drop --no-auth or bind "
-                    "127.0.0.1 and put the server behind a tunnel that authenticates for it."
+                    f"Refusing to bind {self.host} without authentication. --auth local only binds "
+                    "127.0.0.1, localhost or ::1; use --auth oauth to serve other machines."
                 )
             if self.public_url and urlparse(self.public_url).scheme == "https":
                 raise ConfigError(
-                    "--no-auth cannot be combined with an https --public-url: the URL promises a "
+                    "--auth local cannot be combined with an https --public-url: the URL promises a "
                     "publicly reachable server that anyone could then use without credentials."
                 )
 

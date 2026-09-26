@@ -78,3 +78,29 @@ odoo-mcp http purge
 `http-state.db`. Back them up together or neither: the database alone is
 unreadable, which is the point, and losing the key means every connected user
 has to sign in again.
+
+## Local mode on a workstation
+
+`odoo-mcp-http.service` above is for `--auth oauth`. For `--auth local` there
+is no proxy, state database or key; a systemd **user** unit is enough:
+
+```ini
+# ~/.config/systemd/user/odoo-mcp-local.service
+[Unit]
+Description=odoo-mcp shared local MCP server
+
+[Service]
+ExecStart=%h/.local/bin/odoo-mcp serve --auth local --port 5010
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
+```
+
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now odoo-mcp-local
+```
+
+Restart it after upgrading the package: a running server keeps serving the
+version it started with. Clients reconnect on their own after a restart.

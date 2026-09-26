@@ -83,6 +83,28 @@ def test_no_auth_may_bind_loopback():
     HttpServeConfig(host="127.0.0.1", auth_enabled=False).validate_runtime()
 
 
+@pytest.mark.parametrize("host", ["0.0.0.0", "127.1", "::ffff:127.0.0.1", "LOCALHOST", "127.0.0.1.nip.io", ""])
+def test_local_auth_fails_closed_on_anything_but_an_exact_loopback_name(host):
+    with pytest.raises(ConfigError):
+        HttpServeConfig(host=host, auth_enabled=False).validate_runtime()
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1", "localhost", "::1", "[::1]"])
+def test_local_auth_accepts_the_exact_loopback_names(host):
+    HttpServeConfig(host=host, auth_enabled=False).validate_runtime()
+
+
+def test_local_auth_only_trusts_loopback_hosts_and_origins():
+    """Without a bearer token, a claude.ai or public Origin must not get through."""
+    from odoo_mcp_multi.http.app import build_transport_security
+
+    security = build_transport_security(HttpServeConfig(host="127.0.0.1", auth_enabled=False))
+
+    assert security.enable_dns_rebinding_protection is True
+    assert set(security.allowed_hosts) == {"127.0.0.1:*", "localhost:*", "[::1]:*"}
+    assert set(security.allowed_origins) == {"http://127.0.0.1:*", "http://localhost:*", "http://[::1]:*"}
+
+
 def test_no_auth_contradicts_an_https_public_url():
     config = HttpServeConfig(host="127.0.0.1", auth_enabled=False, public_url="https://h.example.com/mcp")
     with pytest.raises(ConfigError):
@@ -93,7 +115,7 @@ def test_no_auth_contradicts_an_https_public_url():
 
 
 def test_serve_rejects_a_public_bind_without_auth(runner, state_paths):
-    result = runner.invoke(main, ["serve", "--no-auth", "--host", "0.0.0.0", *state_paths])
+    result = runner.invoke(main, ["serve", "--auth", "local", "--host", "0.0.0.0", *state_paths])
     assert result.exit_code == 2
     assert "Refusing to bind" in result.output
 
@@ -195,10 +217,26 @@ def test_serve_binds_what_it_was_told(runner, state_paths):
 
 
 def test_serve_warns_loudly_without_auth(runner, state_paths):
-    with patch("uvicorn.run"):
-        result = runner.invoke(main, ["serve", "--no-auth", *state_paths])
+    with patch("uvicorn.run"), patch("odoo_mcp_multi.cli.get_profile", return_value=None):
+        result = runner.invoke(main, ["serve", "--auth", "local", *state_paths])
     assert result.exit_code == 0, result.output
     assert "authentication is disabled" in result.output
+
+
+def test_serve_rejects_a_profile_with_oauth(runner, state_paths):
+    result = runner.invoke(
+        main, ["serve", "--public-url", "https://h.example.com/mcp", "--profile", "prod", *state_paths]
+    )
+    assert result.exit_code == 2
+    assert "--auth local" in result.output
+
+
+def test_serve_local_rejects_an_unknown_profile(runner, state_paths):
+    with patch("uvicorn.run") as run, patch("odoo_mcp_multi.cli.get_profile", return_value=None):
+        result = runner.invoke(main, ["serve", "--auth", "local", "--profile", "nope", *state_paths])
+    assert result.exit_code == 1
+    assert "not found" in result.output
+    run.assert_not_called()
 
 
 def test_http_group_is_registered(runner):

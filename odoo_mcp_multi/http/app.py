@@ -53,7 +53,18 @@ def build_auth_settings(config: HttpServeConfig) -> AuthSettings:
 
 
 def build_transport_security(config: HttpServeConfig) -> TransportSecuritySettings:
-    """Allow the public hostname through the DNS-rebinding guard."""
+    """Allow the public hostname through the DNS-rebinding guard.
+
+    ``--auth local`` has no bearer token to stop a browser page, so it only
+    accepts loopback Hosts and Origins; claude.ai and the public name are
+    never let through there.
+    """
+    if not config.auth_enabled:
+        return TransportSecuritySettings(
+            enable_dns_rebinding_protection=True,
+            allowed_hosts=["127.0.0.1:*", "localhost:*", "[::1]:*"],
+            allowed_origins=["http://127.0.0.1:*", "http://localhost:*", "http://[::1]:*"],
+        )
     return TransportSecuritySettings(
         enable_dns_rebinding_protection=True,
         allowed_hosts=[config.netloc, f"{config.host}:{config.port}", "127.0.0.1:*", "localhost:*"],
