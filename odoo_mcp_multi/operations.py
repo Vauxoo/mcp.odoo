@@ -278,10 +278,11 @@ def op_validate_credentials(
     """Validate a set of Odoo credentials and report the identity behind them.
 
     Builds on :func:`op_test_connection` and closes the gap it leaves for
-    Odoo 19+ API keys: ``Json2Client.authenticate()`` is a no-op, so a bad key
-    would otherwise pass. When no password is supplied we issue a real read
-    against ``res.users`` — it both proves the bearer token works and yields
-    the login to show on the consent screen.
+    JSON-2: ``Json2Client.authenticate()`` is a no-op, so any secret would
+    otherwise pass without Odoo ever being contacted. Whenever the resolved
+    protocol is JSON-2, or only an API key was supplied, we issue a real read
+    against ``res.users`` — it both proves the secret works and yields the
+    login to show on the consent screen.
 
     Returns:
         Dict with success, uid, login, server_version and the *resolved*
@@ -302,8 +303,9 @@ def op_validate_credentials(
 
     login = user
     uid = result.get("uid")
+    json2 = str(result.get("protocol", "")).startswith("json2")
 
-    if not password and api_key:
+    if json2 or (not password and api_key):
         try:
             client = create_client(
                 url=url,
@@ -317,6 +319,12 @@ def op_validate_credentials(
             )
             rows = client.execute_kw("res.users", "search_read", [[], ["id", "login"]], {"limit": 1})
         except Exception as exc:
+            if json2 and not api_key:
+                return {
+                    "success": False,
+                    "error": "Odoo 19+ (JSON-2) only accepts an API key, not a password. Create one in "
+                    "Odoo under Preferences > Account Security and sign in with it.",
+                }
             return {"success": False, "error": f"API key rejected by Odoo: {exc}"}
         if isinstance(rows, list) and rows:
             uid = rows[0].get("id", uid)

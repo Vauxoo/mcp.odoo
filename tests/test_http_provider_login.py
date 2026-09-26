@@ -73,6 +73,24 @@ def test_the_resolved_protocol_is_reported(odoo_client):
     assert result["protocol"] == "json2s"
 
 
+def test_a_password_on_json2_is_probed_for_real(odoo_client):
+    """Json2Client.authenticate() is a no-op: a password there used to pass without Odoo ever
+    being contacted, and the grant only failed on the first tool call."""
+    odoo_client.execute_kw.side_effect = RuntimeError("401 Unauthorized")
+    result = op_validate_credentials(url="https://odoo.example.com", database="db", user="someone", password="pw")
+    assert result["success"] is False
+    assert "only accepts an API key" in result["error"]
+    odoo_client.execute_kw.assert_called_once()
+
+
+def test_a_password_on_legacy_rpc_is_not_probed_twice(odoo_client):
+    """XML-RPC and JSON-RPC authenticate() already contacts Odoo."""
+    odoo_client.protocol = "jsonrpcs"
+    result = op_validate_credentials(url="https://odoo.example.com", database="db", user="someone", password="pw")
+    assert result["success"] is True
+    odoo_client.execute_kw.assert_not_called()
+
+
 # -- the consent form -------------------------------------------------------
 
 
