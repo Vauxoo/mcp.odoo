@@ -145,6 +145,11 @@ def test_cli_edit_profile_url(mock_get, mock_add):
     existing.user = "admin"
     existing.password.get_secret_value.return_value = "secret"
     existing.api_key = None  # legacy profile — no api_key
+    existing.protocol = "auto"
+    existing.verify = True
+    existing.ca_bundle = None
+    existing.ssl_strict = True
+    existing.permissions = None
     mock_get.return_value = existing
 
     result = runner.invoke(main, ["edit-profile", "prod", "--url", "https://new.example.com"])
@@ -177,6 +182,11 @@ def test_cli_edit_profile_rename(mock_get, mock_add, mock_remove):
     existing.user = "admin"
     existing.password.get_secret_value.return_value = "secret"
     existing.api_key = None
+    existing.protocol = "auto"
+    existing.verify = True
+    existing.ca_bundle = None
+    existing.ssl_strict = True
+    existing.permissions = None
     mock_get.return_value = existing
     mock_remove.return_value = True
 
@@ -188,6 +198,44 @@ def test_cli_edit_profile_rename(mock_get, mock_add, mock_remove):
     assert saved.name == "new-name"
     # Old key removed
     mock_remove.assert_called_once_with("old-name")
+
+
+@patch("odoo_mcp_multi.cli.add_profile")
+@patch("odoo_mcp_multi.cli.get_profile")
+def test_cli_edit_profile_trust_settings_keep_the_rest(mock_get, mock_add, tmp_path):
+    """--ca-bundle/--no-ssl-strict are saved, and protocol and permissions survive the edit.
+
+    edit-profile rebuilt the profile from a handful of fields, so any edit — including the
+    TLS one the SSL error recommends — silently reset a read-only profile to full access.
+    """
+    from odoo_mcp_multi.config import OdooProfile
+
+    ca_pem = tmp_path / "ca.pem"
+    ca_pem.write_text("unused: the CLI only checks the path exists")
+    mock_get.return_value = OdooProfile(
+        name="prod",
+        url="https://odoo.example.com",
+        database="db",
+        user="admin",
+        password="secret",
+        protocol="xmlrpcs",
+        permissions={"mode": "granular", "allowed_operations": ["search_read"]},
+    )
+
+    result = runner.invoke(main, ["edit-profile", "prod", "--ca-bundle", str(ca_pem), "--no-ssl-strict"])
+    assert result.exit_code == 0, result.output
+    saved = mock_add.call_args[0][0]
+    assert saved.ca_bundle == str(ca_pem.resolve())
+    assert saved.ssl_strict is False
+    assert saved.protocol == "xmlrpcs"
+    assert saved.permissions.allowed_operations == ["search_read"]
+
+    mock_get.return_value = saved
+    result = runner.invoke(main, ["edit-profile", "prod", "--clear-ca-bundle", "--ssl-strict"])
+    assert result.exit_code == 0, result.output
+    saved = mock_add.call_args[0][0]
+    assert saved.ca_bundle is None
+    assert saved.ssl_strict is True
 
 
 # ---------------------------------------------------------------------------

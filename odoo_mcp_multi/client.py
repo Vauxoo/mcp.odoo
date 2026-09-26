@@ -14,7 +14,7 @@ import ssl
 import time
 import xmlrpc.client
 from abc import ABC, abstractmethod
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 import httpx
 from pydantic import SecretStr
@@ -32,8 +32,10 @@ from odoo_mcp_multi.version import Protocol, detect_protocol, get_server_version
 _logger = logging.getLogger(__name__)
 
 INSECURE_OPT_IN_HINT = (
-    "Trust the CA (point SSL_CERT_FILE at its bundle), or accept an unverified connection explicitly "
-    "with `odoo-mcp edit-profile <name> --no-verify`."
+    "Trust the CA with `odoo-mcp edit-profile <name> --ca-bundle <ca.pem>`; if the error says "
+    "`not marked critical`, add `--no-ssl-strict`. Disabling verification (`--no-verify`) hands the "
+    "credentials to whoever can intercept the connection: that is a decision for a person on a network "
+    "they trust, never one to apply automatically."
 )
 
 
@@ -100,7 +102,7 @@ class BaseOdooClient(ABC):
         user: str,
         password: str | SecretStr,
         timeout: int = 120,
-        verify: bool = True,
+        verify: Union[bool, ssl.SSLContext] = True,
     ) -> None:
         """Initialize the Odoo client.
 
@@ -110,7 +112,7 @@ class BaseOdooClient(ABC):
             user: Username for authentication
             password: Password for authentication (string or SecretStr)
             timeout: Request timeout in seconds (default: 120)
-            verify: Verify SSL certificates (default: True)
+            verify: Verify SSL certificates, or an ``ssl.SSLContext`` to verify with (default: True)
         """
         self.url = normalize_url(url)
         self.database = database
@@ -329,7 +331,7 @@ class JsonRpcClient(BaseOdooClient):
         password: str | SecretStr,
         timeout: int = 120,
         use_json2: bool = False,
-        verify: bool = True,
+        verify: Union[bool, ssl.SSLContext] = True,
     ) -> None:
         """Initialize the JSON-RPC client.
 
@@ -340,7 +342,7 @@ class JsonRpcClient(BaseOdooClient):
             password: Password for authentication
             timeout: Request timeout in seconds (default: 120)
             use_json2: Use JSON2 protocol for Odoo 19.0+ (default: False)
-            verify: Verify SSL certificates (default: True)
+            verify: Verify SSL certificates, or an ``ssl.SSLContext`` to verify with (default: True)
         """
         super().__init__(url, database, user, password, timeout, verify=verify)
         self.use_json2 = use_json2
@@ -502,7 +504,7 @@ class Json2Client(BaseOdooClient):
         # user/password accepted but ignored for backward compat with factory
         user: str = "",
         password: str | SecretStr = "",
-        verify: bool = True,
+        verify: Union[bool, ssl.SSLContext] = True,
     ) -> None:
         # BaseOdooClient requires user/password — pass empty strings
         super().__init__(
@@ -762,7 +764,10 @@ class XmlRpcClient(BaseOdooClient):
     def _get_transport(self) -> xmlrpc.client.Transport:
         """Create a transport with configured timeout and SSL verification settings."""
         if self.url.startswith("https"):
-            context = None if self.verify else ssl._create_unverified_context()
+            if isinstance(self.verify, ssl.SSLContext):
+                context = self.verify
+            else:
+                context = None if self.verify else ssl._create_unverified_context()
             transport = xmlrpc.client.SafeTransport(context=context)
         else:
             transport = xmlrpc.client.Transport()
@@ -851,7 +856,7 @@ def create_client(
     api_key: str | SecretStr = "",
     protocol: Protocol | str = Protocol.AUTO,
     timeout: int = 120,
-    verify: bool = True,
+    verify: Union[bool, ssl.SSLContext] = True,
 ) -> BaseOdooClient:
     """Create an appropriate Odoo client based on protocol.
 
@@ -868,7 +873,7 @@ def create_client(
         api_key: Bearer API key (JSON-2 auth — Odoo ≥ 19)
         protocol: Protocol to use (auto, json2s, jsonrpcs, xmlrpcs, etc.)
         timeout: Request timeout in seconds
-        verify: Verify SSL certificates (default: True)
+        verify: Verify SSL certificates, or an ``ssl.SSLContext`` to verify with (default: True)
 
     Returns:
         Configured Odoo client instance

@@ -7,9 +7,10 @@ optimal RPC protocol accordingly.
 from __future__ import annotations
 
 import logging
+import ssl
 import xmlrpc.client
 from enum import Enum
-from typing import Optional
+from typing import Optional, Union
 
 import httpx
 
@@ -30,7 +31,7 @@ class Protocol(str, Enum):
     AUTO = "auto"  # Auto-detect based on version
 
 
-def get_server_version(url: str, timeout: int = 30, verify: bool = True) -> Optional[dict]:
+def get_server_version(url: str, timeout: int = 30, verify: Union[bool, ssl.SSLContext] = True) -> Optional[dict]:
     """Get server version info without authentication.
 
     Priority order:
@@ -94,7 +95,7 @@ def get_server_version(url: str, timeout: int = 30, verify: bool = True) -> Opti
     return None
 
 
-def detect_protocol(url: str, timeout: int = 30, verify: bool = True) -> Protocol:
+def detect_protocol(url: str, timeout: int = 30, verify: Union[bool, ssl.SSLContext] = True) -> Protocol:
     """Auto-detect the best protocol for an Odoo instance.
 
     Protocol selection logic:

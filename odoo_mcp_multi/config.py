@@ -8,10 +8,12 @@ from __future__ import annotations
 
 import json
 import os
+import ssl
 from enum import Enum
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
+import certifi
 from pydantic import BaseModel, Field, SecretStr, model_validator
 
 
@@ -60,6 +62,30 @@ class ProfilePermissions(BaseModel):
         return self
 
 
+def build_ssl_verify(
+    verify: bool, ca_bundle: Optional[str] = None, ssl_strict: bool = True
+) -> Union[bool, ssl.SSLContext]:
+    """Resolve TLS settings into the ``verify`` value httpx and xmlrpc accept.
+
+    Plain ``True``/``False`` unless a CA bundle or a relaxed strict mode asks for a context,
+    so profiles that set neither keep each transport's own default trust store.
+    Without a bundle, the context trusts both the system store and certifi — the union of
+    what XML-RPC and httpx trusted on their own.
+    """
+    if not verify:
+        return False
+    if ca_bundle is None and ssl_strict:
+        return True
+    if ca_bundle is not None:
+        context = ssl.create_default_context(cafile=os.path.expanduser(ca_bundle))
+    else:
+        context = ssl.create_default_context()
+        context.load_verify_locations(cafile=certifi.where())
+    if not ssl_strict:
+        context.verify_flags &= ~ssl.VERIFY_X509_STRICT
+    return context
+
+
 class OdooProfile(BaseModel):
     """Represents a single Odoo instance configuration.
 
@@ -82,6 +108,21 @@ class OdooProfile(BaseModel):
         description=(
             "Verify SSL certificates. Setting it to False is the only way to talk to a server whose "
             "certificate does not validate: a verification failure is never downgraded automatically."
+        ),
+    )
+    ca_bundle: Optional[str] = Field(
+        default=None,
+        description=(
+            "PEM file with the CA(s) this profile trusts, instead of the default trust store. "
+            "Use it for a corporate TLS proxy that re-signs traffic with its own CA."
+        ),
+    )
+    ssl_strict: bool = Field(
+        default=True,
+        description=(
+            "Keep Python's strict X.509 checks (VERIFY_X509_STRICT, default since 3.13). False relaxes only "
+            "those RFC 5280 checks, e.g. a CA whose basicConstraints is not marked critical; the chain and the "
+            "hostname are still verified."
         ),
     )
     permissions: Optional[ProfilePermissions] = Field(
@@ -108,6 +149,10 @@ class OdooProfile(BaseModel):
             return True
         return operation in self.permissions.allowed_operations
 
+    def ssl_verify(self) -> Union[bool, ssl.SSLContext]:
+        """Return the ``verify`` value the transports take for this profile's TLS settings."""
+        return build_ssl_verify(self.verify, self.ca_bundle, self.ssl_strict)
+
     def to_dict(self) -> dict:
         """Convert profile to dictionary for JSON serialization."""
         d: dict = {
@@ -118,6 +163,10 @@ class OdooProfile(BaseModel):
             "protocol": self.protocol,
             "verify": self.verify,
         }
+        if self.ca_bundle is not None:
+            d["ca_bundle"] = self.ca_bundle
+        if not self.ssl_strict:
+            d["ssl_strict"] = False
         if self.password is not None:
             d["password"] = self.password.get_secret_value()
         if self.api_key is not None:
@@ -138,6 +187,8 @@ class OdooProfile(BaseModel):
             api_key=SecretStr(data["api_key"]) if data.get("api_key") else None,
             protocol=data.get("protocol", "auto"),
             verify=data.get("verify", True),
+            ca_bundle=data.get("ca_bundle"),
+            ssl_strict=data.get("ssl_strict", True),
             permissions=data.get("permissions"),
         )
 
@@ -329,6 +380,8 @@ def list_profiles() -> list[dict]:
             "user": profile.user,
             "protocol": profile.protocol,
             "verify": profile.verify,
+            "ca_bundle": profile.ca_bundle,
+            "ssl_strict": profile.ssl_strict,
             "auth": _get_auth_type(profile),
             "is_default": name == config.default_profile,
         }

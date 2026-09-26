@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ssl
+import sys
 import threading
 from unittest.mock import MagicMock, patch
 
@@ -14,8 +15,9 @@ from odoo_mcp_multi.client import (
     JsonRpcClient,
     XmlRpcClient,
     is_ssl_verification_error,
+    ssl_verification_error,
 )
-from odoo_mcp_multi.config import OdooProfile
+from odoo_mcp_multi.config import OdooProfile, build_ssl_verify
 from odoo_mcp_multi.exceptions import OdooSSLVerificationError
 from odoo_mcp_multi.operations import _with_warning
 
@@ -263,3 +265,174 @@ def test_profile_configuration():
     # Check deserialization
     p2 = OdooProfile.from_dict(d)
     assert p2.verify is False
+
+
+# ---------------------------------------------------------------------------
+# Trust settings: ca_bundle and ssl_strict
+# ---------------------------------------------------------------------------
+
+
+def _issue_chain(tmp_path, ca_constraints_critical: bool = True):
+    """Write a CA and a 127.0.0.1 server certificate signed by it; return (ca.pem, cert.pem, key.pem).
+
+    Everything else VERIFY_X509_STRICT checks (key identifiers, key usage, EKU) is issued
+    correctly, so the ``basicConstraints`` criticality is the only thing that can trip it.
+    """
+    x509 = pytest.importorskip("cryptography.x509")
+    import datetime
+    import ipaddress
+
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
+
+    now = datetime.datetime.now(datetime.timezone.utc)
+    ca_key = ec.generate_private_key(ec.SECP256R1())
+    ca_name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "odoo-mcp test CA")])
+    ca_ski = x509.SubjectKeyIdentifier.from_public_key(ca_key.public_key())
+    ca_cert = (
+        x509.CertificateBuilder()
+        .subject_name(ca_name)
+        .issuer_name(ca_name)
+        .public_key(ca_key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - datetime.timedelta(days=1))
+        .not_valid_after(now + datetime.timedelta(days=1))
+        .add_extension(x509.BasicConstraints(ca=True, path_length=None), critical=ca_constraints_critical)
+        .add_extension(x509.KeyUsage(False, False, False, False, False, True, True, False, False), critical=True)
+        .add_extension(ca_ski, critical=False)
+        .add_extension(x509.AuthorityKeyIdentifier.from_issuer_subject_key_identifier(ca_ski), critical=False)
+        .sign(ca_key, hashes.SHA256())
+    )
+    key = ec.generate_private_key(ec.SECP256R1())
+    cert = (
+        x509.CertificateBuilder()
+        .subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "127.0.0.1")]))
+        .issuer_name(ca_name)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(now - datetime.timedelta(days=1))
+        .not_valid_after(now + datetime.timedelta(days=1))
+        .add_extension(
+            x509.SubjectAlternativeName([x509.IPAddress(ipaddress.ip_address("127.0.0.1"))]), critical=False
+        )
+        .add_extension(x509.ExtendedKeyUsage([ExtendedKeyUsageOID.SERVER_AUTH]), critical=False)
+        .add_extension(x509.SubjectKeyIdentifier.from_public_key(key.public_key()), critical=False)
+        .add_extension(x509.AuthorityKeyIdentifier.from_issuer_subject_key_identifier(ca_ski), critical=False)
+        .sign(ca_key, hashes.SHA256())
+    )
+    ca_pem, cert_pem, key_pem = tmp_path / "ca.pem", tmp_path / "cert.pem", tmp_path / "key.pem"
+    ca_pem.write_bytes(ca_cert.public_bytes(serialization.Encoding.PEM))
+    cert_pem.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
+    key_pem.write_bytes(
+        key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption())
+    )
+    return str(ca_pem), str(cert_pem), str(key_pem)
+
+
+@pytest.fixture
+def tls_odoo(tmp_path, request):
+    """An HTTPS server on 127.0.0.1 answering JSON-RPC and XML-RPC ``authenticate`` with uid 7.
+
+    Parametrize indirectly with ``False`` for a CA whose basicConstraints is not critical.
+    """
+    from http.server import ThreadingHTTPServer
+    from xmlrpc.server import SimpleXMLRPCRequestHandler, SimpleXMLRPCServer
+
+    ca_pem, cert_pem, key_pem = _issue_chain(tmp_path, ca_constraints_critical=getattr(request, "param", True))
+
+    class Handler(SimpleXMLRPCRequestHandler):
+        rpc_paths = ("/xmlrpc/2/common",)
+
+        def do_POST(self):
+            if self.path != "/jsonrpc":
+                return super().do_POST()
+            self.rfile.read(int(self.headers["Content-Length"]))
+            body = b'{"jsonrpc": "2.0", "id": 1, "result": 7}'
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *_args):
+            pass
+
+    class Server(ThreadingHTTPServer, SimpleXMLRPCServer):
+        pass
+
+    server = Server(("127.0.0.1", 0), requestHandler=Handler, logRequests=False)
+    server.register_function(lambda *_args: 7, "authenticate")
+    server_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    server_context.load_cert_chain(cert_pem, key_pem)
+    server.socket = server_context.wrap_socket(server.socket, server_side=True)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    yield f"https://127.0.0.1:{server.server_address[1]}", ca_pem
+    server.shutdown()
+    server.server_close()
+
+
+def _authenticate(client_class, url: str, verify) -> int:
+    client = client_class(url=url, database="db", user="admin", password="pwd", verify=verify)
+    return client.authenticate()
+
+
+@pytest.mark.parametrize("client_class", [JsonRpcClient, XmlRpcClient])
+def test_ca_bundle_trusts_a_private_ca(tls_odoo, client_class):
+    """The default trust store refuses the private CA; the profile's ca_bundle makes it verify."""
+    url, ca_pem = tls_odoo
+    with pytest.raises(OdooSSLVerificationError):
+        _authenticate(client_class, url, build_ssl_verify(True))
+    assert _authenticate(client_class, url, build_ssl_verify(True, ca_bundle=ca_pem)) == 7
+
+
+@pytest.mark.skipif(sys.version_info < (3, 13), reason="VERIFY_X509_STRICT is on by default from Python 3.13")
+@pytest.mark.parametrize("tls_odoo", [False], indirect=True)
+@pytest.mark.parametrize("client_class", [JsonRpcClient, XmlRpcClient])
+def test_ssl_strict_off_accepts_non_critical_basic_constraints(tls_odoo, client_class):
+    """A trusted CA with non-critical basicConstraints fails under STRICT and verifies once it is relaxed."""
+    url, ca_pem = tls_odoo
+    with pytest.raises(OdooSSLVerificationError, match="not marked critical"):
+        _authenticate(client_class, url, build_ssl_verify(True, ca_bundle=ca_pem))
+    assert _authenticate(client_class, url, build_ssl_verify(True, ca_bundle=ca_pem, ssl_strict=False)) == 7
+
+
+def test_build_ssl_verify_keeps_plain_values_by_default():
+    """Profiles that set neither knob pass a bool, so each transport keeps its own trust store."""
+    assert build_ssl_verify(True) is True
+    assert build_ssl_verify(False) is False
+
+
+def test_build_ssl_verify_opt_out_wins_over_trust_settings(tmp_path):
+    """--no-verify is never silently overridden by a stale bundle or strict setting."""
+    assert build_ssl_verify(False, ca_bundle=str(tmp_path / "missing.pem"), ssl_strict=False) is False
+
+
+def test_build_ssl_verify_relaxed_context_still_verifies():
+    """ssl_strict=False drops only VERIFY_X509_STRICT: chain and hostname are still checked."""
+    context = build_ssl_verify(True, ssl_strict=False)
+    assert isinstance(context, ssl.SSLContext)
+    assert context.verify_mode is ssl.CERT_REQUIRED
+    assert context.check_hostname is True
+    assert not context.verify_flags & ssl.VERIFY_X509_STRICT
+
+
+def test_profile_round_trips_trust_settings():
+    """ca_bundle and ssl_strict persist, and are omitted from profiles.json while at their defaults."""
+    profile = OdooProfile(name="p", url="https://x", database="db", user="u", password="pwd")
+    assert "ca_bundle" not in profile.to_dict()
+    assert "ssl_strict" not in profile.to_dict()
+    assert profile.ssl_verify() is True
+
+    tuned = profile.model_copy(update={"ca_bundle": "/etc/ca.pem", "ssl_strict": False})
+    restored = OdooProfile.from_dict(tuned.to_dict())
+    assert restored.ca_bundle == "/etc/ca.pem"
+    assert restored.ssl_strict is False
+
+
+def test_ssl_error_hint_offers_trust_before_opt_out():
+    """The message an agent reads points at --ca-bundle and says --no-verify is a person's call."""
+    message = str(ssl_verification_error(Exception("certificate verify failed")))
+    assert message.index("--ca-bundle") < message.index("--no-verify")
+    assert "never one to apply automatically" in message

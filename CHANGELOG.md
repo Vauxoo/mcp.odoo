@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - A TLS certificate verification failure no longer downgrades the connection. Since 0.9.0 the XML-RPC, JSON-RPC and JSON-2 clients caught the error, set `self.verify = False` and replayed the same request, so an on-path attacker collected the password (or the `Authorization: bearer` API key) just by presenting a certificate that fails to validate, and every later call on that client stayed unverified. The three transports now propagate `OdooSSLVerificationError`. **This refuses connections that used to work**: the explicit opt-in is unchanged, so trust the CA (`SSL_CERT_FILE`) or run `odoo-mcp edit-profile <name> --no-verify`. `docs/windows-install.md` walks through the corporate-proxy case.
 - `is_ssl_verification_error()` no longer loops forever on an exception chain that links back to itself.
+- `edit-profile` no longer drops `protocol` and `permissions`: it rebuilt the profile from a handful of fields, so any edit — `--no-verify` included — silently turned a granular read-only profile into full access.
+- The SSL error an AI agent reads now offers `--ca-bundle` first and states that `--no-verify` is a decision for a person, never one to apply automatically.
+
+### Added
+
+- Per-profile TLS trust, so a corporate proxy no longer forces `--no-verify`: `--ca-bundle <pem>` trusts that CA on every transport (XML-RPC, JSON-RPC, JSON-2) instead of the default store, and `--no-ssl-strict` relaxes only Python 3.13+'s `VERIFY_X509_STRICT` for a CA whose `basicConstraints` is not critical — chain and hostname are still verified. Both are on `add-profile` and `edit-profile` (`--clear-ca-bundle` undoes the first) and stored as `ca_bundle` / `ssl_strict` in `profiles.json`. Profiles that set neither behave exactly as before.
+
+### Fixed
+
+- `odoo-mcp test` ignored the profile's `verify` setting, so it failed on a `verify: false` profile the server itself connected to.
 
 ## [0.16.0] - 2026-09-02
 

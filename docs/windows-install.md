@@ -274,24 +274,32 @@ The connection is refused, never downgraded, so this has to be resolved rather t
 
 Installing the CA in the Windows certificate store is **not enough**. Only the XML-RPC transport
 reads that store; JSON-RPC and JSON-2 go through `httpx`, which verifies against the `certifi`
-bundle instead — and `detect_protocol` picks one of those two for any Odoo 8.0 or newer. Point
-both at the CA by exporting it as PEM and setting `SSL_CERT_FILE` in the environment of whatever
-launches `odoo-mcp` (the `env` block of the MCP client config from Step 6, so the AI client sees
-it too):
+bundle instead — and `detect_protocol` picks one of those two for any Odoo 8.0 or newer. Export
+the CA as PEM and give it to the profile; every transport then verifies against that file:
 
 ```powershell
-setx SSL_CERT_FILE "%USERPROFILE%\certs\corporate-ca.pem"
+odoo-mcp edit-profile <name> --ca-bundle "$env:USERPROFILE\certs\corporate-ca.pem" --test
 ```
 
-Two failures do not go away this way:
+The bundle replaces the default trust store for that profile only, so it belongs on profiles that
+go through the proxy. To trust the CA for every profile instead, set `SSL_CERT_FILE` in the
+environment of whatever launches `odoo-mcp` (the `env` block of the MCP client config from Step 6).
+`--clear-ca-bundle` goes back to the default store.
 
-- **The CA is unavailable** (nobody will hand it over).
-- **`Basic Constraints of CA cert not marked critical`.** The certificate violates RFC 5280 and
-  Python 3.13+ rejects it by default (`VERIFY_X509_STRICT`), even with that CA trusted — which is
-  why it works in a browser and fails here. Reissuing the CA is the real fix.
+**`Basic Constraints of CA cert not marked critical`.** The CA violates RFC 5280 and Python 3.13+
+rejects it by default (`VERIFY_X509_STRICT`), even with that CA trusted — which is why it works in a
+browser and fails here. Reissuing the CA is the real fix; until then, relax only that check:
 
-In both cases the remaining option is to accept an unverified connection knowingly, on a network
-you have reason to trust. Confirm it with the team first, then:
+```powershell
+odoo-mcp edit-profile <name> --ca-bundle "$env:USERPROFILE\certs\corporate-ca.pem" --no-ssl-strict --test
+```
+
+The chain and the hostname are still verified, so this is not `--no-verify`.
+
+If the CA is unavailable (nobody will hand it over), the remaining option is to accept an
+unverified connection knowingly, on a network you have reason to trust. It sends the password or
+the API key to whoever can intercept the connection — confirm it with the team first, and never
+let an AI agent apply it on its own:
 
 ```powershell
 odoo-mcp edit-profile <name> --no-verify

@@ -12,8 +12,9 @@ from __future__ import annotations
 import csv
 import io
 import re
+import ssl
 from time import time
-from typing import Any, Optional
+from typing import Any, Optional, Union
 from unittest.mock import Mock
 
 import jinja2
@@ -97,7 +98,7 @@ def _get_client(profile_name: Optional[str] = None):
         password=active_profile.password or "",
         api_key=active_profile.api_key or "",
         protocol=active_profile.protocol,
-        verify=active_profile.verify,
+        verify=active_profile.ssl_verify(),
     )
 
 
@@ -117,7 +118,7 @@ def op_test_connection(
     api_key: str = "",
     protocol: Optional[str] = None,
     timeout: int = 30,
-    verify: bool = True,
+    verify: Union[bool, ssl.SSLContext] = True,
 ) -> dict:
     """Test connection and authentication to an Odoo instance.
 
@@ -132,7 +133,7 @@ def op_test_connection(
         api_key: Login API key (Odoo 19+)
         protocol: Protocol to use (auto-detected if None)
         timeout: Connection timeout in seconds
-        verify: Verify SSL certificates (default: True)
+        verify: Verify SSL certificates, or an ``ssl.SSLContext`` to verify with (default: True)
 
     Returns:
         Dict with uid, server_version, and protocol on success,
@@ -691,7 +692,7 @@ def op_get_version(profile: Optional[str] = None) -> dict:
     """
     try:
         active_profile = resolve_profile(profile, fallback=_fallback_profile)
-        version = get_server_version(normalize_url(active_profile.url), verify=active_profile.verify)
+        version = get_server_version(normalize_url(active_profile.url), verify=active_profile.ssl_verify())
     except Exception as exc:
         return {"success": False, "error": f"Version lookup failed: {exc}"}
 

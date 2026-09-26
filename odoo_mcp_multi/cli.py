@@ -27,6 +27,7 @@ from odoo_mcp_multi import __version__
 from odoo_mcp_multi.config import (
     OdooProfile,
     add_profile,
+    build_ssl_verify,
     get_profile,
     list_profiles,
     remove_profile,
@@ -172,6 +173,19 @@ def _prompt_wizard_credential(
 @click.option("--api-key", "api_key", default=None, help="API key for Odoo 19+ Bearer auth (/json/2)")
 @click.option("--protocol", default="auto", help="RPC protocol: auto, json2s, jsonrpcs, xmlrpcs (default: auto)")
 @click.option("--verify/--no-verify", "verify", default=True, help="Verify SSL certificates (default: True)")
+@click.option(
+    "--ca-bundle",
+    "ca_bundle",
+    default=None,
+    type=click.Path(exists=True, dir_okay=False, resolve_path=True),
+    help="PEM file with the CA(s) to trust for this profile (e.g. a corporate TLS proxy's CA)",
+)
+@click.option(
+    "--ssl-strict/--no-ssl-strict",
+    "ssl_strict",
+    default=True,
+    help="Keep Python's strict X.509 checks; --no-ssl-strict accepts a CA whose basicConstraints is not critical",
+)
 @click.option("--default", "set_default", is_flag=True, help="Set as default profile")
 @click.option("--test/--no-test", "test_connection", default=True, help="Test connection before saving")
 def cmd_add_profile(
@@ -183,6 +197,8 @@ def cmd_add_profile(
     api_key: str | None,
     protocol: str,
     verify: bool,
+    ca_bundle: str | None,
+    ssl_strict: bool,
     set_default: bool,
     test_connection: bool,
 ) -> None:
@@ -198,7 +214,7 @@ def cmd_add_profile(
             password=password or "",
             api_key=api_key or "",
             protocol=protocol if protocol != "auto" else None,
-            verify=verify,
+            verify=build_ssl_verify(verify, ca_bundle, ssl_strict),
         )
         if res.get("success") is False:
             click.secho(f"{CROSS} Connection test failed: {res.get('error')}", fg="red")
@@ -220,6 +236,8 @@ def cmd_add_profile(
         api_key=api_key if api_key else None,
         protocol=protocol,
         verify=verify,
+        ca_bundle=ca_bundle,
+        ssl_strict=ssl_strict,
     )
     add_profile(profile, set_default=set_default)
     auth_method = f"api_key ({protocol})" if api_key else "password"
@@ -254,6 +272,10 @@ def cmd_list_profiles(as_json: bool) -> None:
         click.echo(f"    Database: {p['database']}")
         click.echo(f"    Auth:     {auth_display}")
         click.echo(f"    Verify:   {p.get('verify', True)}")
+        if p.get("ca_bundle"):
+            click.echo(f"    CA:       {p['ca_bundle']}")
+        if p.get("ssl_strict") is False:
+            click.echo("    Strict:   False")
         if p.get("user"):
             click.echo(f"    User:     {p['user']}")
         click.echo()
@@ -328,6 +350,20 @@ def _resolve_secret(new_value: str | None, existing_secret) -> str | None:
     default=None,
     help="Update SSL certificate verification setting",
 )
+@click.option(
+    "--ca-bundle",
+    "ca_bundle",
+    default=None,
+    type=click.Path(exists=True, dir_okay=False, resolve_path=True),
+    help="PEM file with the CA(s) to trust for this profile (e.g. a corporate TLS proxy's CA)",
+)
+@click.option("--clear-ca-bundle", is_flag=True, default=False, help="Go back to the default trust store")
+@click.option(
+    "--ssl-strict/--no-ssl-strict",
+    "ssl_strict",
+    default=None,
+    help="Update Python's strict X.509 checks setting",
+)
 @click.option("--test", "test_connection", is_flag=True, default=False, help="Test connection after editing")
 def cmd_edit_profile(
     name: str,
@@ -338,6 +374,9 @@ def cmd_edit_profile(
     password: str,
     api_key: str,
     verify: bool | None,
+    ca_bundle: str | None,
+    clear_ca_bundle: bool,
+    ssl_strict: bool | None,
     test_connection: bool,
 ) -> None:
     """Edit an existing profile.
@@ -351,6 +390,7 @@ def cmd_edit_profile(
         odoo-mcp edit-profile staging --user admin --password
         odoo-mcp edit-profile prod19 --api-key
         odoo-mcp edit-profile old-name --new-name better-name
+        odoo-mcp edit-profile prod --ca-bundle ~/certs/corporate-ca.pem
     """
     existing = get_profile(name)
     if existing is None:
@@ -361,6 +401,8 @@ def cmd_edit_profile(
     new_database = database if database else existing.database
     new_user = user if user else existing.user
     new_verify = verify if verify is not None else existing.verify
+    new_ca_bundle = None if clear_ca_bundle else (ca_bundle or existing.ca_bundle)
+    new_ssl_strict = ssl_strict if ssl_strict is not None else existing.ssl_strict
 
     new_password = _resolve_secret(password, existing.password)
     new_api_key = _resolve_secret(api_key, existing.api_key)
@@ -371,17 +413,18 @@ def cmd_edit_profile(
 
     if test_connection:
         click.echo(f"Testing connection to {new_url}...")
+        ssl_verify = build_ssl_verify(new_verify, new_ca_bundle, new_ssl_strict)
         try:
             if new_api_key and not new_password:
                 from odoo_mcp_multi.parsers import normalize_url
                 from odoo_mcp_multi.version import get_server_version
 
-                info = get_server_version(normalize_url(new_url), verify=new_verify)
+                info = get_server_version(normalize_url(new_url), verify=ssl_verify)
                 ver = (info or {}).get("server_version", "unknown")
                 click.secho(f"{TICK} Server reachable! Odoo {ver}", fg="green")
             else:
                 result = op_test_connection(
-                    url=new_url, database=new_database, user=new_user, password=new_password or "", verify=new_verify
+                    url=new_url, database=new_database, user=new_user, password=new_password or "", verify=ssl_verify
                 )
                 if result.get("success") is False:
                     click.secho(f"{CROSS} Connection test failed: {result['error']}", fg="red")
@@ -406,7 +449,11 @@ def cmd_edit_profile(
         user=new_user,
         password=new_password if new_password else None,
         api_key=new_api_key if new_api_key else None,
+        protocol=existing.protocol,
         verify=new_verify,
+        ca_bundle=new_ca_bundle,
+        ssl_strict=new_ssl_strict,
+        permissions=existing.permissions,
     )
     add_profile(updated_profile, set_default=False)
 
@@ -451,7 +498,7 @@ def _test_profile_connection(odoo_profile) -> None:
         from odoo_mcp_multi.parsers import normalize_url
         from odoo_mcp_multi.version import get_server_version
 
-        info = get_server_version(normalize_url(odoo_profile.url))
+        info = get_server_version(normalize_url(odoo_profile.url), verify=odoo_profile.ssl_verify())
         if info is None:
             raise OdooConnectionError("Could not reach server (no version info)")
         ver = info.get("server_version", info.get("version", "unknown"))
@@ -466,6 +513,7 @@ def _test_profile_connection(odoo_profile) -> None:
         user=odoo_profile.user,
         password=odoo_profile.password,
         protocol=odoo_profile.protocol,
+        verify=odoo_profile.ssl_verify(),
     )
     if result.get("success") is False:
         click.secho(f"{CROSS} Connection test failed: {result['error']}", fg="red")
