@@ -15,10 +15,12 @@ import time
 import xmlrpc.client
 from abc import ABC, abstractmethod
 from typing import Any, Optional, Union
+from urllib.parse import urlparse
 
 import httpx
 from pydantic import SecretStr
 
+from odoo_mcp_multi.context import get_request_profile
 from odoo_mcp_multi.exceptions import (
     OdooAuthenticationError,
     OdooConnectionError,
@@ -39,8 +41,57 @@ INSECURE_OPT_IN_HINT = (
 )
 
 
+def ssl_failure_reason(exc: BaseException) -> str:
+    """Say in plain words why a certificate did not verify, from the TLS library's message."""
+    text = str(exc).lower()
+    reasons = (
+        (("self-signed", "self signed"), "it is self-signed"),
+        (
+            ("not marked critical", "ca_bcons_not_critical", "basic constraints"),
+            "its CA certificate does not mark basicConstraints as critical, which strict verification rejects",
+        ),
+        (
+            ("hostname mismatch", "ip address mismatch", "doesn't match", "does not match"),
+            "it was issued for a different host name",
+        ),
+        (("expired",), "it has expired"),
+        (
+            ("unable to get local issuer", "unknown ca", "unable to get issuer"),
+            "it is signed by a certificate authority this server does not trust",
+        ),
+    )
+    for needles, reason in reasons:
+        if any(n in text for n in needles):
+            return reason
+    return "it could not be verified"
+
+
+def remote_ssl_message(exc: BaseException, url: Optional[str] = None) -> str:
+    """The certificate error as a remote (OAuth) user must read it.
+
+    That user owns neither the server nor a profile on it, so the CLI remedies
+    (``edit-profile --ca-bundle``, ``--no-verify``) are not theirs to apply and
+    must not be suggested. They need to know their credentials did not leave,
+    and who can fix it.
+    """
+    host = urlparse(url).hostname if url else None
+    target = f"the Odoo server at {host}" if host else "your Odoo server"
+    return (
+        f"The TLS certificate of {target} could not be verified: {ssl_failure_reason(exc)}. "
+        "Nothing was sent to it, credentials included. This cannot be fixed from your side: ask the "
+        "administrator of this MCP server to trust your Odoo's certificate authority, or serve Odoo "
+        f"with a certificate from a public one. (Detail: {exc})"
+    )
+
+
 def ssl_verification_error(exc: Exception) -> OdooSSLVerificationError:
-    """Build the fail-closed error every transport raises on certificate verification failure."""
+    """Build the fail-closed error every transport raises on certificate verification failure.
+
+    Over OAuth the caller is a remote user, not the owner of a profile, so the
+    remedy is worded for them instead.
+    """
+    if get_request_profile() is not None:
+        return OdooSSLVerificationError(remote_ssl_message(exc))
     return OdooSSLVerificationError(f"SSL certificate validation failed: {exc}. {INSECURE_OPT_IN_HINT}")
 
 

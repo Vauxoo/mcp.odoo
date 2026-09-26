@@ -20,10 +20,10 @@ from unittest.mock import Mock
 import jinja2
 import jinja2.sandbox
 
-from odoo_mcp_multi.client import create_client
+from odoo_mcp_multi.client import create_client, remote_ssl_message
 from odoo_mcp_multi.config import list_profiles, resolve_profile
 from odoo_mcp_multi.context import get_request_profile
-from odoo_mcp_multi.exceptions import OdooMethodNotFoundError
+from odoo_mcp_multi.exceptions import OdooMethodNotFoundError, OdooSSLVerificationError
 from odoo_mcp_multi.parsers import normalize_url, parse_domain, parse_fields, parse_ids, parse_json_arg
 from odoo_mcp_multi.version import get_server_version, validate_version_compatibility
 
@@ -212,7 +212,13 @@ def op_test_connection(
         )
         uid = client.authenticate()
     except Exception as exc:
-        return {"success": False, "error": f"Connection test failed: {exc}"}
+        failure = {"success": False, "error": f"Connection test failed: {exc}"}
+        # Only the typed error the transports raise on a failed handshake: the keyword
+        # heuristic behind is_ssl_verification_error would also match an Odoo reply,
+        # and the remote wording promises that nothing reached the server.
+        if isinstance(exc, OdooSSLVerificationError):
+            failure["ssl_error"] = exc.__cause__ or exc
+        return failure
 
     det_protocol = getattr(client, "protocol", protocol or "auto")
     if hasattr(det_protocol, "value"):
@@ -284,6 +290,9 @@ def op_validate_credentials(
     against ``res.users`` — it both proves the secret works and yields the
     login to show on the consent screen.
 
+    Errors are worded for the remote user of the consent form: a certificate
+    failure says nothing was sent and who can fix it, never the CLI remedies.
+
     Returns:
         Dict with success, uid, login, server_version and the *resolved*
         protocol (never 'auto'), or {success: False, error: "..."}.
@@ -299,6 +308,8 @@ def op_validate_credentials(
         verify=verify,
     )
     if not result.get("success"):
+        if "ssl_error" in result:
+            return {"success": False, "error": remote_ssl_message(result["ssl_error"], url), "tls_untrusted": True}
         return result
 
     login = user
@@ -319,6 +330,12 @@ def op_validate_credentials(
             )
             rows = client.execute_kw("res.users", "search_read", [[], ["id", "login"]], {"limit": 1})
         except Exception as exc:
+            if isinstance(exc, OdooSSLVerificationError):
+                return {
+                    "success": False,
+                    "error": remote_ssl_message(exc.__cause__ or exc, url),
+                    "tls_untrusted": True,
+                }
             if json2 and not api_key:
                 return {
                     "success": False,

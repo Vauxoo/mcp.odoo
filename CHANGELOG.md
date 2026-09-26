@@ -34,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Over OAuth, a certificate failure told the remote user to run `odoo-mcp edit-profile --ca-bundle` or consider `--no-verify`, on a server they do not control, and the consent form could report it as "API key rejected". The user now reads why the certificate failed, that nothing was sent, and that the operator must fix it; the operator gets the host in the server log. stdio and `--auth local` keep the CLI remedy.
 - The `serve` consent form accepted a password on Odoo 19+ (JSON-2) without contacting Odoo, because JSON-2 has no login call: the grant was issued and only the first tool call failed. JSON-2 sign-ins are now always proven with a real read, and a password there is refused with a message that asks for an API key.
 - `odoo-mcp test` ignored the profile's `verify` setting, so it failed on a `verify: false` profile the server itself connected to.
 - `odoo-mcp upgrade` works for every installer: under `uv tool install` it failed with `No module named pip`, and uvx or a uv-created venv were taken for plain pip. It also no longer mistakes an editable checkout in a uv venv for a PyPI install it could overwrite.

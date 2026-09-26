@@ -8,6 +8,7 @@ yet — so everything they accept is validated here.
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import urlparse
@@ -24,6 +25,8 @@ from odoo_mcp_multi.http.settings import DEFAULT_SCOPES, HttpServeConfig
 from odoo_mcp_multi.operations import op_list_databases, op_validate_credentials
 from odoo_mcp_multi.parsers import normalize_url
 from odoo_mcp_multi.server import SERVER_NAME
+
+_logger = logging.getLogger(__name__)
 
 _TEMPLATES = jinja2.Environment(
     loader=jinja2.FileSystemLoader(Path(__file__).parent / "templates"),
@@ -148,6 +151,14 @@ class ConsentRoutes:
         )
 
         if not result.get("success"):
+            if result.get("tls_untrusted"):
+                # The user was told to ask the operator; this is what the operator reads.
+                _logger.warning(
+                    "Consent refused: %s presents a certificate this server does not trust. Remote users "
+                    "cannot connect to it until its CA is trusted by this host. %s",
+                    urlparse(profile.url).hostname,
+                    result["error"],
+                )
             attempts = self.provider.store.bump_txn_attempts(txn_id, MAX_LOGIN_ATTEMPTS)
             if attempts >= MAX_LOGIN_ATTEMPTS:
                 return _error_page(

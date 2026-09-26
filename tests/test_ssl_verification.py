@@ -509,3 +509,39 @@ def test_get_client_passes_the_profile_trust_settings(monkeypatch, timeout):
     operations._get_client()
 
     assert isinstance(seen["verify"], ssl.SSLContext)
+
+
+def test_a_certificate_failure_over_oauth_is_worded_for_the_remote_user():
+    """The OAuth caller owns neither the server nor a profile: no CLI remedies for them."""
+    from odoo_mcp_multi.client import ssl_verification_error
+    from odoo_mcp_multi.context import reset_request_profile, set_request_profile
+
+    cause = ssl.SSLCertVerificationError(1, "certificate verify failed: unable to get local issuer certificate")
+    token = set_request_profile(
+        OdooProfile(name="oauth:db", url="https://odoo.example.com", database="db", api_key="k")
+    )
+    try:
+        message = str(ssl_verification_error(cause))
+    finally:
+        reset_request_profile(token)
+
+    assert "signed by a certificate authority this server does not trust" in message
+    assert "edit-profile" not in message and "--no-verify" not in message
+    assert "edit-profile" in str(ssl_verification_error(cause)), "stdio and --auth local keep the CLI remedy"
+
+
+@pytest.mark.parametrize(
+    ("detail", "reason"),
+    [
+        ("certificate verify failed: self-signed certificate in certificate chain", "self-signed"),
+        ("[SSL: CA_BCONS_NOT_CRITICAL] Basic Constraints of CA cert not marked critical", "basicConstraints"),
+        ("certificate verify failed: Hostname mismatch, certificate is not valid for 'x'", "different host"),
+        ("certificate verify failed: certificate has expired", "expired"),
+        ("certificate verify failed: unable to get local issuer certificate", "does not trust"),
+        ("something else entirely", "could not be verified"),
+    ],
+)
+def test_ssl_failure_reason_says_why_in_plain_words(detail, reason):
+    from odoo_mcp_multi.client import ssl_failure_reason
+
+    assert reason in ssl_failure_reason(Exception(detail))

@@ -91,6 +91,54 @@ def test_a_password_on_legacy_rpc_is_not_probed_twice(odoo_client):
     odoo_client.execute_kw.assert_not_called()
 
 
+def _untrusted_certificate():
+    """The error a transport raises for a self-signed certificate, cause chained as in client.py."""
+    import ssl
+
+    from odoo_mcp_multi.client import ssl_verification_error
+
+    cause = ssl.SSLCertVerificationError(1, "certificate verify failed: self-signed certificate")
+    try:
+        raise ssl_verification_error(cause) from cause
+    except Exception as exc:
+        return exc
+
+
+def _assert_speaks_to_the_remote_user(result):
+    assert result["success"] is False
+    assert result["tls_untrusted"] is True
+    error = result["error"]
+    assert "odoo.example.com" in error
+    assert "it is self-signed" in error
+    assert "Nothing was sent" in error
+    assert "administrator of this MCP server" in error
+    for cli_remedy in ("edit-profile", "--ca-bundle", "--no-verify", "API key rejected"):
+        assert cli_remedy not in error
+
+
+@pytest.mark.parametrize("secret", [{"password": "pw"}, {"api_key": "key"}])
+def test_an_untrusted_certificate_on_login_speaks_to_the_remote_user(odoo_client, secret):
+    odoo_client.authenticate.side_effect = _untrusted_certificate()
+    result = op_validate_credentials(url="https://odoo.example.com", database="db", user="someone", **secret)
+    _assert_speaks_to_the_remote_user(result)
+
+
+def test_an_untrusted_certificate_on_the_key_probe_is_not_a_rejected_key(odoo_client):
+    """The key was never checked; telling the user it was rejected sends them to regenerate it."""
+    odoo_client.execute_kw.side_effect = _untrusted_certificate()
+    result = op_validate_credentials(url="https://odoo.example.com", database="db", user="someone", api_key="key")
+    _assert_speaks_to_the_remote_user(result)
+
+
+def test_an_odoo_reply_that_mentions_verification_is_not_a_certificate_failure(odoo_client):
+    """The probe runs after Odoo answered; "nothing was sent" would be false there."""
+    odoo_client.execute_kw.side_effect = RuntimeError("Two-factor verification failed")
+    result = op_validate_credentials(url="https://odoo.example.com", database="db", user="someone", api_key="key")
+    assert result["success"] is False
+    assert "tls_untrusted" not in result
+    assert "Nothing was sent" not in result["error"]
+
+
 # -- the consent form -------------------------------------------------------
 
 
@@ -151,3 +199,20 @@ async def test_disallowed_odoo_host_is_refused(http_config, odoo_client, tmp_pat
     assert response.status_code == 200
     assert "not allowed to connect to that host" in response.text
     odoo_client.authenticate.assert_not_called()
+
+
+async def test_an_untrusted_certificate_is_explained_to_the_user_and_logged_for_the_operator(
+    client, odoo_client, caplog
+):
+    odoo_client.authenticate.side_effect = _untrusted_certificate()
+    registration = await register(client)
+    _, challenge = pkce()
+    txn = await authorize(client, registration["client_id"], challenge)
+
+    with caplog.at_level("WARNING", logger="odoo_mcp_multi.http.consent"):
+        response = await client.post("/odoo/login", data=dict(GOOD_LOGIN, txn=txn))
+
+    assert response.status_code == 200
+    assert "This cannot be fixed from your side" in response.text
+    assert "edit-profile" not in response.text
+    assert any("does not trust" in record.getMessage() for record in caplog.records)

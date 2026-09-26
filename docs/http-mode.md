@@ -156,6 +156,13 @@ given, which makes it a way to probe the network the server sits on.
 Odoo's own access rights bound what any of them can do, because every call
 runs as the end user, but the reach is theirs, not a restricted subset.
 
+**Odoo servers behind a private CA cannot connect yet.** Certificates are
+verified against this host's default trust store, and a failure is never
+downgraded. The user sees why (self-signed, unknown CA, expired, wrong host
+name), that nothing was sent, and that the fix is on the operator's side;
+the server log names the host. There is no operator setting to trust a
+private CA in OAuth mode yet.
+
 ## Checking a deployment
 
 ```bash
