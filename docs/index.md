@@ -38,35 +38,50 @@ behave identically — no duplication, no drift.
 
 ## Quick Install
 
-=== "macOS"
+Any of these works — use the installer you already have. All four are tested in
+CI on every merge request and against PyPI after every release.
+
+=== "uv"
 
 ```bash
-brew install pipx
-pipx install odoo-mcp-multi
+uv tool install odoo-mcp-multi
+uv tool update-shell   # then open a NEW terminal
 odoo-mcp add-profile
 odoo-mcp run
 ```
 
-=== "Linux"
+=== "pipx"
 
 ```bash
-pip install pipx
 pipx install odoo-mcp-multi
+pipx ensurepath        # then open a NEW terminal
 odoo-mcp add-profile
 odoo-mcp run
 ```
 
-=== "Windows"
+=== "uvx"
 
-```powershell
-winget install Python.Python.3.12
-# Open a new terminal
-pip install pipx && pipx ensurepath
-# Open another new terminal
-pipx install odoo-mcp-multi
+```bash
+# Nothing to install: the MCP client runs it on demand.
+uvx --from odoo-mcp-multi odoo-mcp add-profile
+# MCP config: "command": "uvx", "args": ["--from", "odoo-mcp-multi", "odoo-mcp", "run"]
+```
+
+=== "pip"
+
+```bash
+pip install odoo-mcp-multi   # inside an environment you manage
 odoo-mcp add-profile
 odoo-mcp run
 ```
+
+!!! note "The extra PATH step"
+    `uv tool` and `pipx` install `odoo-mcp` into `~/.local/bin`, which is usually not
+    on `PATH`: right after installing, `odoo-mcp` is "not found". Run
+    `uv tool update-shell` / `pipx ensurepath` and open a new terminal, or use the
+    absolute path (`uv tool dir --bin`, `pipx environment --value PIPX_BIN_DIR`).
+    GUI MCP clients on macOS do not read shell rc files — give them the absolute path.
+    `odoo-mcp upgrade` picks the right upgrade command for whichever installer you used.
 
 ## Copy-Paste Prompt for AI Clients
 
@@ -75,12 +90,16 @@ Paste this block verbatim into Antigravity, Claude, or Cursor:
 ```text
 Install & configure the Odoo MCP server. Run these steps:
 
-1. Install: brew install pipx && pipx install odoo-mcp-multi  (macOS)
-             pip install pipx && pipx install odoo-mcp-multi   (Linux)
+1. Install with the tool I already have (any is fine):
+   uv tool install odoo-mcp-multi && uv tool update-shell
+   pipx install odoo-mcp-multi && pipx ensurepath
+   pip install odoo-mcp-multi   (inside an environment I manage)
+   If `odoo-mcp` is then "not found", open a new terminal or use its absolute path.
 2. Add a profile: odoo-mcp add-profile
 3. Test connection: odoo-mcp test
 4. Add to your MCP config:
    { "mcpServers": { "odoo": { "command": "odoo-mcp", "args": ["run"] } } }
+   (with uvx: "command": "uvx", "args": ["--from", "odoo-mcp-multi", "odoo-mcp", "run"])
 5. Restart your AI client.
 ```
 

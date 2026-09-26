@@ -65,11 +65,13 @@ Paste the blocks below into your AI client (Antigravity, Claude, Cursor) to get 
 ### 1. Install the Package
 
 ```text
-Please install the `odoo-mcp-multi` package. Use the best method for my OS:
-- macOS: `brew install pipx && pipx install odoo-mcp-multi`
-- Linux: `pip install pipx && pipx install odoo-mcp-multi`
-- Windows: `winget install Python.Python.3.12`, then `pip install pipx && pipx ensurepath`, then `pipx install odoo-mcp-multi`
-- Or simply use `pip install odoo-mcp-multi` if a python environment is already managed.
+Please install the `odoo-mcp-multi` package with whichever of these tools I already have — any of them is fine:
+- uv:   `uv tool install odoo-mcp-multi`, then `uv tool update-shell`
+- pipx: `pipx install odoo-mcp-multi`, then `pipx ensurepath`
+- pip:  `pip install odoo-mcp-multi` inside a Python environment I already manage
+- Or install nothing: MCP clients can launch it with `uvx --from odoo-mcp-multi odoo-mcp run`.
+
+uv and pipx put `odoo-mcp` in ~/.local/bin, which is not on PATH until that second command runs AND a new terminal is opened. If `odoo-mcp` is still "not found", use its absolute path (`uv tool dir --bin` or `pipx environment --value PIPX_BIN_DIR` prints the directory).
 
 After installing, please run `odoo-mcp add-profile` to configure my credentials interactively, and then run `odoo-mcp test` to verify the connection.
 ```
@@ -104,8 +106,8 @@ This will copy the skills into my global skills directory so you can use them in
 
 Claude Code consumes `odoo-mcp` as a standard plugin from the Vauxoo AI
 marketplace — skills plus the `odoo` MCP server in one install (the MCP
-server runs the pip-installed `odoo-mcp` CLI, so install the package
-first):
+server runs the installed `odoo-mcp` CLI from `PATH`, so install the
+package first):
 
 ```text
 /plugin marketplace add https://git.vauxoo.com/ai/marketplace.git
@@ -117,50 +119,65 @@ it now offers to remove the old flat copies and prints these commands.
 
 ## Installation
 
-`pipx` is the recommended installer for all platforms — it creates an
-isolated virtual environment and exposes `odoo-mcp` globally.
+Four installers work, and none is preferred: use the one you already have.
+Every merge request installs the built wheel with each of them on Python 3.10
+and 3.14, launches the MCP server the way a client does and runs
+`odoo-mcp upgrade`; every release repeats that against PyPI.
 
-### macOS
+| Installer | Install | Upgrade | Uninstall |
+|-----------|---------|---------|-----------|
+| **uv tool** | `uv tool install odoo-mcp-multi` | `uv tool upgrade odoo-mcp-multi` | `uv tool uninstall odoo-mcp-multi` |
+| **pipx** | `pipx install odoo-mcp-multi` | `pipx upgrade odoo-mcp-multi` | `pipx uninstall odoo-mcp-multi` |
+| **uvx** | nothing — runs on demand from uv's cache | `uvx --from odoo-mcp-multi@latest odoo-mcp --version` | `uv cache clean odoo-mcp-multi` |
+| **pip** | `pip install odoo-mcp-multi` (in an environment you manage) | `pip install -U odoo-mcp-multi` | `pip uninstall odoo-mcp-multi` |
+
+`odoo-mcp upgrade` detects which of these installed it and runs the matching
+command (under uvx it explains the `@latest` refresh instead).
+
+Getting the installer itself:
+
+| OS | uv | pipx |
+|----|----|------|
+| macOS | `brew install uv` | `brew install pipx` |
+| Linux | `curl -LsSf https://astral.sh/uv/install.sh \| sh` | `pip install --user pipx` or your distro's package |
+| Windows | `winget install astral-sh.uv` | `pip install pipx` (needs Python first) |
+
+uv downloads a Python interpreter when none is installed, so on a clean
+machine it is the shortest path. Then configure and run:
 
 ```bash
-brew install pipx
-pipx install odoo-mcp-multi
 odoo-mcp add-profile
+odoo-mcp test
 odoo-mcp run
 ```
 
-### Linux
+### The extra PATH step (uv tool, pipx and uvx)
 
-```bash
-pip install pipx
-pipx install odoo-mcp-multi
-odoo-mcp add-profile
-odoo-mcp run
-```
+`uv tool install` and `pipx install` put `odoo-mcp` in an isolated environment
+and link it into `~/.local/bin` (`%USERPROFILE%\.local\bin` on Windows). That
+directory is usually **not on `PATH`**, so right after a successful install the
+shell answers `odoo-mcp: command not found` ("is not recognized" on Windows).
+The uv installer puts `uv` and `uvx` in the same directory, so the same applies
+to `uvx`. This is expected, and CI checks both halves: the command is missing
+after install, and found after the step below in a new shell.
+
+1. **Add the directory once**: `uv tool update-shell` or `pipx ensurepath`, then
+   **open a new terminal**. The current one keeps the old `PATH`.
+2. **Or skip `PATH` and use the absolute path**, which `uv tool dir --bin` or
+   `pipx environment --value PIPX_BIN_DIR` prints.
+
+MCP clients launched from the Dock, Finder or Start menu (Claude Desktop,
+Antigravity) do not read your shell's rc files, so on macOS they may still not
+find `odoo-mcp` or `uvx` after step 1. Put the absolute path in the client's
+`command` (see [MCP Client Configuration](#mcp-client-configuration)).
 
 ### Windows
 
-> **Pre-requisite:** Python must be installed before pipx.
-> The recommended method is `winget` (included in Windows 10 21H1+ and Windows 11):
-
-```powershell
-# Step 1: Install Python via winget (opens a new PowerShell after install)
-winget install Python.Python.3.12
-
-# Step 2: Open a NEW PowerShell window, then install pipx
-pip install pipx
-pipx ensurepath
-
-# Step 3: Open ANOTHER new PowerShell window (required for PATH to take effect)
-pipx install odoo-mcp-multi
-odoo-mcp add-profile
-odoo-mcp run
-```
-
 > **Windows notes:**
 >
-> - **Two terminal restarts required**: `winget install` and `pipx ensurepath` both modify
->   `PATH`. Each change only takes effect in a new terminal session.
+> - **Not covered by CI**: the install jobs run on Linux. The support runbook
+>   [`docs/windows-install.md`](docs/windows-install.md) covers the Windows-only
+>   failures (Smart App Control, `pip` not on `PATH`).
 > - **Credential file permissions**: on Linux/macOS, credentials are stored with `600`
 >   (owner-read-only) Unix permissions. On Windows, `os.chmod` is silently ignored —
 >   the file `%USERPROFILE%\.config\odoo-mcp\profiles.json` is created correctly but
@@ -171,32 +188,14 @@ odoo-mcp run
 > - **Microsoft Store Python**: avoid it — it runs in an app sandbox that can cause
 >   issues with `pipx ensurepath` and file system access.
 
-### Alternative: direct `pip install` (developer / existing venv)
-
-```bash
-pip install odoo-mcp-multi
-odoo-mcp add-profile
-odoo-mcp run
-```
-
 ### Uninstall
 
-All platforms (pipx recommended install):
-
-```bash
-pipx uninstall odoo-mcp-multi
-```
+Use the uninstall command from the table above for the installer you used.
 
 > Credentials are **not** removed automatically. Delete the profile file manually if needed:
 >
 > - **macOS / Linux**: `~/.config/odoo-mcp/profiles.json`
 > - **Windows**: `%USERPROFILE%\.config\odoo-mcp\profiles.json`
-
-If you used `pip install` directly instead:
-
-```bash
-pip uninstall odoo-mcp-multi
-```
 
 ## Profile Management
 
@@ -262,7 +261,25 @@ profile, use `["run", "-p", "prod"]`.
 }
 ```
 
-Add the block above to your client's MCP config file. Paths vary by tool and OS:
+With uvx nothing is installed, and the client starts the server from uv's cache:
+
+```json
+{
+  "mcpServers": {
+    "odoo": {
+      "command": "uvx",
+      "args": ["--from", "odoo-mcp-multi", "odoo-mcp", "run"]
+    }
+  }
+}
+```
+
+If the client reports that `odoo-mcp` or `uvx` is not found, it does not see the
+directory the installer used (see [the extra PATH step](#the-extra-path-step-uv-tool-pipx-and-uvx)).
+Replace `command` with the absolute path, e.g. `/Users/you/.local/bin/odoo-mcp`
+(`command -v odoo-mcp` on macOS/Linux, `where.exe odoo-mcp` on Windows).
+
+Add the block to your client's MCP config file. Paths vary by tool and OS:
 
 | Client | macOS | Linux | Windows |
 |--------|-------|-------|---------|

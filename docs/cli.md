@@ -209,8 +209,9 @@ For the stable channel (latest release tag instead of `main`):
 
 The plugin brings the skills **and** registers the `odoo` MCP server by
 running `odoo-mcp run`, so the package must be installed and on `PATH`
-(`pipx install odoo-mcp-multi`). Without it the skills still load; only
-the MCP server shows as failed in `/mcp`.
+(`uv tool install odoo-mcp-multi`, `pipx install odoo-mcp-multi` or
+`pip install odoo-mcp-multi`, plus the PATH step the README describes).
+Without it the skills still load; only the MCP server shows as failed in `/mcp`.
 
 `odoo-mcp plugins install claude` no longer copies files: it offers to
 remove a flat install left by earlier versions (which would duplicate the

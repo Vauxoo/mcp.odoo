@@ -20,6 +20,14 @@ cache:
   paths:
     - .cache/pip/
 
+# A scheduled pipeline exists only to verify that the published package still
+# installs (see verify-pypi below). Every other job is excluded from it: on main
+# the schedule would otherwise release, redeploy pages, mirror and notify.
+.not-on-schedule:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+      when: never
+
 .python-template:
   image: python:3.12-slim
   before_script:
@@ -33,6 +41,7 @@ lint:
     - ruff check odoo_mcp_multi/
     - ruff format --check odoo_mcp_multi/
   rules:
+    - !reference [.not-on-schedule, rules]
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     - if: $CI_COMMIT_TAG
@@ -44,6 +53,7 @@ lint-markdown:
     - npm install -g markdownlint-cli2
     - markdownlint-cli2 "**/*.md" "#node_modules"
   rules:
+    - !reference [.not-on-schedule, rules]
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     - if: $CI_COMMIT_TAG
@@ -58,6 +68,7 @@ validate-plugin:
     - npm install -g @anthropic-ai/claude-code
     - claude plugin validate .
   rules:
+    - !reference [.not-on-schedule, rules]
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     - if: $CI_COMMIT_TAG
@@ -80,6 +91,7 @@ build:
       - dist/
     expire_in: 1 day
   rules:
+    - !reference [.not-on-schedule, rules]
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     - if: $CI_COMMIT_TAG
@@ -108,6 +120,7 @@ test-python:
       - .coverage.${PYTHON}
     expire_in: 1 day
   rules:
+    - !reference [.not-on-schedule, rules]
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     - if: $CI_COMMIT_TAG
@@ -136,9 +149,123 @@ test:
     expire_in: 1 week
   coverage: '/(?i)total.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
   rules:
+    - !reference [.not-on-schedule, rules]
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     - if: $CI_COMMIT_TAG
+
+# ---------------------------------------------------------------------------
+# Install the package the way users do — pip, pipx, uv tool, uvx — on a bare
+# image with the oldest and newest supported Python, then launch it the way an
+# MCP client does (.gitlab/ci/mcp_smoke.py: --version, initialize, tools/list,
+# one tools/call), then runs `odoo-mcp upgrade`, which must pick the matching
+# installer. pipx and uv tool put odoo-mcp in ~/.local/bin, which is not
+# on PATH: the job proves it is missing, runs the documented step
+# (`pipx ensurepath`, `uv tool update-shell`) and finds it in a new shell.
+#
+# install:* run the wheel `build` made; verify-pypi:* run the same checks
+# against PyPI — after publishing on a tag, and on a schedule, where a new
+# release of a dependency can break an install nobody changed.
+# ---------------------------------------------------------------------------
+.install-smoke:
+  image: python:${PYTHON}-slim
+  stage: test
+  parallel:
+    matrix:
+      - PYTHON: ["3.10", "3.14"]
+  variables:
+    PIP_ROOT_USER_ACTION: ignore
+    # uv would otherwise download its own interpreter; use the one the matrix names.
+    UV_PYTHON_PREFERENCE: only-system
+    # pipx ensurepath and uv tool update-shell edit the rc file of the user's shell.
+    SHELL: /bin/bash
+  before_script:
+    - VERSION="$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' odoo_mcp_multi/__init__.py)"
+    - echo "Installing $PACKAGE (expecting $VERSION)"
+
+.from-wheel:
+  extends: .install-smoke
+  needs:
+    - build
+  before_script:
+    - PACKAGE="$(ls dist/*.whl)"
+    - !reference [.install-smoke, before_script]
+  rules:
+    - !reference [.not-on-schedule, rules]
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG
+
+.from-pypi:
+  extends: .install-smoke
+  stage: notify
+  needs:
+    - job: publish:pypi
+      optional: true
+  before_script:
+    - PACKAGE="odoo-mcp-multi==$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' odoo_mcp_multi/__init__.py)"
+    - !reference [.install-smoke, before_script]
+    # A fresh upload takes a moment to reach the index.
+    - for attempt in $(seq 1 20); do pip download -q --no-deps -d /tmp/probe "$PACKAGE" && break; sleep 30; done
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+
+.pip-script:
+  script:
+    - pip install "$PACKAGE"
+    - python .gitlab/ci/mcp_smoke.py "$VERSION" odoo-mcp
+    - odoo-mcp upgrade
+
+.pipx-script:
+  script:
+    - pip install pipx
+    - pipx install "$PACKAGE"
+    - test -z "$(command -v odoo-mcp)"
+    - pipx ensurepath
+    - bash -lic 'odoo-mcp --version'
+    - python .gitlab/ci/mcp_smoke.py "$VERSION" "$(pipx environment --value PIPX_BIN_DIR)/odoo-mcp"
+    - bash -lic 'odoo-mcp upgrade'
+
+.uv-tool-script:
+  script:
+    - pip install uv
+    - uv tool install "$PACKAGE"
+    - test -z "$(command -v odoo-mcp)"
+    - uv tool update-shell
+    - bash -lic 'odoo-mcp --version'
+    - python .gitlab/ci/mcp_smoke.py "$VERSION" "$(uv tool dir --bin)/odoo-mcp"
+    - bash -lic 'odoo-mcp upgrade'
+
+.uvx-script:
+  script:
+    - pip install uv
+    - python .gitlab/ci/mcp_smoke.py "$VERSION" uvx --from "$PACKAGE" odoo-mcp
+    - uvx --from "$PACKAGE" odoo-mcp upgrade
+
+install:pip:
+  extends: [.from-wheel, .pip-script]
+
+install:pipx:
+  extends: [.from-wheel, .pipx-script]
+
+install:uv-tool:
+  extends: [.from-wheel, .uv-tool-script]
+
+install:uvx:
+  extends: [.from-wheel, .uvx-script]
+
+verify-pypi:pip:
+  extends: [.from-pypi, .pip-script]
+
+verify-pypi:pipx:
+  extends: [.from-pypi, .pipx-script]
+
+verify-pypi:uv-tool:
+  extends: [.from-pypi, .uv-tool-script]
+
+verify-pypi:uvx:
+  extends: [.from-pypi, .uvx-script]
 
 # ---------------------------------------------------------------------------
 # Auto-release: runs on main after lint+test pass.
@@ -225,6 +352,7 @@ auto-release:
       NEW_TAG=$(git describe --tags --exact-match HEAD)
       echo "==> Released: $NEW_TAG"
   rules:
+    - !reference [.not-on-schedule, rules]
     # Loop-prevention (layer 1): bump commits have [skip ci] so no pipeline.
     # Loop-prevention (layer 2): this rule never runs when commit IS a bump.
     - if: >-
@@ -259,6 +387,7 @@ release-notes:
     name: $CI_COMMIT_TAG
     description: release_notes.md
   rules:
+    - !reference [.not-on-schedule, rules]
     - if: $CI_COMMIT_TAG
 
 pages:
@@ -276,6 +405,7 @@ pages:
     paths:
       - public
   rules:
+    - !reference [.not-on-schedule, rules]
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     - if: $CI_COMMIT_TAG
 
@@ -287,6 +417,7 @@ publish:pypi:
     - python -m build
     - twine upload --verbose dist/*
   rules:
+    - !reference [.not-on-schedule, rules]
     - if: $CI_COMMIT_TAG
 
 publish:gitlab:
@@ -297,6 +428,7 @@ publish:gitlab:
     - python -m build
     - TWINE_PASSWORD=${CI_JOB_TOKEN} TWINE_USERNAME=gitlab-ci-token python -m twine upload --verbose --repository-url ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/pypi dist/*
   rules:
+    - !reference [.not-on-schedule, rules]
     - if: $CI_COMMIT_TAG
 
 # ---------------------------------------------------------------------------
@@ -317,6 +449,7 @@ notify-catalog:
       -F "variables[SOURCE_TAG]=$CI_COMMIT_TAG"
       https://git.vauxoo.com/api/v4/projects/$CATALOG_PROJECT_ID/trigger/pipeline
   rules:
+    - !reference [.not-on-schedule, rules]
     - if: $CATALOG_TRIGGER_TOKEN && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     - if: $CATALOG_TRIGGER_TOKEN && $CI_COMMIT_TAG
 
@@ -341,6 +474,7 @@ mirror-to-github:
     - git remote add github git@github.com:Vauxoo/mcp.odoo.git || true
     - git push github HEAD:main --force --tags
   rules:
+    - !reference [.not-on-schedule, rules]
     - if: $CI_COMMIT_BRANCH == "main"
   needs: []
 
@@ -358,5 +492,6 @@ notify_catalog:
       -F "variables[SOURCE_TAG]=$CI_COMMIT_TAG"
       https://git.vauxoo.com/api/v4/projects/$CATALOG_PROJECT_ID/trigger/pipeline
   rules:
+    - !reference [.not-on-schedule, rules]
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
     - if: $CI_COMMIT_TAG

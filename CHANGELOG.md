@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Per-profile TLS trust, so a corporate proxy no longer forces `--no-verify`: `--ca-bundle <pem>` trusts that CA on every transport (XML-RPC, JSON-RPC, JSON-2) instead of the default store, and `--no-ssl-strict` relaxes only Python 3.13+'s `VERIFY_X509_STRICT` for a CA whose `basicConstraints` is not critical — chain and hostname are still verified. Both are on `add-profile` and `edit-profile` (`--clear-ca-bundle` undoes the first) and stored as `ca_bundle` / `ssl_strict` in `profiles.json`. Profiles that set neither behave exactly as before.
 - Python 3.13 and 3.14 are now declared supported. Every pipeline installs the built wheel on a bare image for each of 3.10–3.14 and runs the whole suite against it — no test is skipped by Python version — then reports the combined line and branch coverage.
+- uv (`uv tool install`), uvx, pipx and pip are documented as equal options, with the extra step uv and pipx need before `odoo-mcp` is on `PATH` and the absolute-path fallback for GUI MCP clients. CI installs the wheel with each of them on Python 3.10 and 3.14, speaks MCP to the server the way a client does and runs `odoo-mcp upgrade`; after every release, and on a schedule, it repeats that against PyPI.
 
 ### Fixed
 
