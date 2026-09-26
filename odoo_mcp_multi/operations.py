@@ -147,7 +147,7 @@ def _get_client(profile_name: Optional[str] = None):
             password=active_profile.password or "",
             api_key=active_profile.api_key or "",
             protocol=active_profile.protocol,
-            verify=active_profile.verify,
+            verify=active_profile.ssl_verify(),
             timeout=_default_timeout,
         )
 

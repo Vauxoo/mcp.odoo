@@ -486,3 +486,26 @@ def test_ssl_error_hint_offers_trust_before_opt_out():
     message = str(ssl_verification_error(Exception("certificate verify failed")))
     assert message.index("--ca-bundle") < message.index("--no-verify")
     assert "never one to apply automatically" in message
+
+
+@pytest.mark.parametrize("timeout", [None, 60])
+def test_get_client_passes_the_profile_trust_settings(monkeypatch, timeout):
+    """``serve`` sets a default timeout, which takes its own create_client call;
+    both calls must hand the transports the profile's CA bundle and strict mode."""
+    import ssl
+
+    import certifi
+
+    from odoo_mcp_multi import operations
+
+    profile = OdooProfile(
+        name="p", url="https://odoo.example.com", database="db", user="u", password="x", ca_bundle=certifi.where()
+    )
+    monkeypatch.setattr(operations, "resolve_active_profile", lambda name=None: profile)
+    monkeypatch.setattr(operations, "_default_timeout", timeout)
+    seen = {}
+    monkeypatch.setattr(operations, "create_client", lambda **kw: seen.update(kw))
+
+    operations._get_client()
+
+    assert isinstance(seen["verify"], ssl.SSLContext)

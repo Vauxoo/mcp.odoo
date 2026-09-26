@@ -36,6 +36,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `odoo-mcp test` ignored the profile's `verify` setting, so it failed on a `verify: false` profile the server itself connected to.
 - `odoo-mcp upgrade` works for every installer: under `uv tool install` it failed with `No module named pip`, and uvx or a uv-created venv were taken for plain pip. It also no longer mistakes an editable checkout in a uv venv for a PyPI install it could overwrite.
+- The metadata cache tolerates two threads evicting the same expired entry, which used to surface as a spurious `list_models`/`list_fields` error now that tool calls run concurrently.
+- The `mcp` dependency floor was `>=1.0.0`, but the server fails to import on anything older than `mcp` 1.14.0 (`issubclass() arg 1 must be a class` while registering tools). The floor is now `>=1.14.0`.
+- `serve` ignored a profile's `ca_bundle` and `ssl_strict`: the timeout it sets takes a separate client-creation path that still passed the bare `verify` flag, so a profile behind a corporate CA failed over HTTP while it worked over stdio.
 
 ## [0.16.0] - 2026-09-02
 
