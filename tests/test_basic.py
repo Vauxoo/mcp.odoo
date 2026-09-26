@@ -1,8 +1,8 @@
 import json
-import os
 import re
 from pathlib import Path
 
+import odoo_mcp_multi
 from odoo_mcp_multi import __version__, cli, config, server, utils
 
 
@@ -19,19 +19,10 @@ def test_version():
     assert __version__ == "0.16.0"
 
 
-def test_suite_runs_against_the_installed_wheel():
-    """CI sets ODOO_MCP_TEST_INSTALLED: the suite must exercise site-packages, not the checkout.
-
-    `python -m pytest` or the default import mode would put the checkout first on sys.path
-    and silently test the source tree instead of what users install.
-    """
-    if not os.environ.get("ODOO_MCP_TEST_INSTALLED"):
-        return
-    assert "site-packages" in Path(config.__file__).parts
-
-
 REPO_ROOT = Path(__file__).parent.parent
-PLUGIN_DIR = REPO_ROOT / "odoo_mcp_multi" / "plugins" / "odoo-mcp"
+# The installed package, not the checkout: CI deletes the checkout copy so the suite can only
+# test the wheel, and reading the plugin from it also proves the wheel ships it.
+PLUGIN_DIR = Path(odoo_mcp_multi.__file__).parent / "plugins" / "odoo-mcp"
 
 
 def test_changelog_release_contract():
@@ -69,8 +60,8 @@ def test_claude_plugin_manifest():
 
     # The skills override must point at the packaged skills so the pip
     # layout and the plugin layout stay a single source of truth.
-    skills_dir = REPO_ROOT / data["skills"]
-    assert skills_dir.resolve() == (PLUGIN_DIR / "skills").resolve()
+    assert Path(data["skills"]) == Path("odoo_mcp_multi/plugins/odoo-mcp/skills")
+    skills_dir = PLUGIN_DIR / "skills"
     bundled = [p.name for p in skills_dir.iterdir() if (p / "SKILL.md").exists()]
     assert len(bundled) >= 3
 

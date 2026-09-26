@@ -99,10 +99,10 @@ test-python:
   script:
     - pip install --upgrade pip
     - pip install "$(ls dist/*.whl)[dev]"
-    # `pytest` rather than `python -m pytest`, and importlib mode: neither puts
-    # the checkout on sys.path, so the tests import the installed wheel —
-    # test_suite_runs_against_the_installed_wheel fails if that ever changes.
-    - ODOO_MCP_TEST_INSTALLED=1 pytest --import-mode=importlib
+    # With the checkout's copy gone, the only importable odoo_mcp_multi is the
+    # wheel, whatever way pytest is invoked.
+    - rm -rf odoo_mcp_multi
+    - pytest
   artifacts:
     paths:
       - .coverage.${PYTHON}

@@ -5,10 +5,12 @@ from __future__ import annotations
 import datetime
 import ipaddress
 import ssl
-import sys
 import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from unittest.mock import MagicMock, patch
+from xmlrpc.server import SimpleXMLRPCRequestHandler, SimpleXMLRPCServer
 
+import certifi
 import httpx
 import pytest
 from cryptography import x509
@@ -328,38 +330,47 @@ def _issue_chain(tmp_path, ca_constraints_critical: bool = True):
     return str(ca_pem), str(cert_pem), str(key_pem)
 
 
-@pytest.fixture
-def tls_odoo(tmp_path, request):
-    """An HTTPS server on 127.0.0.1 answering JSON-RPC and XML-RPC ``authenticate`` with uid 7.
+class _JsonRpcHandler(BaseHTTPRequestHandler):
+    """Answers every POST as the JSON-RPC ``authenticate`` call, with uid 7."""
 
-    Parametrize indirectly with ``False`` for a CA whose basicConstraints is not critical.
-    """
-    from http.server import ThreadingHTTPServer
-    from xmlrpc.server import SimpleXMLRPCRequestHandler, SimpleXMLRPCServer
+    def do_POST(self):
+        self.rfile.read(int(self.headers["Content-Length"]))
+        body = b'{"jsonrpc": "2.0", "id": 1, "result": 7}'
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
 
-    ca_pem, cert_pem, key_pem = _issue_chain(tmp_path, ca_constraints_critical=getattr(request, "param", True))
-
-    class Handler(SimpleXMLRPCRequestHandler):
-        rpc_paths = ("/xmlrpc/2/common",)
-
-        def do_POST(self):
-            if self.path != "/jsonrpc":
-                return super().do_POST()
-            self.rfile.read(int(self.headers["Content-Length"]))
-            body = b'{"jsonrpc": "2.0", "id": 1, "result": 7}'
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-
-        def log_message(self, *_args):
-            pass
-
-    class Server(ThreadingHTTPServer, SimpleXMLRPCServer):
+    def log_message(self, *_args):
         pass
 
-    server = Server(("127.0.0.1", 0), requestHandler=Handler, logRequests=False)
+
+class _XmlRpcHandler(SimpleXMLRPCRequestHandler):
+    rpc_paths = ("/xmlrpc/2/common",)
+
+    def log_message(self, *_args):
+        pass
+
+
+class _TlsServer(ThreadingHTTPServer, SimpleXMLRPCServer):
+    pass
+
+
+HANDLERS = {JsonRpcClient: _JsonRpcHandler, XmlRpcClient: _XmlRpcHandler}
+
+
+@pytest.fixture
+def ca_constraints_critical():
+    """An RFC 5280 compliant CA; parametrize to False for one whose basicConstraints is not critical."""
+    return True
+
+
+@pytest.fixture
+def tls_odoo(tmp_path, client_class, ca_constraints_critical):
+    """An HTTPS server on 127.0.0.1 speaking ``client_class``'s protocol, whose ``authenticate`` returns 7."""
+    ca_pem, cert_pem, key_pem = _issue_chain(tmp_path, ca_constraints_critical)
+    server = _TlsServer(("127.0.0.1", 0), requestHandler=HANDLERS[client_class], logRequests=False)
     server.register_function(lambda *_args: 7, "authenticate")
     server_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     server_context.load_cert_chain(cert_pem, key_pem)
@@ -376,6 +387,30 @@ def _authenticate(client_class, url: str, verify) -> int:
     return client.authenticate()
 
 
+def _patch_default_flags(monkeypatch, adjust):
+    """Make ``ssl.create_default_context`` return a context whose verify_flags ``adjust`` rewrote."""
+    create_default_context = ssl.create_default_context
+
+    def create_context(*args, **kwargs):
+        context = create_default_context(*args, **kwargs)
+        context.verify_flags = adjust(context.verify_flags)
+        return context
+
+    monkeypatch.setattr(ssl, "create_default_context", create_context)
+
+
+@pytest.fixture
+def strict_by_default(monkeypatch):
+    """The default context sets VERIFY_X509_STRICT, as Python 3.13+ does, whatever Python runs the test."""
+    _patch_default_flags(monkeypatch, lambda flags: flags | ssl.VERIFY_X509_STRICT)
+
+
+@pytest.fixture
+def lenient_by_default(monkeypatch):
+    """The default context leaves VERIFY_X509_STRICT off, as Python 3.10-3.12 do, whatever Python runs the test."""
+    _patch_default_flags(monkeypatch, lambda flags: flags & ~ssl.VERIFY_X509_STRICT)
+
+
 @pytest.mark.parametrize("client_class", [JsonRpcClient, XmlRpcClient])
 def test_ca_bundle_trusts_a_private_ca(tls_odoo, client_class):
     """The default trust store refuses the private CA; the profile's ca_bundle makes it verify."""
@@ -385,48 +420,32 @@ def test_ca_bundle_trusts_a_private_ca(tls_odoo, client_class):
     assert _authenticate(client_class, url, build_ssl_verify(True, ca_bundle=ca_pem)) == 7
 
 
-@pytest.fixture
-def strict_by_default(monkeypatch):
-    """Make ``ssl.create_default_context`` set VERIFY_X509_STRICT, as Python 3.13+ does.
-
-    What ssl_strict=False relaxes must be tested on every supported Python, not only on the
-    ones whose default happens to enable it.
-    """
-    create_default_context = ssl.create_default_context
-
-    def create_strict_context(*args, **kwargs):
-        context = create_default_context(*args, **kwargs)
-        context.verify_flags |= ssl.VERIFY_X509_STRICT
-        return context
-
-    monkeypatch.setattr(ssl, "create_default_context", create_strict_context)
-
-
-@pytest.mark.parametrize("tls_odoo", [False], indirect=True)
+@pytest.mark.parametrize("ca_constraints_critical", [False])
 @pytest.mark.parametrize("client_class", [JsonRpcClient, XmlRpcClient])
 def test_ssl_strict_off_accepts_non_critical_basic_constraints(tls_odoo, client_class, strict_by_default):
-    """A trusted CA with non-critical basicConstraints fails under STRICT and verifies once it is relaxed."""
+    """On a strict Python the CA fails with the default ssl_strict, and verifies once it is relaxed."""
     url, ca_pem = tls_odoo
     with pytest.raises(OdooSSLVerificationError, match="not marked critical"):
         _authenticate(client_class, url, build_ssl_verify(True, ca_bundle=ca_pem))
     assert _authenticate(client_class, url, build_ssl_verify(True, ca_bundle=ca_pem, ssl_strict=False)) == 7
 
 
-@pytest.mark.parametrize("tls_odoo", [False], indirect=True)
+@pytest.mark.parametrize("ca_constraints_critical", [False])
 @pytest.mark.parametrize("client_class", [JsonRpcClient, XmlRpcClient])
-def test_ssl_strict_follows_the_python_default(tls_odoo, client_class):
-    """ssl_strict=True means "what this Python does": 3.13+ refuses the CA, older versions accept it.
-
-    Pins the documented difference between versions, so a Python or OpenSSL upgrade that
-    changes it fails here instead of surprising a user.
-    """
+def test_lenient_python_accepts_non_critical_basic_constraints(tls_odoo, client_class, lenient_by_default):
+    """On a Python without STRICT the same CA verifies untouched: ssl_strict adds no check of its own."""
     url, ca_pem = tls_odoo
-    verify = build_ssl_verify(True, ca_bundle=ca_pem)
-    if sys.version_info >= (3, 13):
-        with pytest.raises(OdooSSLVerificationError, match="not marked critical"):
-            _authenticate(client_class, url, verify)
-    else:
-        assert _authenticate(client_class, url, verify) == 7
+    assert _authenticate(client_class, url, build_ssl_verify(True, ca_bundle=ca_pem)) == 7
+
+
+def test_ssl_strict_keeps_the_python_default_flags():
+    """ssl_strict=True means "what this Python does": the context carries exactly its default flags.
+
+    Holds on every version, so the two tests above, which pin each default, also describe the
+    Python running the suite.
+    """
+    context = build_ssl_verify(True, ca_bundle=certifi.where())
+    assert context.verify_flags == ssl.create_default_context().verify_flags
 
 
 def test_build_ssl_verify_keeps_plain_values_by_default():
