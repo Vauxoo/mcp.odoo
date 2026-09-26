@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+One odoo-mcp can now serve every session on your machine (`serve --auth local`, a Linux service via `odoo-mcp service install`) or remote users through OAuth (`serve`), and a profile can trust its own CA instead of `--no-verify`.
+
+Try: instala odoo-mcp como servicio para que todas mis sesiones de claude usen un solo servidor
+
 ### Security
 
 - A TLS certificate verification failure no longer downgrades the connection. Since 0.9.0 the XML-RPC, JSON-RPC and JSON-2 clients caught the error, set `self.verify = False` and replayed the same request, so an on-path attacker collected the password (or the `Authorization: bearer` API key) just by presenting a certificate that fails to validate, and every later call on that client stayed unverified. The three transports now propagate `OdooSSLVerificationError`. **This refuses connections that used to work**: the explicit opt-in is unchanged, so trust the CA (`SSL_CERT_FILE`) or run `odoo-mcp edit-profile <name> --no-verify`. `docs/windows-install.md` walks through the corporate-proxy case.
