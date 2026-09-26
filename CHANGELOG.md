@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-09-26
+
 One odoo-mcp can now serve every session on your machine (`serve --auth local`, a Linux service via `odoo-mcp service install`) or remote users through OAuth (`serve`), and a profile can trust its own CA instead of `--no-verify`.
 
 Try: instala odoo-mcp como servicio para que todas mis sesiones de claude usen un solo servidor
