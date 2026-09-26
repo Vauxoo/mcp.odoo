@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - `odoo-mcp test` ignored the profile's `verify` setting, so it failed on a `verify: false` profile the server itself connected to.
+- `odoo-mcp upgrade` works for every installer: under `uv tool install` it failed with `No module named pip`, and uvx or a uv-created venv were taken for plain pip. It also no longer mistakes an editable checkout in a uv venv for a PyPI install it could overwrite.
 
 ## [0.16.0] - 2026-09-02
 

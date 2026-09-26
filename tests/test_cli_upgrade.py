@@ -1,14 +1,16 @@
 """Tests for the `odoo-mcp upgrade` self-update command.
 
-Covers three installation contexts:
+Covers the installation contexts:
 - Editable (pip install -e .): recommends git pull
 - pipx: runs pipx upgrade
+- uv tool install: runs uv tool upgrade
+- uvx: nothing installed, explains how to refresh the cache
 - Regular pip: runs pip install --upgrade
 
 Also tests --force flag and failure handling.
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from click.testing import CliRunner
 
@@ -22,44 +24,91 @@ runner = CliRunner()
 # ---------------------------------------------------------------------------
 
 
-@patch("odoo_mcp_multi.cli.subprocess.run")
-def test_detect_editable_install(mock_run):
-    """Detects editable install from 'Editable project location' in pip show."""
+def _detect_in(prefix, executable="/usr/bin/python3", editable=False) -> str:
+    """Run the detection as if the interpreter lived in ``prefix``."""
     from odoo_mcp_multi.cli import _detect_install_context
 
-    mock_run.return_value = MagicMock(
-        returncode=0,
-        stdout="Name: odoo-mcp-multi\nEditable project location: /src/odoo-mcp\n",
-    )
-    assert _detect_install_context() == "editable"
+    with (
+        patch("odoo_mcp_multi.cli.sys") as mock_sys,
+        patch("odoo_mcp_multi.cli._is_editable_install", return_value=editable),
+    ):
+        mock_sys.prefix = str(prefix)
+        mock_sys.executable = executable
+        return _detect_install_context()
 
 
-@patch("odoo_mcp_multi.cli.subprocess.run")
-def test_detect_pipx_install(mock_run):
+def _uv_venv(prefix):
+    """A venv as uv creates it: cache tag, and uv's version in pyvenv.cfg."""
+    prefix.mkdir(parents=True, exist_ok=True)
+    (prefix / "CACHEDIR.TAG").touch()
+    (prefix / "pyvenv.cfg").write_text("home = /usr/bin\nuv = 0.11.2\n", encoding="utf-8")
+    return prefix
+
+
+def test_detect_uv_tool_install(tmp_path):
+    """`uv tool install` is recognised by its receipt; its venv has no pip to ask."""
+    prefix = _uv_venv(tmp_path / "tools" / "odoo-mcp-multi")
+    (prefix / "uv-receipt.toml").touch()
+    assert _detect_in(prefix) == "uv-tool"
+
+
+def test_detect_editable_uv_tool_install(tmp_path):
+    """`uv tool install -e .` has a receipt too, but must not be upgraded from PyPI over the checkout."""
+    prefix = _uv_venv(tmp_path / "tools" / "odoo-mcp-multi")
+    (prefix / "uv-receipt.toml").touch()
+    assert _detect_in(prefix, editable=True) == "editable"
+
+
+def test_detect_uvx_run(tmp_path):
+    """uvx runs from an archive-v* entry of the uv cache."""
+    assert _detect_in(_uv_venv(tmp_path / "archive-v0" / "QrNLKKeBTi2a")) == "uvx"
+
+
+def test_detect_editable_install_in_a_uv_venv(tmp_path):
+    """An editable checkout in a uv-created venv stays 'editable', so upgrade never overwrites it."""
+    assert _detect_in(_uv_venv(tmp_path / ".venv"), editable=True) == "editable"
+
+
+def test_detect_uv_venv_install(tmp_path):
+    """A regular install in a venv uv created is upgraded through uv, not the missing pip."""
+    assert _detect_in(_uv_venv(tmp_path / ".venv")) == "uv-venv"
+
+
+def test_detect_pipx_install(tmp_path):
     """Detects pipx install from sys.executable path containing 'pipx'."""
-    from odoo_mcp_multi.cli import _detect_install_context
+    executable = "/Users/nhomar/.local/pipx/venvs/odoo-mcp-multi/bin/python"
+    assert _detect_in(tmp_path, executable=executable) == "pipx"
 
-    mock_run.return_value = MagicMock(
-        returncode=0,
-        stdout="Name: odoo-mcp-multi\nVersion: 0.8.1\n",
+
+def test_detect_pipx_install_built_by_uv(tmp_path):
+    """pipx builds its venvs with uv when uv is installed; it is still upgraded through pipx."""
+    prefix = _uv_venv(tmp_path / "pipx" / "venvs" / "odoo-mcp-multi")
+    assert _detect_in(prefix, executable=f"{prefix}/bin/python") == "pipx"
+
+
+def test_detect_pip_install(tmp_path):
+    """Detects regular pip install when not editable, not pipx and not uv."""
+    assert _detect_in(tmp_path) == "pip"
+
+
+@patch("odoo_mcp_multi.cli.importlib.metadata.distribution")
+def test_editable_install_read_from_direct_url(mock_distribution):
+    """PEP 610: an editable install records dir_info.editable in direct_url.json."""
+    from odoo_mcp_multi.cli import _is_editable_install
+
+    mock_distribution.return_value.read_text.return_value = (
+        '{"url": "file:///src/odoo-mcp", "dir_info": {"editable": true}}'
     )
-    with patch("odoo_mcp_multi.cli.sys") as mock_sys:
-        mock_sys.executable = "/Users/nhomar/.local/pipx/venvs/odoo-mcp-multi/bin/python"
-        assert _detect_install_context() == "pipx"
+    assert _is_editable_install() is True
 
 
-@patch("odoo_mcp_multi.cli.subprocess.run")
-def test_detect_pip_install(mock_run):
-    """Detects regular pip install when not editable and not pipx."""
-    from odoo_mcp_multi.cli import _detect_install_context
+@patch("odoo_mcp_multi.cli.importlib.metadata.distribution")
+def test_index_install_has_no_direct_url(mock_distribution):
+    """A wheel from an index writes no direct_url.json, so it is not editable."""
+    from odoo_mcp_multi.cli import _is_editable_install
 
-    mock_run.return_value = MagicMock(
-        returncode=0,
-        stdout="Name: odoo-mcp-multi\nVersion: 0.8.1\n",
-    )
-    with patch("odoo_mcp_multi.cli.sys") as mock_sys:
-        mock_sys.executable = "/usr/bin/python3"
-        assert _detect_install_context() == "pip"
+    mock_distribution.return_value.read_text.return_value = None
+    assert _is_editable_install() is False
 
 
 # ---------------------------------------------------------------------------
@@ -90,6 +139,42 @@ def test_upgrade_pipx(mock_run, mock_ctx):
     call_args = mock_run.call_args[0][0]
     assert "pipx" in call_args
     assert "upgrade" in call_args
+
+
+# ---------------------------------------------------------------------------
+# uv tool install — runs uv tool upgrade; uvx — nothing to upgrade
+# ---------------------------------------------------------------------------
+
+
+@patch("odoo_mcp_multi.cli._detect_install_context", return_value="uv-tool")
+@patch("odoo_mcp_multi.cli._run_upgrade_command")
+def test_upgrade_uv_tool(mock_run, mock_ctx):
+    """uv tool install runs 'uv tool upgrade odoo-mcp-multi' and reads uv's up-to-date wording."""
+    mock_run.return_value = (0, "Nothing to upgrade")
+    result = runner.invoke(main, ["upgrade"])
+    assert result.exit_code == 0
+    assert mock_run.call_args[0][0] == ["uv", "tool", "upgrade", "odoo-mcp-multi"]
+    assert "already at the latest version" in result.output.lower()
+
+
+@patch("odoo_mcp_multi.cli._detect_install_context", return_value="uv-venv")
+@patch("odoo_mcp_multi.cli._run_upgrade_command")
+def test_upgrade_uv_venv(mock_run, mock_ctx):
+    """A uv-created venv is upgraded with `uv pip`, targeting this interpreter."""
+    mock_run.return_value = (0, "Installed 1 package")
+    result = runner.invoke(main, ["upgrade"])
+    assert result.exit_code == 0
+    assert mock_run.call_args[0][0][:5] == ["uv", "pip", "install", "--upgrade", "--python"]
+
+
+@patch("odoo_mcp_multi.cli._detect_install_context", return_value="uvx")
+@patch("odoo_mcp_multi.cli._run_upgrade_command")
+def test_upgrade_uvx_explains_the_cache(mock_run, mock_ctx):
+    """Under uvx there is no install to upgrade: explain @latest instead of running anything."""
+    result = runner.invoke(main, ["upgrade"])
+    assert result.exit_code == 0
+    assert "uvx --from odoo-mcp-multi@latest" in result.output
+    mock_run.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

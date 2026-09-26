@@ -7,6 +7,7 @@ the MCP tool interface. Both interfaces share logic via operations.py.
 
 from __future__ import annotations
 
+import importlib.metadata
 import json
 import re
 import shutil
@@ -1118,21 +1119,38 @@ main.add_command(cmd_plugins, name="skills")
 PACKAGE_NAME = "odoo-mcp-multi"
 
 
+def _is_editable_install() -> bool:
+    """Read PEP 610's direct_url.json, which every installer writes; `pip show` needs pip in the venv."""
+    direct_url = importlib.metadata.distribution(PACKAGE_NAME).read_text("direct_url.json") or "{}"
+    return json.loads(direct_url).get("dir_info", {}).get("editable", False)
+
+
 def _detect_install_context() -> str:
     """Determine how odoo-mcp-multi was installed.
 
-    Returns one of 'editable', 'pipx', or 'pip' so the upgrade command
-    can invoke the right tool without cross-contaminating environments.
+    Returns one of 'editable', 'uv-tool', 'uvx', 'pipx', 'uv-venv', or 'pip'
+    so the upgrade command can invoke the right tool without
+    cross-contaminating environments. Editable comes first whatever made it
+    (`pip install -e`, `uv tool install -e`), so a checkout is never
+    overwritten from PyPI. uv environments carry no pip, so they are
+    recognised by what uv leaves behind: `uv tool install` writes a receipt,
+    uvx runs from an ``archive-v*`` entry of the uv cache, and any other venv
+    uv created records ``uv = <version>`` in its pyvenv.cfg. pipx is checked
+    before that last marker because pipx builds its venvs with uv whenever
+    uv is installed.
     """
-    result = subprocess.run(
-        [sys.executable, "-m", "pip", "show", PACKAGE_NAME],
-        capture_output=True,
-        text=True,
-    )
-    if "Editable project location" in result.stdout:
+    if _is_editable_install():
         return "editable"
+    prefix = Path(sys.prefix)
+    if (prefix / "uv-receipt.toml").exists():
+        return "uv-tool"
+    if prefix.parent.name.startswith("archive-v"):
+        return "uvx"
     if "pipx" in sys.executable:
         return "pipx"
+    pyvenv_cfg = prefix / "pyvenv.cfg"
+    if pyvenv_cfg.exists() and re.search(r"^uv\s*=", pyvenv_cfg.read_text(encoding="utf-8"), re.MULTILINE):
+        return "uv-venv"
     return "pip"
 
 
@@ -1195,7 +1213,7 @@ def cmd_get_financial_report(report, date_from, date_to, date_filter, fmt, profi
 def cmd_upgrade(force) -> None:
     """Self-update odoo-mcp-multi to the latest version.
 
-    Detects the installation method (pip, pipx, or editable) and runs
+    Detects the installation method (pip, pipx, uv tool, uvx or editable) and runs
     the appropriate upgrade command. Editable installs are skipped
     unless --force is passed.
     """
@@ -1213,11 +1231,21 @@ def cmd_upgrade(force) -> None:
         )
         return
 
+    if context == "uvx":
+        click.secho(
+            "uvx runs a cached copy and installs nothing to upgrade. Run it once as "
+            f"'uvx --from {PACKAGE_NAME}@latest odoo-mcp --version' to refresh the cache.",
+            fg="yellow",
+        )
+        return
+
     pip_cmd = [sys.executable, "-m", "pip", "install", "--upgrade", PACKAGE_NAME]
     upgrade_commands = {
         "editable": pip_cmd,
         "pip": pip_cmd,
         "pipx": ["pipx", "upgrade", PACKAGE_NAME],
+        "uv-tool": ["uv", "tool", "upgrade", PACKAGE_NAME],
+        "uv-venv": ["uv", "pip", "install", "--upgrade", "--python", sys.executable, PACKAGE_NAME],
     }
     cmd = upgrade_commands[context]
 
@@ -1228,7 +1256,7 @@ def cmd_upgrade(force) -> None:
         click.secho(f"Upgrade failed (exit {exit_code}):\n{output}", fg="red", err=True)
         sys.exit(1)
 
-    if "already satisfied" in output.lower() or "already up" in output.lower():
+    if any(marker in output.lower() for marker in ("already satisfied", "already up", "nothing to upgrade")):
         click.secho(
             f"{TICK} Already at the latest version ({current_version}).",
             fg="green",
