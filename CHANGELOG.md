@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Tool calls sent in the same parallel batch can now run in any order, also over stdio; the bundled skills tell agents to send dependent calls one at a time.
 - MCP tools now run on a worker thread instead of the event loop. FastMCP calls synchronous tools inline, so a slow Odoo RPC blocked every other request in the same process; over HTTP that also stalled the OAuth endpoints, whose clients time out in ten seconds. Also makes long stdio calls interruptible.
 - `server.py` exposes a `build_server()` factory so a second transport can be configured independently. The module-level `mcp` singleton is unchanged for stdio.
 

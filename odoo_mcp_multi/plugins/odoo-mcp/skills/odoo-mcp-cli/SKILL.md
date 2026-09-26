@@ -1,7 +1,7 @@
 ---
 name: "odoo-mcp-cli"
-description: "Use this skill when you need to manage Odoo profiles or run data operations directly from the terminal using the odoo-mcp CLI. Triggers on: 'add profile', 'list profiles', 'test connection', 'search records cli', 'export records', 'import records cli', 'run mcp server', 'odoo-mcp command', 'delete records cli', 'unlink records'."
-last_validated: 2026-05-09
+description: "Use this skill when you need to manage Odoo profiles or run data operations directly from the terminal using the odoo-mcp CLI. Triggers on: 'add profile', 'list profiles', 'test connection', 'search records cli', 'export records', 'import records cli', 'run mcp server', 'shared mcp server', 'mcp over http', 'odoo-mcp command', 'delete records cli', 'unlink records'."
+last_validated: 2026-09-25
 ---
 
 # Odoo MCP CLI Commands Reference
@@ -132,33 +132,77 @@ Verifies that the stored credentials can connect to the Odoo instance.
 
 ---
 
-### `run` — Start the MCP Server
+### `run` — Start the MCP Server (stdio)
 
 ```bash
-# Start with all profiles available
+# stdio (default): serves the single client that launched the process
 odoo-mcp run
 
-# Lock to a specific profile
+# Fallback profile for tool calls that omit `profile`
 odoo-mcp run -p prod
 ```
+
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--profile` | `-p` | default profile | Fallback profile for tool calls that omit `profile` |
+
+Every client session starts its own `run` process (~60 MiB each). When many
+sessions stay open at once on one workstation, use `serve --auth local`
+instead.
 
 ---
 
 ### `serve` — Start the MCP Server over HTTP
 
-For remote clients. Users authenticate with their own Odoo credentials on a
-consent page, and every tool call runs as that Odoo user; the host's
-`profiles.json` is not used in this mode.
+One process for many clients. `--auth` picks who they are:
 
 ```bash
-# Local development, no authentication (loopback only)
-odoo-mcp serve --no-auth --port 5010
+# local: every MCP client on this machine, with this machine's profiles.json
+odoo-mcp serve --auth local --port 5010 [-p prod]
 
-# Served for real — --public-url is the exact URL users paste into their client
+# oauth (default): remote users sign in with their own Odoo credentials;
+# --public-url is the exact URL users paste into their client
 odoo-mcp serve --port 5010 --public-url https://odoo-mcp.example.com/mcp
 ```
 
-Inspect and revoke what it has issued:
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--auth` | | `oauth` | `local` or `oauth` |
+| `--profile` | `-p` | default profile | Fallback profile, `--auth local` only |
+| `--host` | | `127.0.0.1` | Bind address. `--auth local` only accepts `127.0.0.1`, `localhost` or `::1` |
+| `--port` | | `5010` | HTTP port (serves `http://HOST:PORT/mcp`) |
+| `--max-concurrency` | | `32` | Tool calls that run at once |
+
+#### `--auth local`
+
+All sessions share one process and the same profiles, and tool calls run in
+worker threads so a slow Odoo call from one session does not hold up the
+others. It has **no authentication** and the process holds the credentials of
+every profile, so:
+
+- It only binds loopback; `--host 0.0.0.0` or a LAN address exits with an
+  error. Do not work around it with a proxy, tunnel or port forward: that
+  exposes every configured Odoo instance to whoever can reach it. To serve
+  other machines use `--auth oauth`.
+- Loopback is shared by every OS user of the machine. Use it only on a
+  single-user workstation; on a shared host keep `run` (stdio).
+
+Register the running server in the client instead of the stdio command,
+for example in Claude Code:
+
+```bash
+claude mcp add -s user --transport http odoo http://127.0.0.1:5010/mcp
+```
+
+Profiles are read on every call, so `add-profile` and `edit-profile` take
+effect without restarting the server. Restart it after upgrading
+`odoo-mcp-multi`; clients reconnect on their own.
+
+#### `--auth oauth`
+
+For remote clients. Users authenticate with their own Odoo credentials on a
+consent page, and every tool call runs as that Odoo user; the host's
+`profiles.json` is not used. Inspect and revoke what it has issued:
 
 ```bash
 odoo-mcp http grants
@@ -431,3 +475,19 @@ odoo-mcp execute-kw -m sale.order --method action_confirm --args "[$ORDERS]" -p 
 IDS=$(odoo-mcp search-read -m res.partner -d "[('active','=',False)]" -f "id" -p prod | jq '[.records[].id]')
 odoo-mcp unlink -m res.partner -i "$IDS" -p prod
 ```
+
+### Example 5: One server for many sessions
+
+**User:** "I keep many sessions open and each one starts its own odoo-mcp"
+
+**Action:**
+
+```bash
+odoo-mcp serve --auth local --port 5010
+claude mcp add -s user --transport http odoo http://127.0.0.1:5010/mcp
+```
+
+Keep it on loopback. If the user also wants to reach it from another
+machine, explain that `--auth local` has no authentication and exposes every
+profile: install `odoo-mcp-multi` on that machine, or serve it with
+`--auth oauth`, where each user signs in with their own Odoo credentials.

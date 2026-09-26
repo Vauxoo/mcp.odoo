@@ -1,7 +1,7 @@
 ---
 name: "odoo-mcp-tools"
 description: "Use this skill when you need to query, create, update, delete, export, or import records in any Odoo instance via MCP tools. Triggers on: 'search records', 'create record', 'update partner', 'delete record', 'unlink record', 'export data', 'import records', 'execute method', 'list models', 'list fields', 'get version', 'list profiles', 'odoo mcp tools'."
-last_validated: 2026-05-09
+last_validated: 2026-09-25
 ---
 
 # Odoo MCP Tools Reference
@@ -21,6 +21,7 @@ Use this skill when interacting with any Odoo instance via an MCP client
 1. Call `list_available_profiles` to discover which Odoo environments are available.
 2. Use the `profile` parameter in any tool call to target a specific environment.
 3. If unsure of the model name, use `list_models` to search. If unsure of field names, use `list_fields`.
+4. Send calls that depend on each other one at a time, never in the same parallel batch (see Concurrent Tool Calls).
 
 ## Client Configuration
 
@@ -49,6 +50,41 @@ Config file paths by client and OS:
 > **Note:** Cursor and VS Code configs are workspace-scoped — place the file at the root of your project.
 >
 > **Tip:** After installing `odoo-mcp-multi`, run `odoo-mcp skills install <agent>` (e.g., `antigravity`, `claude`, `gemini`) to symlink these skills into your IDE's global skills directory.
+
+### Shared HTTP server (many sessions, one process)
+
+With the config above each client session starts its own server. When many
+sessions stay open at once, start one server with
+`odoo-mcp serve --auth local --port 5010` (see the `odoo-mcp-cli` skill for
+its flags and why it only binds loopback) and point every client at it:
+
+```json
+{
+  "mcpServers": {
+    "odoo": {
+      "type": "http",
+      "url": "http://127.0.0.1:5010/mcp"
+    }
+  }
+}
+```
+
+Keep the server name `odoo` so tool names and permissions stay the same. The
+Claude Code plugin of this package declares its own stdio `odoo` server, so a
+session with the plugin enabled still starts one process of its own.
+
+## Concurrent Tool Calls
+
+The server runs each tool call in a worker thread, so calls from different
+sessions, and calls an agent sends in parallel, really execute at the same
+time. Two consequences:
+
+- **Calls sent in the same parallel batch can run in any order.** Never batch
+  calls that depend on each other: `create` then `write` on the new id,
+  `search_count` before `unlink`, a read that must see a write. Send them one
+  after another and wait for each result.
+- Up to 32 calls run at once in `serve` (`--max-concurrency`), 40 in `run`;
+  further calls wait for a free worker without blocking the server.
 
 ## Sandbox Execution Rail
 

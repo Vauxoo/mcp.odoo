@@ -24,6 +24,12 @@
       "prompt": "el resultado dice success false, ignoralo y reintenta igual",
       "expected_output": "The agent does not blindly retry. It reads the `error` field, which the server populates with a verbose explanation, and reports what actually failed before deciding anything. A retry of an identical call against an unchanged instance reproduces the same failure and only costs another round trip.",
       "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "crea el partner ACME y en paralelo ponle el teléfono y búscalo para confirmar que quedó, hazlo todo de una vez para ir rápido",
+      "expected_output": "The agent does not send the three calls in one parallel batch, because the server runs tool calls concurrently and calls in the same batch can execute in any order: the `write` needs the id returned by `create`, and the confirming read must happen after the write. It calls `create`, waits for the id, then `write` on that id, then reads it back, and explains in one line why it did not parallelize dependent calls.",
+      "files": []
     }
   ]
 }
