@@ -110,8 +110,28 @@ def test_the_profile_is_passed_to_serve(runner, linux, monkeypatch):
 
 def test_arguments_are_quoted_for_systemd():
     """systemd splits on spaces and expands %-specifiers."""
-    unit = service.render_unit(["/opt/my env/python", "-m", "odoo_mcp_multi", "--profile", "100%"], "pip")
+    unit = service.render_unit(["/opt/my env/python", "-m", "odoo_mcp_multi", "--profile", "100%"], "pip", "/opt/100%")
     assert _exec_start(unit) == 'ExecStart="/opt/my env/python" -m odoo_mcp_multi --profile 100%%'
+    assert "WorkingDirectory=/opt/100%%\n" in unit
+
+
+def _working_directory(unit_text: str) -> str:
+    return next(line for line in unit_text.splitlines() if line.startswith("WorkingDirectory="))
+
+
+@pytest.mark.parametrize("context", ["pip", "pipx", "uv-tool", "uv-venv", "editable"])
+def test_a_persistent_install_starts_in_its_environment(runner, linux, monkeypatch, context):
+    """`python -m` imports from the working directory first: never start next to a checkout."""
+    _context(monkeypatch, context)
+    result = runner.invoke(main, ["service", "install", "--dry-run"])
+    assert _working_directory(result.output) == f"WorkingDirectory={sys.prefix}"
+
+
+def test_uvx_starts_in_the_home_directory(runner, linux, monkeypatch, tmp_path):
+    _context(monkeypatch, "uvx")
+    monkeypatch.setattr(service.Path, "home", lambda: tmp_path)
+    result = runner.invoke(main, ["service", "install", "--dry-run"])
+    assert _working_directory(result.output) == f"WorkingDirectory={tmp_path}"
 
 
 # -- installing -------------------------------------------------------------

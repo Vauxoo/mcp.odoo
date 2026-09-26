@@ -754,7 +754,7 @@ def cmd_service_install(port: int, host: str, profile: str, uvx_from: str, no_st
         serve_args = ["serve", "--auth", "local", "--host", host, "--port", str(port)]
         serve_args += ["--profile", profile] if profile else []
         command = service.exec_start(context, serve_args, uvx_from or f"{PACKAGE_NAME}=={__version__}")
-        unit_text = service.render_unit(command, context)
+        unit_text = service.render_unit(command, context, service.working_directory(context))
         if dry_run:
             click.echo(unit_text, nl=False)
             return

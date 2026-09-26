@@ -62,6 +62,11 @@ check_method() {  # $1: method, $2: install command, $3: odoo-mcp command, $4: E
     expect "unit runs the $METHOD environment" "yes" \
         "$(as_user "grep -q -- '$4' ~/.config/systemd/user/odoo-mcp.service && echo yes || echo no")"
     expect "systemd reports it active" "active" "$(as_user 'systemctl --user is-active odoo-mcp.service' || true)"
+    expect "the unit sets an absolute WorkingDirectory" "yes" \
+        "$(as_user "grep -q '^WorkingDirectory=/' ~/.config/systemd/user/odoo-mcp.service && echo yes || echo no")"
+    expect "it runs in the unit's WorkingDirectory, never next to a checkout" \
+        "$(as_user "sed -n 's/^WorkingDirectory=//p' ~/.config/systemd/user/odoo-mcp.service")" \
+        "$(readlink "/proc/$(as_user 'systemctl --user show -P MainPID odoo-mcp.service')/cwd")"
     expect "ping with the token" "200" "$(ping_status token)"
     expect "ping without the token" "401" "$(ping_status none)"
     expect "status exits 0" "0" "$(as_user "$cli service status >/dev/null; echo \$?")"

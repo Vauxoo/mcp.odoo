@@ -67,6 +67,18 @@ def exec_start(context: str, serve_args: list[str], uvx_from: str) -> list[str]:
     return [sys.executable, "-m", "odoo_mcp_multi", *serve_args]
 
 
+def working_directory(context: str) -> str:
+    """The directory the service starts in.
+
+    ``python -m`` puts the working directory first on ``sys.path``, so a unit
+    started next to an ``odoo_mcp_multi/`` folder (a checkout) would run that
+    code instead of the installed package. The environment's own prefix never
+    holds one. uvx runs a console script, which does not import from the
+    working directory, so the home directory is enough there.
+    """
+    return str(Path.home()) if context == "uvx" else sys.prefix
+
+
 def _quote(arg: str) -> str:
     """Quote one ExecStart argument the way systemd parses it (``%`` is a specifier)."""
     arg = arg.replace("%", "%%")
@@ -75,7 +87,7 @@ def _quote(arg: str) -> str:
     return '"' + arg.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
-def render_unit(command: list[str], context: str) -> str:
+def render_unit(command: list[str], context: str, workdir: str) -> str:
     """The unit file text."""
     return (
         "[Unit]\n"
@@ -85,6 +97,7 @@ def render_unit(command: list[str], context: str) -> str:
         "[Service]\n"
         f"# Written by `odoo-mcp service install` for a {context} install.\n"
         f"ExecStart={' '.join(_quote(arg) for arg in command)}\n"
+        f"WorkingDirectory={workdir.replace('%', '%%')}\n"
         "Environment=PYTHONUNBUFFERED=1\n"
         "Restart=on-failure\n"
         "RestartSec=2\n"

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The systemd unit `odoo-mcp service install` writes now sets `WorkingDirectory` to the install environment: `python -m` imports from the working directory first, so a service started next to a checkout could run that checkout instead of the installed package.
+
 ## [0.17.0] - 2026-09-26
 
 One odoo-mcp can now serve every session on your machine (`serve --auth local`, a Linux service via `odoo-mcp service install`) or remote users through OAuth (`serve`), and a profile can trust its own CA instead of `--no-verify`.
