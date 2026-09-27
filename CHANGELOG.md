@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `odoo-mcp upgrade` refreshes the skills `plugins install` copied for Codex, Hermes, Antigravity and the other agents, which otherwise kept describing the old version, and reminds to restart the shared server when a systemd unit or LaunchAgent runs it.
+- Docs: how to register the shared local server in Codex, Hermes, Antigravity and Gemini CLI, each checked with a real tool call, including the per-client approval setting and the config files that must stay 0600.
 - Docs: a macOS LaunchAgent recipe for the shared local server, which clients can use it (Claude Desktop cannot send the token header), Claude Code allow rules, and a "keep one install" check for machines where several copies shadow each other.
 
 ### Changed

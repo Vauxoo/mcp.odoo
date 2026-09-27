@@ -116,23 +116,35 @@ After `odoo-mcp upgrade`, restart it:
 `launchctl kickstart -k gui/$(id -u)/com.vauxoo.odoo-mcp`. To remove it:
 `launchctl bootout gui/$(id -u)/com.vauxoo.odoo-mcp` and delete the plist.
 
-### Which clients can use it
+### Registering clients
 
-| Client | Local HTTP server | Why |
+Every client below was checked against a running `serve --auth local` with a
+real tool call. `TOKEN` is the content of `~/.config/odoo-mcp/local-token`.
+
+| Client | How | Skip per-call approval |
 |---|---|---|
-| Claude Code | yes | `claude mcp add --transport http … --header "Authorization: Bearer …"` |
-| Claude Desktop | no, keep `odoo-mcp run` | its config file only launches commands and cannot send the token header |
-| Any client that sets HTTP headers | yes | same URL and header |
+| Claude Code | `claude mcp add -s user --transport http odoo http://127.0.0.1:5010/mcp --header "Authorization: Bearer $(cat ~/.config/odoo-mcp/local-token)"` | `"permissions": {"allow": ["mcp__odoo__*", "Bash(odoo-mcp:*)"]}` in `~/.claude/settings.json` |
+| Codex | `~/.codex/config.toml`: `[mcp_servers.odoo]` with `url = "http://127.0.0.1:5010/mcp"` and `[mcp_servers.odoo.http_headers]` `Authorization = "Bearer TOKEN"` | `default_tools_approval_mode = "approve"` under `[mcp_servers.odoo]` (found in Codex 0.155, undocumented) |
+| Hermes | `hermes config set mcp_servers.odoo.url http://127.0.0.1:5010/mcp` and `hermes config set mcp_servers.odoo.headers.Authorization "Bearer TOKEN"` | not needed |
+| Antigravity | `agy mcp add --header "Authorization: Bearer TOKEN" odoo http://127.0.0.1:5010/mcp` | `"mcp(odoo/*)"` in `permissions.allow` of `~/.gemini/antigravity-cli/settings.json`; headless runs deny MCP tools without it |
+| Gemini CLI | `gemini mcp add -s user -t http --trust -H "Authorization: Bearer TOKEN" odoo http://127.0.0.1:5010/mcp` | `--trust` |
+| Claude Desktop | cannot use it: its config file only launches commands and sends no headers | keep `odoo-mcp run` |
 
-Sessions that were already open when you registered the server do not see
-it: restart them (`claude --resume <id>` keeps the conversation).
+Things these clients do not tell you:
 
-In Claude Code, allow the tools once instead of approving every call, in
-`~/.claude/settings.json`:
-
-```json
-{ "permissions": { "allow": ["mcp__odoo__*", "Bash(odoo-mcp:*)"] } }
-```
+- **The token ends up in each client's config file.** Keep those files at
+  mode 0600: `~/.gemini/settings.json` and `~/.gemini/config/mcp_config.json`
+  are created 0644, and `agy mcp add` writes the latter back as 0644 every
+  time, so run `chmod 600` after it.
+- **Open sessions do not see a newly added server.** Restart them
+  (`claude --resume <id>` keeps the conversation).
+- **Gemini CLI** no longer serves individual Code Assist accounts ("migrate to
+  the Antigravity suite"); the configuration above is valid, but such an
+  account can only use it from Antigravity.
+- **Skills are separate from the server.** `odoo-mcp plugins install
+  codex|hermes|antigravity` copies them (Codex reads `~/.agents/skills`);
+  `odoo-mcp upgrade` refreshes existing copies. Claude Code gets them from
+  the marketplace plugin.
 
 What a tool may write is still bounded by each profile's `permissions` and
 by Odoo's access rights.
