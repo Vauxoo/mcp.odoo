@@ -171,7 +171,7 @@ async def test_host_profiles_are_not_listed_over_http(client, auth_store, record
     )
     assert response.status_code == 200, response.text
     payload = json.loads(response.json()["result"]["content"][0]["text"])
-    assert payload == []
+    assert payload == {"count": 0, "profiles": []}
 
 
 async def test_a_named_profile_cannot_escape_the_authorized_connection(client, auth_store, recording_create_client):

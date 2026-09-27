@@ -106,7 +106,10 @@ Lists all configured Odoo profiles with name, URL, database, and default status.
 
 ```python
 list_available_profiles()
+# -> {"count": 25, "profiles": [{"name": "prod", "url": "...", "database": "...", "is_default": true}, ...]}
 ```
+
+Report the number of profiles from `count`; do not count the list yourself.
 
 ---
 

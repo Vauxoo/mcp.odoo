@@ -113,9 +113,12 @@ def list_available_profiles() -> str:
     You can then pass the 'name' of a profile to other tools to target that specific instance.
 
     Returns:
-        JSON array containing names and basic info of available profiles.
+        JSON object: {"count": <number of profiles>, "profiles": [<name, url,
+        database, is_default>, ...]}. Read the total from "count" instead of
+        counting the list.
     """
-    return _json(op_list_profiles())
+    profiles = op_list_profiles()
+    return _json({"count": len(profiles), "profiles": profiles})
 
 
 def search_read(

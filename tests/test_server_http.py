@@ -130,7 +130,9 @@ async def test_local_mode_serves_the_tools_with_this_machines_profiles(http_serv
             tools = await session.list_tools()
             result = await session.call_tool("list_available_profiles", {})
     assert len(tools.tools) == 13
-    assert [p["name"] for p in json.loads(result.content[0].text)] == ["local-test"]
+    listing = json.loads(result.content[0].text)
+    assert listing["count"] == 1
+    assert [p["name"] for p in listing["profiles"]] == ["local-test"]
 
 
 def _ping(port: int, headers: dict) -> httpx.Response:

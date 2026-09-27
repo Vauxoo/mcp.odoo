@@ -34,7 +34,12 @@ Lists all configured Odoo profiles with name, URL, database, and default status.
 
 ```python
 list_available_profiles()
+# -> {"count": 25, "profiles": [{"name": "prod", "url": "...", "database": "...", "is_default": true}, ...]}
 ```
+
+`count` is the number of profiles, so an agent reports it instead of counting
+the list (small models miscount). Over OAuth the list is empty: the host's
+profiles belong to the operator.
 
 ---
 

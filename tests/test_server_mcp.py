@@ -76,7 +76,7 @@ async def test_list_available_profiles(mock_op):
     mock_op.return_value = [{"name": "prod", "url": "https://odoo.example.com"}]
     result = await mcp.call_tool("list_available_profiles", {})
     data = _json_data(result)
-    assert data[0]["name"] == "prod"
+    assert data == {"count": 1, "profiles": [{"name": "prod", "url": "https://odoo.example.com"}]}
     mock_op.assert_called_once()
 
 
@@ -415,7 +415,7 @@ async def test_metadata_always_allowed(mock_op):
 
     result = await mcp.call_tool("list_available_profiles", {})
     data = _json_data(result)
-    assert data[0]["name"] == "locked"
+    assert data["profiles"][0]["name"] == "locked"
 
     _set_fallback_ref(None)
 
