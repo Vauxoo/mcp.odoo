@@ -10,13 +10,23 @@ Covers the installation contexts:
 Also tests --force flag and failure handling.
 """
 
+import sys
 from unittest.mock import patch
 
+import pytest
 from click.testing import CliRunner
 
 from odoo_mcp_multi.cli import main
 
 runner = CliRunner()
+
+
+@pytest.fixture(autouse=True)
+def isolated_home(monkeypatch, tmp_path):
+    """Keep the post-upgrade steps from reading the real skill directories."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    return tmp_path
 
 
 # ---------------------------------------------------------------------------
@@ -236,3 +246,76 @@ def test_upgrade_force_bypasses_editable(mock_run, mock_ctx):
     result = runner.invoke(main, ["upgrade", "--force"])
     assert result.exit_code == 0
     mock_run.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# After a successful upgrade
+# ---------------------------------------------------------------------------
+
+
+def _skill_copy(path):
+    path.mkdir(parents=True)
+    (path / "SKILL.md").write_text("---\nname: x\n---\n")
+
+
+@patch("odoo_mcp_multi.cli._detect_install_context", return_value="uv-tool")
+@patch("odoo_mcp_multi.cli._run_upgrade_command")
+def test_upgrade_refreshes_every_copied_skill_directory_once(mock_run, mock_ctx, isolated_home):
+    """Copies keep describing the old version; symlinks follow the package on their own."""
+    _skill_copy(isolated_home / ".agents/skills/odoo-mcp-cli")
+    _skill_copy(isolated_home / ".hermes/skills/odoo-mcp-cli")
+    _skill_copy(isolated_home / ".gemini/config/plugins/odoo-mcp")
+    (isolated_home / ".kimi/skills").mkdir(parents=True)
+    (isolated_home / ".kimi/skills/odoo-mcp-cli").symlink_to(isolated_home / ".agents/skills/odoo-mcp-cli")
+    mock_run.return_value = (0, "Updated odoo-mcp-multi v0.17.0 -> v0.18.0")
+
+    result = runner.invoke(main, ["upgrade"])
+
+    assert result.exit_code == 0, result.output
+    refreshes = [c for c in mock_run.call_args_list if c.args[0][1:4] == ["-m", "odoo_mcp_multi", "plugins"]]
+    assert [c.args[0][5] for c in refreshes] == ["agents", "antigravity", "hermes"]
+    assert all(c.args[0][0] == sys.executable and c.kwargs["cwd"] == sys.prefix for c in refreshes)
+    assert "Refreshed the hermes skills" in result.output
+
+
+@patch("odoo_mcp_multi.cli._detect_install_context", return_value="pipx")
+@patch("odoo_mcp_multi.cli._run_upgrade_command")
+def test_a_failed_refresh_says_how_to_do_it_by_hand(mock_run, mock_ctx, isolated_home):
+    _skill_copy(isolated_home / ".hermes/skills/odoo-mcp-cli")
+    mock_run.side_effect = [(0, "upgraded package odoo-mcp-multi"), (1, "boom")]
+    result = runner.invoke(main, ["upgrade"])
+    assert result.exit_code == 0
+    assert "odoo-mcp plugins install hermes --force" in result.output
+
+
+@patch("odoo_mcp_multi.cli._detect_install_context", return_value="pipx")
+@patch("odoo_mcp_multi.cli._run_upgrade_command")
+def test_an_up_to_date_install_refreshes_nothing(mock_run, mock_ctx, isolated_home):
+    """pipx's own wording, which used to be reported as a successful upgrade."""
+    _skill_copy(isolated_home / ".hermes/skills/odoo-mcp-cli")
+    mock_run.return_value = (0, "odoo-mcp-multi is already at latest version 0.17.0 (location: /x)")
+    result = runner.invoke(main, ["upgrade"])
+    assert mock_run.call_count == 1
+    assert "already at the latest version" in result.output.lower()
+
+
+@patch("odoo_mcp_multi.cli._detect_install_context", return_value="uv-tool")
+@patch("odoo_mcp_multi.cli._run_upgrade_command")
+def test_upgrade_reminds_to_restart_the_systemd_service(mock_run, mock_ctx, isolated_home):
+    unit = isolated_home / ".config/systemd/user/odoo-mcp.service"
+    unit.parent.mkdir(parents=True)
+    unit.write_text("[Service]\n")
+    mock_run.return_value = (0, "Updated odoo-mcp-multi")
+    result = runner.invoke(main, ["upgrade"])
+    assert "run 'odoo-mcp service install' to restart it" in result.output
+
+
+@patch("odoo_mcp_multi.cli._detect_install_context", return_value="uv-tool")
+@patch("odoo_mcp_multi.cli._run_upgrade_command")
+def test_upgrade_reminds_to_restart_the_launch_agent(mock_run, mock_ctx, isolated_home):
+    plist = isolated_home / "Library/LaunchAgents/com.vauxoo.odoo-mcp.plist"
+    plist.parent.mkdir(parents=True)
+    plist.write_text("<plist/>")
+    mock_run.return_value = (0, "Updated odoo-mcp-multi")
+    result = runner.invoke(main, ["upgrade"])
+    assert "launchctl kickstart -k gui/$(id -u)/com.vauxoo.odoo-mcp" in result.output

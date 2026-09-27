@@ -1503,10 +1503,61 @@ def _detect_install_context() -> str:
     return "pip"
 
 
-def _run_upgrade_command(cmd: list[str]) -> tuple[int, str]:
+def _run_upgrade_command(cmd: list[str], cwd: str | None = None) -> tuple[int, str]:
     """Execute an upgrade subprocess and return (exit_code, output)."""
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd)
     return result.returncode, (result.stdout + result.stderr).strip()
+
+
+LAUNCH_AGENT_PLIST = "~/Library/LaunchAgents/com.vauxoo.odoo-mcp.plist"
+
+
+def _copied_skill_targets() -> list[str]:
+    """Agents whose odoo-mcp skills `plugins install` copied, one per directory.
+
+    Copies do not follow the package: after an upgrade they keep describing
+    the old version until reinstalled. Symlinked (dev) installs follow the
+    package on their own, and Claude Code gets the skills from the
+    marketplace plugin, so neither is listed.
+    """
+    targets, seen = [], set()
+    for agent, directory in AGENT_DIRS.items():
+        if agent == "claude":
+            continue
+        base = Path(directory).expanduser()
+        marker = base / _get_plugin_dir().name if agent in PLUGIN_AGENTS else base / "odoo-mcp-cli"
+        if marker in seen:
+            continue
+        seen.add(marker)
+        if marker.is_dir() and not marker.is_symlink():
+            targets.append(agent)
+    return targets
+
+
+def _after_upgrade() -> None:
+    """Bring what lives outside the package up to the new version."""
+    for agent in _copied_skill_targets():
+        # The new code is on disk; run it from the environment's prefix so
+        # `-m` cannot pick up a checkout from the current directory.
+        cmd = [sys.executable, "-m", "odoo_mcp_multi", "plugins", "install", agent, "--force"]
+        exit_code, output = _run_upgrade_command(cmd, cwd=sys.prefix)
+        if exit_code == 0:
+            click.secho(f"{TICK} Refreshed the {agent} skills", fg="green")
+        else:
+            click.secho(
+                f"Could not refresh the {agent} skills; run 'odoo-mcp plugins install {agent} --force'.\n{output}",
+                fg="yellow",
+            )
+
+    from odoo_mcp_multi import service
+
+    if service.unit_path().exists():
+        click.echo("The shared server still runs the old version: run 'odoo-mcp service install' to restart it.")
+    elif Path(LAUNCH_AGENT_PLIST).expanduser().exists():
+        click.echo(
+            "The shared server still runs the old version: "
+            "run 'launchctl kickstart -k gui/$(id -u)/com.vauxoo.odoo-mcp' to restart it."
+        )
 
 
 @main.command("get-financial-report")
@@ -1605,7 +1656,8 @@ def cmd_upgrade(force) -> None:
         click.secho(f"Upgrade failed (exit {exit_code}):\n{output}", fg="red", err=True)
         sys.exit(1)
 
-    if any(marker in output.lower() for marker in ("already satisfied", "already up", "nothing to upgrade")):
+    up_to_date = ("already satisfied", "already up", "already at latest", "nothing to upgrade")
+    if any(marker in output.lower() for marker in up_to_date):
         click.secho(
             f"{TICK} Already at the latest version ({current_version}).",
             fg="green",
@@ -1613,6 +1665,7 @@ def cmd_upgrade(force) -> None:
         return
 
     click.secho(f"{TICK} Upgrade successful!\n{output}", fg="green")
+    _after_upgrade()
 
 
 if __name__ == "__main__":
