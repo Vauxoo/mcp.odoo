@@ -7,11 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Read-only profiles are now read-only everywhere, CLI and `execute_kw` included, and `odoo-mcp upgrade` refreshes the skills copied for other agents.
+
+Try: configura mi perfil prod como solo lectura pero permitiendo message_post en project.task
+
+### Security
+
+- Profile permissions are now enforced by the CLI too (#15). The check lived only in the MCP tool layer, so `odoo-mcp unlink`, `execute-kw` and every other data command ran on a granular read-only profile. It now sits in `operations.py`, shared by stdio, HTTP and the CLI, and refuses before any RPC.
+- `execute_kw` no longer reopens a denied operation: on a granular profile it refuses the ORM methods behind one (`unlink`, `write`, `create`, `read`, `load`, `fields_get`…) unless that operation is allowed.
+
 ### Added
 
 - `odoo-mcp upgrade` refreshes the skills `plugins install` copied for Codex, Hermes, Antigravity and the other agents, which otherwise kept describing the old version, and reminds to restart the shared server when a systemd unit or LaunchAgent runs it.
 - Docs: how to register the shared local server in Codex, Hermes, Antigravity and Gemini CLI, each checked with a real tool call, including the per-client approval setting and the config files that must stay 0600.
 - Docs: a macOS LaunchAgent recipe for the shared local server, which clients can use it (Claude Desktop cannot send the token header), Claude Code allow rules, and a "keep one install" check for machines where several copies shadow each other.
+- `permissions.execute_kw_allow` in `profiles.json`: a list of `{"model": ..., "method": ...}` pairs (`*` matches any) that limits `execute_kw` on a granular profile to exactly those calls.
+- Every MCP tool carries `ToolAnnotations`: reads are `readOnlyHint`; `write`, `unlink`, `import_records` and `execute_kw` are `destructiveHint`.
 
 ### Changed
 

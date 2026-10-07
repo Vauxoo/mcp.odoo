@@ -645,3 +645,62 @@ def test_operation_enum_completeness():
     }
     actual = {op.value for op in Operation}
     assert actual == expected
+
+
+# ---------------------------------------------------------------------------
+# execute_kw method rules
+# ---------------------------------------------------------------------------
+
+
+def _execute_kw_profile(permissions):
+    return OdooProfile(
+        name="p", url="https://example.com", database="db", password=SecretStr("secret"), permissions=permissions
+    )
+
+
+def test_execute_kw_full_access_allows_any_method():
+    assert _execute_kw_profile(None).is_execute_kw_allowed("res.partner", "unlink") is True
+    assert _execute_kw_profile({"mode": "full"}).is_execute_kw_allowed("res.partner", "unlink") is True
+
+
+def test_execute_kw_denied_when_operation_not_allowed():
+    p = _execute_kw_profile({"mode": "granular", "allowed_operations": ["search_read"]})
+    assert p.is_execute_kw_allowed("res.partner", "search_count") is False
+
+
+def test_execute_kw_refuses_methods_of_denied_operations():
+    """Without an allowlist, execute_kw cannot reach an operation the profile denies."""
+    p = _execute_kw_profile({"mode": "granular", "allowed_operations": ["search_read", "execute_kw"]})
+    assert p.is_execute_kw_allowed("res.partner", "unlink") is False
+    assert p.is_execute_kw_allowed("res.partner", "write") is False
+    assert p.is_execute_kw_allowed("res.partner", "create") is False
+    assert p.is_execute_kw_allowed("res.partner", "read") is True
+    assert p.is_execute_kw_allowed("sale.order", "action_confirm") is True
+
+
+def test_execute_kw_allowlist_is_exclusive_and_supports_wildcards():
+    p = _execute_kw_profile(
+        {
+            "mode": "granular",
+            "allowed_operations": ["search_read", "execute_kw"],
+            "execute_kw_allow": [
+                {"model": "project.task", "method": "message_post"},
+                {"model": "res.partner"},
+                {"model": "*", "method": "unlink"},
+            ],
+        }
+    )
+    assert p.is_execute_kw_allowed("project.task", "message_post") is True
+    assert p.is_execute_kw_allowed("project.task", "action_done") is False
+    assert p.is_execute_kw_allowed("res.partner", "write") is True
+    assert p.is_execute_kw_allowed("sale.order", "unlink") is True
+    assert p.is_execute_kw_allowed("sale.order", "read") is False
+
+
+def test_execute_kw_allowlist_roundtrip():
+    rules = [{"model": "project.task", "method": "message_post"}]
+    p = _execute_kw_profile({"mode": "granular", "allowed_operations": ["execute_kw"], "execute_kw_allow": rules})
+    d = p.to_dict()
+    assert d["permissions"]["execute_kw_allow"] == rules
+    assert OdooProfile.from_dict(d).is_execute_kw_allowed("project.task", "message_post") is True
+    assert "execute_kw_allow" not in _execute_kw_profile({"mode": "granular"}).to_dict()["permissions"]

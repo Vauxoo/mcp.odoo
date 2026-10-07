@@ -549,3 +549,104 @@ def test_cli_plugins_install_warns_on_contract_violations(tmp_path, monkeypatch)
     assert "differs from directory name" in result.output
     assert "missing 'description'" in result.output
     assert "Successfully installed" in result.output
+
+
+# ---------------------------------------------------------------------------
+# Profile permissions are enforced by the CLI too
+# ---------------------------------------------------------------------------
+
+
+def _write_granular_profile(home, allowed, execute_kw_allow=None):
+    permissions = {"mode": "granular", "allowed_operations": allowed}
+    if execute_kw_allow is not None:
+        permissions["execute_kw_allow"] = execute_kw_allow
+    config_dir = home / ".config" / "odoo-mcp"
+    config_dir.mkdir(parents=True)
+    (config_dir / "profiles.json").write_text(
+        json.dumps(
+            {
+                "default_profile": "ro",
+                "profiles": {
+                    "ro": {
+                        "name": "ro",
+                        "url": "http://127.0.0.1:9",
+                        "database": "demo",
+                        "user": "admin",
+                        "password": "admin",
+                        "permissions": permissions,
+                    }
+                },
+            }
+        )
+    )
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["search-count", "-m", "res.partner"],
+        ["write", "-m", "res.partner", "-i", "1", "-v", '{"name": "X"}'],
+        ["unlink", "-m", "res.partner", "-i", "1"],
+        ["create", "-m", "res.partner", "-v", '{"name": "X"}'],
+        ["export-records", "-m", "res.partner"],
+        ["import-records", "-m", "res.partner", "-f", "name", "-r", '[{"name": "X"}]'],
+        ["execute-kw", "-m", "res.partner", "--method", "search_count", "-a", "[[]]"],
+        ["list-models"],
+        ["list-fields", "-m", "res.partner"],
+        ["get-financial-report", "-r", "1"],
+    ],
+)
+def test_cli_denies_operations_outside_the_profile(argv, tmp_path, monkeypatch):
+    """A read-only profile blocks every other data command before any RPC."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    _write_granular_profile(tmp_path, ["search_read"])
+
+    with patch("odoo_mcp_multi.operations.create_client") as create_client:
+        result = runner.invoke(main, [*argv, "-p", "ro"])
+
+    assert result.exit_code == 1
+    assert "is not allowed for profile 'ro'" in result.output
+    create_client.assert_not_called()
+
+
+def test_cli_allows_operations_in_the_profile(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    _write_granular_profile(tmp_path, ["search_count"])
+
+    with patch("odoo_mcp_multi.operations.create_client") as create_client:
+        create_client.return_value.execute_kw.return_value = 7
+        create_client.return_value.last_warning = None
+        result = runner.invoke(main, ["search-count", "-m", "res.partner", "-p", "ro"])
+
+    assert result.exit_code == 0
+    assert json.loads(result.output)["count"] == 7
+
+
+@pytest.mark.parametrize(
+    ("execute_kw_allow", "method", "allowed"),
+    [
+        (None, "unlink", False),
+        (None, "action_confirm", True),
+        ([{"model": "res.partner", "method": "message_post"}], "message_post", True),
+        ([{"model": "res.partner", "method": "message_post"}], "action_confirm", False),
+        ([{"model": "res.partner", "method": "unlink"}], "unlink", True),
+    ],
+)
+def test_cli_execute_kw_honours_method_rules(execute_kw_allow, method, allowed, tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    _write_granular_profile(tmp_path, ["search_read", "execute_kw"], execute_kw_allow)
+
+    with patch("odoo_mcp_multi.operations.create_client") as create_client:
+        create_client.return_value.execute_kw.return_value = True
+        create_client.return_value.last_warning = None
+        result = runner.invoke(
+            main, ["execute-kw", "-m", "res.partner", "--method", method, "-a", "[[1]]", "-p", "ro"]
+        )
+
+    if allowed:
+        assert result.exit_code == 0
+        create_client.return_value.execute_kw.assert_called_once()
+    else:
+        assert result.exit_code == 1
+        assert f"Method 'res.partner.{method}' is not allowed through execute_kw" in result.output
+        create_client.assert_not_called()

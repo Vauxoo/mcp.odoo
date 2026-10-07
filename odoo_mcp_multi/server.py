@@ -13,9 +13,10 @@ from typing import Any, Callable, Optional, Union
 
 import anyio
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 
-from odoo_mcp_multi.config import ALWAYS_ALLOWED_TOOLS
 from odoo_mcp_multi.operations import (
+    check_permission,
     op_create,
     op_execute_kw,
     op_export_records,
@@ -29,7 +30,6 @@ from odoo_mcp_multi.operations import (
     op_search_read,
     op_unlink,
     op_write,
-    resolve_active_profile,
     set_fallback_profile,
 )
 
@@ -84,26 +84,14 @@ def _json(data: Any) -> str:
     return json.dumps(data, indent=2, default=str, ensure_ascii=False)
 
 
-def _check_permission(tool_name: str, profile: str | None) -> str | None:
+def _check_permission(tool_name: str, profile: str | None, model: str = "", method: str = "") -> str | None:
     """Check if the resolved profile allows this operation.
 
     Returns None if allowed, or a JSON error string if denied.
     Metadata tools (list_available_profiles, get_version) are always allowed.
     """
-    if tool_name in ALWAYS_ALLOWED_TOOLS:
-        return None
-    try:
-        resolved = resolve_active_profile(profile, fallback=_fallback_profile)
-    except ValueError:
-        return None  # let the operation itself handle missing profiles
-    if not resolved.is_operation_allowed(tool_name):
-        return _json(
-            {
-                "success": False,
-                "error": f"Operation '{tool_name}' is not allowed for profile '{resolved.name}'.",
-            }
-        )
-    return None
+    denied = check_permission(tool_name, profile, fallback=_fallback_profile, model=model, method=method)
+    return _json(denied) if denied else None
 
 
 def list_available_profiles() -> str:
@@ -346,7 +334,7 @@ def execute_kw(
         - Send an email: model='mail.mail', method='send', args='[[123]]'
         - Get default values: model='res.partner', method='default_get', args='[["name", "email"]]'
     """
-    denied = _check_permission("execute_kw", profile)
+    denied = _check_permission("execute_kw", profile, model=model, method=method)
     if denied:
         return denied
     return _json(op_execute_kw(model, method, args, kwargs, profile))
@@ -482,6 +470,28 @@ _TOOLS: tuple[Callable[..., str], ...] = (
 )
 
 
+_READ_ONLY = ToolAnnotations(readOnlyHint=True)
+_ADDITIVE = ToolAnnotations(readOnlyHint=False, destructiveHint=False)
+_DESTRUCTIVE = ToolAnnotations(readOnlyHint=False, destructiveHint=True)
+
+# Behaviour hints sent with each tool so clients can tell reads from writes.
+_ANNOTATIONS: dict[str, ToolAnnotations] = {
+    "list_available_profiles": _READ_ONLY,
+    "search_read": _READ_ONLY,
+    "search_count": _READ_ONLY,
+    "write": _DESTRUCTIVE,
+    "unlink": _DESTRUCTIVE,
+    "create": _ADDITIVE,
+    "export_records": _READ_ONLY,
+    "import_records": _DESTRUCTIVE,
+    "execute_kw": _DESTRUCTIVE,
+    "get_version": _READ_ONLY,
+    "list_models": _READ_ONLY,
+    "list_fields": _READ_ONLY,
+    "get_financial_report": _READ_ONLY,
+}
+
+
 def _threaded(fn: Callable[..., str]) -> Callable[..., Any]:
     """Wrap a blocking tool so it runs off the event loop.
 
@@ -506,7 +516,7 @@ def _threaded(fn: Callable[..., str]) -> Callable[..., Any]:
 def _register_tools(server: FastMCP) -> None:
     """Register every Odoo tool on a FastMCP instance."""
     for fn in _TOOLS:
-        server.tool()(_threaded(fn))
+        server.tool(annotations=_ANNOTATIONS[fn.__name__])(_threaded(fn))
 
 
 def build_server(**kwargs: Any) -> FastMCP:

@@ -459,3 +459,43 @@ async def test_get_financial_report_pass_through(mock_op):
         profile="vauxoo",
         company_ids="19,1",
     )
+
+
+@pytest.mark.asyncio
+async def test_every_tool_carries_annotations():
+    tools = {t.name: t.annotations for t in await mcp.list_tools()}
+    assert all(annotations is not None for annotations in tools.values())
+    assert tools["search_read"].readOnlyHint is True
+    assert tools["get_financial_report"].readOnlyHint is True
+    assert tools["unlink"].destructiveHint is True
+    assert tools["execute_kw"].destructiveHint is True
+    assert tools["create"].destructiveHint is False
+
+
+@pytest.mark.asyncio
+@patch("odoo_mcp_multi.server.op_execute_kw")
+async def test_execute_kw_refuses_a_method_of_a_denied_operation(mock_op):
+    """Allowing execute_kw must not reopen unlink when unlink is denied."""
+    from pydantic import SecretStr
+
+    from odoo_mcp_multi.config import OdooProfile
+    from odoo_mcp_multi.server import _set_fallback_ref
+
+    _set_fallback_ref(
+        OdooProfile(
+            name="reader",
+            url="https://example.com",
+            database="db",
+            password=SecretStr("secret"),
+            permissions={"mode": "granular", "allowed_operations": ["search_read", "execute_kw"]},
+        )
+    )
+    try:
+        result = await mcp.call_tool("execute_kw", {"model": "res.partner", "method": "unlink", "args": "[[1]]"})
+    finally:
+        _set_fallback_ref(None)
+
+    data = _json_data(result)
+    assert data["success"] is False
+    assert "res.partner.unlink" in data["error"]
+    mock_op.assert_not_called()

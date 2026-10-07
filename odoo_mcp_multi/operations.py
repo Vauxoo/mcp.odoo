@@ -124,6 +124,36 @@ def resolve_active_profile(profile_name: Optional[str] = None, fallback: Optiona
     return resolve_profile(profile_name, fallback=fallback if fallback is not None else _fallback_profile)
 
 
+def check_permission(
+    operation: str,
+    profile_name: Optional[str] = None,
+    fallback: Optional[Any] = None,
+    model: str = "",
+    method: str = "",
+) -> Optional[dict]:
+    """Return an error dict if the resolved profile denies ``operation``, else None.
+
+    Every gated ``op_*`` calls this before any RPC, so the MCP tools and the
+    CLI enforce the same rules. For execute_kw, ``model`` and ``method`` are
+    checked against the profile's execute_kw rules as well.
+
+    A profile that cannot be resolved is not denied here; the operation
+    reports that error itself.
+    """
+    try:
+        resolved = resolve_active_profile(profile_name, fallback=fallback)
+    except ValueError:
+        return None
+    if not resolved.is_operation_allowed(operation):
+        return {"success": False, "error": f"Operation '{operation}' is not allowed for profile '{resolved.name}'."}
+    if operation == "execute_kw" and not resolved.is_execute_kw_allowed(model, method):
+        return {
+            "success": False,
+            "error": f"Method '{model}.{method}' is not allowed through execute_kw for profile '{resolved.name}'.",
+        }
+    return None
+
+
 def _get_client(profile_name: Optional[str] = None):
     """Get an Odoo client instance for the specified profile.
 
@@ -508,6 +538,9 @@ def op_search_read(
         Dict with records/data, total, limit, offset, has_more, next_offset,
         or an error dict with success=False for agent consumption.
     """
+    denied = check_permission("search_read", profile)
+    if denied:
+        return denied
     if format not in VALID_FORMATS:
         return {
             "success": False,
@@ -580,6 +613,9 @@ def op_search_count(
         Dict with model and count,
         or an error dict with success=False for agent consumption.
     """
+    denied = check_permission("search_count", profile)
+    if denied:
+        return denied
     try:
         client = _get_client(profile)
         parsed_domain = parse_domain(domain)
@@ -608,6 +644,9 @@ def op_write(
         Dict with success status and updated_ids,
         or an error dict with success=False for agent consumption.
     """
+    denied = check_permission("write", profile)
+    if denied:
+        return denied
     parsed_ids = parse_ids(ids)
     if not parsed_ids:
         return {"success": False, "error": "No record IDs provided. Pass a JSON array or comma-separated list."}
@@ -645,6 +684,9 @@ def op_unlink(
         Dict with success status and deleted_ids,
         or an error dict with success=False for agent consumption.
     """
+    denied = check_permission("unlink", profile)
+    if denied:
+        return denied
     parsed_ids = parse_ids(ids)
     if not parsed_ids:
         return {"success": False, "error": "No record IDs provided. Pass a JSON array or comma-separated list."}
@@ -678,6 +720,9 @@ def op_create(
         Dict with success=True and id of created record,
         or an error dict with success=False for agent consumption.
     """
+    denied = check_permission("create", profile)
+    if denied:
+        return denied
     parsed_values = parse_json_arg(values, {})
     if not parsed_values:
         return {"success": False, "error": "No values provided. Pass a JSON object with field names and values."}
@@ -715,6 +760,9 @@ def op_export_records(
         Dict with records, total, limit, offset, has_more, next_offset,
         or an error dict with success=False for agent consumption.
     """
+    denied = check_permission("export_records", profile)
+    if denied:
+        return denied
     if format not in VALID_FORMATS:
         return {
             "success": False,
@@ -812,6 +860,9 @@ def op_import_records(
         Dict with ids and messages from Odoo's load(), or an error dict
         with success=False and a verbose error message for agent consumption.
     """
+    denied = check_permission("import_records", profile)
+    if denied:
+        return denied
     parsed_fields = parse_fields(fields)
     if not parsed_fields:
         return {
@@ -865,6 +916,9 @@ def op_execute_kw(
         Dict with success=True and result,
         or an error dict with success=False for agent consumption.
     """
+    denied = check_permission("execute_kw", profile, model=model, method=method)
+    if denied:
+        return denied
     try:
         client = _get_client(profile)
         parsed_args = parse_json_arg(args, [])
@@ -914,6 +968,9 @@ def op_list_models(
         Dict with models list,
         or an error dict with success=False for agent consumption.
     """
+    denied = check_permission("list_models", profile)
+    if denied:
+        return denied
     if format not in VALID_FORMATS:
         return {
             "success": False,
@@ -977,6 +1034,9 @@ def op_list_fields(
         Dict with fields definitions,
         or an error dict with success=False for agent consumption.
     """
+    denied = check_permission("list_fields", profile)
+    if denied:
+        return denied
     if format not in VALID_FORMATS:
         return {
             "success": False,
@@ -1349,6 +1409,9 @@ def get_financial_report(
         - Get P&L in JSON: report_id_or_name='Profit and Loss', date_filter='this_year', format='json'
         - Get report for companies in HTML: report_id_or_name='12', company_ids='19,1', format='html'
     """
+    denied = check_permission("get_financial_report", profile)
+    if denied:
+        return denied
     if format not in VALID_FORMATS:
         return {
             "success": False,

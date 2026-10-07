@@ -37,6 +37,32 @@ class Operation(str, Enum):
 # Operations that are always allowed regardless of permission mode.
 ALWAYS_ALLOWED_TOOLS = frozenset({"list_available_profiles", "get_version"})
 
+# ORM methods that execute_kw would otherwise use to reach a gated operation.
+# In granular mode they are refused unless that operation is allowed or the
+# profile's execute_kw_allow lists them.
+EXECUTE_KW_METHOD_OPERATIONS = {
+    "search_read": Operation.SEARCH_READ.value,
+    "search": Operation.SEARCH_READ.value,
+    "read": Operation.SEARCH_READ.value,
+    "search_count": Operation.SEARCH_COUNT.value,
+    "write": Operation.WRITE.value,
+    "unlink": Operation.UNLINK.value,
+    "create": Operation.CREATE.value,
+    "export_data": Operation.EXPORT_RECORDS.value,
+    "load": Operation.IMPORT_RECORDS.value,
+    "fields_get": Operation.LIST_FIELDS.value,
+}
+
+
+class ExecuteKwRule(BaseModel):
+    """One model/method pair execute_kw may call; ``*`` matches any value."""
+
+    model: str
+    method: str = "*"
+
+    def matches(self, model: str, method: str) -> bool:
+        return self.model in ("*", model) and self.method in ("*", method)
+
 
 class ProfilePermissions(BaseModel):
     """Permission configuration for a profile.
@@ -44,12 +70,20 @@ class ProfilePermissions(BaseModel):
     Two modes:
     - 'full' (default): all operations allowed, backward compatible.
     - 'granular': only operations in allowed_operations are permitted.
+
+    In granular mode, ``execute_kw_allow`` narrows execute_kw to the listed
+    model/method pairs. Without it, execute_kw may call any method except
+    those in EXECUTE_KW_METHOD_OPERATIONS whose operation is not allowed.
     """
 
     mode: str = Field(default="full", description="Permission mode: 'full' or 'granular'")
     allowed_operations: list[str] = Field(
         default_factory=list,
         description="Operations allowed when mode is 'granular' (e.g., ['search_read', 'list_fields'])",
+    )
+    execute_kw_allow: Optional[list[ExecuteKwRule]] = Field(
+        default=None,
+        description="Model/method pairs execute_kw may call in granular mode; None = any non-gated method.",
     )
 
     @model_validator(mode="after")
@@ -149,6 +183,17 @@ class OdooProfile(BaseModel):
             return True
         return operation in self.permissions.allowed_operations
 
+    def is_execute_kw_allowed(self, model: str, method: str) -> bool:
+        """Check if execute_kw may call ``model.method`` under this profile's permissions."""
+        if not self.is_operation_allowed(Operation.EXECUTE_KW.value):
+            return False
+        if self.permissions is None or self.permissions.mode == "full":
+            return True
+        if self.permissions.execute_kw_allow is not None:
+            return any(rule.matches(model, method) for rule in self.permissions.execute_kw_allow)
+        gated = EXECUTE_KW_METHOD_OPERATIONS.get(method)
+        return gated is None or gated in self.permissions.allowed_operations
+
     def ssl_verify(self) -> Union[bool, ssl.SSLContext]:
         """Return the ``verify`` value the transports take for this profile's TLS settings."""
         return build_ssl_verify(self.verify, self.ca_bundle, self.ssl_strict)
@@ -172,7 +217,7 @@ class OdooProfile(BaseModel):
         if self.api_key is not None:
             d["api_key"] = self.api_key.get_secret_value()
         if self.permissions is not None:
-            d["permissions"] = self.permissions.model_dump()
+            d["permissions"] = self.permissions.model_dump(exclude_none=True)
         return d
 
     @classmethod
