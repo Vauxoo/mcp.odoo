@@ -16,7 +16,7 @@ def test_imports():
 
 def test_version():
     """Verify that the package has a version."""
-    assert __version__ == "0.17.0"
+    assert __version__ == "0.18.0"
 
 
 REPO_ROOT = Path(__file__).parent.parent

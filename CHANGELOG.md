@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.0] - 2026-10-07
+
 Read-only profiles are now read-only everywhere, CLI and `execute_kw` included, and `odoo-mcp upgrade` refreshes the skills copied for other agents.
 
 Try: configura mi perfil prod como solo lectura pero permitiendo message_post en project.task
