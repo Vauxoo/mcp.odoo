@@ -1,6 +1,11 @@
 workflow:
   auto_cancel:
     on_new_commit: interruptible
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH && $CI_COMMIT_TITLE =~ /\[(patch|minor|major)\]/i
+      auto_cancel:
+        on_new_commit: none
+    - when: always
 
 default:
   interruptible: true
